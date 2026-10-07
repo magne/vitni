@@ -33,7 +33,7 @@ fn degrees(text: &str, (positive, negative): (char, char), limit: f64) -> Option
             None => (1.0, text.strip_prefix('+').unwrap_or(text)),
         },
     };
-    let value = sign * decimal(number)?;
+    let value = sign * decimal(number.trim())?;
     (value.abs() <= limit).then_some(value)
 }
 
@@ -83,6 +83,7 @@ mod tests {
         assert_eq!(point("S33.9", "W0.12"), Some((-33.9, -0.12)));
         assert_eq!(point("58.028N", "7.46E"), Some((58.028, 7.46)));
         assert_eq!(point("n58", "w7"), Some((58.0, -7.0)));
+        assert_eq!(point("N 58.028", "7.46 E"), Some((58.028, 7.46)));
     }
 
     #[test]

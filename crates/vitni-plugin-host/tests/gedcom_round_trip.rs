@@ -989,7 +989,9 @@ async fn gedcom_imports_and_exports_a_second_name_without_clobbering_the_first()
 async fn a_places_map_is_imported_however_late_the_document_states_it() {
     let doc = "0 HEAD\n1 SOUR test\n0 @I1@ INDI\n1 NAME John /Smith/\n1 BIRT\n2 PLAC Mandal\n\
                1 DEAT\n2 PLAC Mandal\n3 MAP\n4 LATI N58.028\n4 LONG E7.46\n\
-               1 BURI\n2 PLAC Holum\n3 MAP\n4 LATI north\n4 LONG E7.5\n0 TRLR\n";
+               1 BURI\n2 PLAC Holum\n3 MAP\n4 LATI north\n4 LONG E7.5\n\
+               1 RESI\n2 PLAC Vigeland\n3 MAP\n4 LATI N58.08\n\
+               1 CENS\n2 PLAC Vigeland\n3 MAP\n4 LATI N58.09\n4 LONG E7.30\n0 TRLR\n";
     let io_dir = tempfile::tempdir().expect("io dir");
     let source = write_file(io_dir.path(), "in.ged", doc.as_bytes());
     let (root, _dir) = init_workspace();
@@ -1014,8 +1016,13 @@ async fn a_places_map_is_imported_however_late_the_document_states_it() {
     points.sort_by(|left, right| left.0.cmp(&right.0));
     assert_eq!(
         points,
-        [("Holum".to_owned(), None), ("Mandal".to_owned(), Some((58.028, 7.46))),],
-        "a point stated on a later event still reaches the place; one that is not degrees is left out"
+        [
+            ("Holum".to_owned(), None),
+            ("Mandal".to_owned(), Some((58.028, 7.46))),
+            ("Vigeland".to_owned(), Some((58.09, 7.3))),
+        ],
+        "a point stated on a later event still reaches the place, past an earlier half-stated one; one that \
+         is not degrees is left out"
     );
 }
 

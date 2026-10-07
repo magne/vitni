@@ -475,6 +475,10 @@ does.
   place on import, but `place-dto` carries no coordinates, so both exporters write none
   (`plugins/gedcom-export`, `plugins/gramps-export`). *Shape:* `coordinates` on `place-dto`, emitted as
   `PLAC.MAP.LATI`/`LONG` and `<coord>`.
+- **A Gramps `<coord>` in degrees-minutes-seconds is not imported** — Gramps keeps a point as typed,
+  and `vitni_interchange::Coordinates::parse` reads decimal degrees only, so `50°52'21.92"N` or
+  `50:52:21.92` is dropped with a warning in the import log. *Shape:* parse the DMS forms Gramps
+  accepts into the same `Coordinates`.
 - **Gramps `<placeobj><code>` is not read** — `vitni-gramps-xml` does not parse a place's code, so it
   never reaches the single-valued `SetCode` the origin gate would reconcile on re-import. GEDCOM has no
   equivalent. A place's dated names and enclosures need nothing more: neither format dates them, and

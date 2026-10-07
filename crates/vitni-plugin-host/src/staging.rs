@@ -394,7 +394,7 @@ fn to_coordinates(name: &str, point: types::Coordinates) -> Option<GeoCoordinate
             place = name,
             latitude = point.latitude,
             longitude = point.longitude,
-            "dropping a staged place's point that is out of range"
+            "dropping a staged place's point that is not finite degrees in range"
         );
     }
     coordinates
