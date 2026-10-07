@@ -260,6 +260,7 @@ fn place_graph(key: &str, name: &str, place_type: Option<PlaceType>) -> Graph {
         EntityFields::Place(StagedPlace {
             name: name.to_owned(),
             place_type,
+            coordinates: None,
             restrictions: Vec::new(),
         }),
     );

@@ -611,6 +611,7 @@ fn record() -> RecordGraph {
     let place = StagedPlace {
         name: "Norge".to_owned(),
         place_type: None,
+        coordinates: None,
         restrictions: BTreeSet::default(),
     };
     RecordGraph {

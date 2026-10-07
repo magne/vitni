@@ -637,6 +637,7 @@ bulk-import-plan-field-address = address
 bulk-import-plan-field-place = place
 bulk-import-plan-field-type = type
 bulk-import-plan-field-enclosure = location
+bulk-import-plan-field-coordinates = coordinates
 bulk-import-plan-field-title = title
 bulk-import-plan-field-author = author
 bulk-import-plan-field-publication = publication

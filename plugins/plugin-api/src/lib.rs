@@ -116,6 +116,26 @@ pub fn log_warn(message: &str) {
     log::log(log::Level::Warn, message);
 }
 
+/// The point a record states for the place `place`, as the host `coordinates` it stages: `None` when
+/// the record gives none, and, with a warning, when it gives one that is not decimal degrees in range.
+#[must_use]
+pub fn place_point(place: &str, latitude: Option<&str>, longitude: Option<&str>) -> Option<types::Coordinates> {
+    if latitude.is_none() && longitude.is_none() {
+        return None;
+    }
+    let point = vitni_interchange::Coordinates::parse(latitude.unwrap_or_default(), longitude.unwrap_or_default());
+    let Some(point) = point else {
+        log_warn(&format!(
+            "the point of place {place:?} is not decimal degrees, so it is not imported: {latitude:?}, {longitude:?}"
+        ));
+        return None;
+    };
+    Some(types::Coordinates {
+        latitude: point.latitude,
+        longitude: point.longitude,
+    })
+}
+
 /// Reads the entire host-opened import source into memory (ADR 0013), a chunk at a time.
 ///
 /// # Errors

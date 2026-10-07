@@ -553,6 +553,78 @@ async fn reimport_reconciles_sex_only_when_the_header_created_date_is_at_least_a
     );
 }
 
+/// A Gramps document whose one person was born at a place with the point `lat`/`long`, exported on
+/// `created`.
+fn located_doc(created: &str, lat: &str, long: &str) -> String {
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<database xmlns="http://gramps-project.org/xml/1.7.1/">
+<header><created date="{created}"/></header>
+<people>
+<person handle="_p1" id="I0001">
+<gender>M</gender>
+<name><first>John</first><surname>Smith</surname></name>
+<eventref hlink="_e1"/>
+</person>
+</people>
+<events>
+<event handle="_e1" id="E0001"><type>Birth</type><place hlink="_pl1"/></event>
+</events>
+<places>
+<placeobj handle="_pl1" id="P0001" type="City"><pname value="Mandal"/><coord long="{long}" lat="{lat}"/></placeobj>
+</places>
+</database>
+"#
+    )
+}
+
+/// Imports `doc` into the fixed run dataset and returns the workspace with its one place's point.
+async fn import_point(workspace: Workspace, io_dir: &Path, doc: &str) -> (Workspace, Option<(f64, f64)>) {
+    let source = write_file(io_dir, "in.gramps", doc.as_bytes());
+    let (_, workspace) = common::host()
+        .run_bulk_import(
+            &common::component("gramps-import"),
+            run_invocation(workspace),
+            source,
+            |_: ProgressUpdate| ProgressControl::Proceed,
+        )
+        .await
+        .expect("import");
+    let places = list_places(&workspace).await.expect("places");
+    assert_eq!(places.len(), 1, "every import resolves to the one place: {places:?}");
+    let point = places[0]
+        .coordinates_point
+        .map(|point| (point.latitude.to_degrees(), point.longitude.to_degrees()));
+    (workspace, point)
+}
+
+#[tokio::test]
+async fn a_places_coord_is_imported_and_reconciled_by_the_header_created_date() {
+    let io_dir = tempfile::tempdir().expect("io dir");
+    let (root, _dir) = init_workspace();
+    let workspace = open_workspace(&root).await;
+
+    let doc = located_doc("2000-01-01", "58.028", "7.46");
+    let (workspace, point) = import_point(workspace, io_dir.path(), &doc).await;
+    assert_eq!(
+        point,
+        Some((58.028, 7.46)),
+        "the first import carries the place's <coord>"
+    );
+
+    let doc = located_doc("2000-01-02", "58.03", "7.455");
+    let (workspace, point) = import_point(workspace, io_dir.path(), &doc).await;
+    assert_eq!(
+        point,
+        Some((58.028, 7.46)),
+        "a file older than the live point leaves it"
+    );
+
+    let doc = located_doc("2100-01-01", "58.03", "7.455");
+    let (_, point) = import_point(workspace, io_dir.path(), &doc).await;
+    assert_eq!(point, Some((58.03, 7.455)), "a newer file moves the point");
+}
+
 #[tokio::test]
 async fn gramps_round_trips_eventref_role_age_attributes_and_note() {
     let host = common::host();

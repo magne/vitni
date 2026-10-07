@@ -16,6 +16,7 @@ use vitni_core::enums::{
     AssociationRole, ChildParentRelationship, EventType, NoteType, ParticipantRole, PlaceType, Restriction, Sex,
     SourceMediaType,
 };
+use vitni_core::geo::GeoCoordinates;
 use vitni_core::matching::MatchableKind;
 use vitni_core::provenance::Confidence;
 use vitni_core::text::{Attribute, ExternalId, Rect};
@@ -128,13 +129,15 @@ pub struct StagedEvent {
     pub restrictions: BTreeSet<Restriction>,
 }
 
-/// A place: its name, type and restrictions. The place enclosing it is a link.
+/// A place: its name, type, point and restrictions. The place enclosing it is a link.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StagedPlace {
     /// The place's name.
     pub name: String,
     /// The kind of place, when the record says.
     pub place_type: Option<PlaceType>,
+    /// Where the place lies, when the record gives a point.
+    pub coordinates: Option<GeoCoordinates>,
     /// Privacy restrictions.
     pub restrictions: BTreeSet<Restriction>,
 }

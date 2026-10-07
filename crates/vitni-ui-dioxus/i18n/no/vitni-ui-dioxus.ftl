@@ -636,6 +636,7 @@ bulk-import-plan-field-address = adresse
 bulk-import-plan-field-place = sted
 bulk-import-plan-field-type = type
 bulk-import-plan-field-enclosure = beliggenhet
+bulk-import-plan-field-coordinates = koordinater
 bulk-import-plan-field-title = tittel
 bulk-import-plan-field-author = forfatter
 bulk-import-plan-field-publication = utgivelse
