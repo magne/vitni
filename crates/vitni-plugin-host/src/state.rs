@@ -12,7 +12,7 @@
 
 use std::fs::File;
 use std::io::{Read, Write};
-
+use std::path::Path;
 use std::sync::Arc;
 
 use crate::run::{ActiveRun, ImportRunSpec, RunDataset, RunTemplate};
@@ -144,16 +144,17 @@ impl HostState {
         self.run = Some(run);
     }
 
-    /// Opens the run `spec` describes once the guest has submitted its graphs, deciding its dataset
-    /// first when the operator named none (ADR 0037 §3). Returns `false` when the operator cancelled
-    /// at the proposal, so nothing is written.
+    /// Opens the run `spec` describes over the file at `source` once the guest has submitted its
+    /// graphs, deciding its dataset first when the operator named none (ADR 0037 §3). Returns `false`
+    /// when the operator cancelled at the proposal, so nothing is written.
     ///
     /// # Errors
     ///
     /// [`PluginError::Dataset`] when the decision names no dataset, or an unknown or ambiguous one;
     /// [`PluginError::Commit`] when the workspace cannot be read.
-    pub(crate) async fn open_proposed_run(&mut self, spec: ImportRunSpec) -> Result<bool, PluginError> {
+    pub(crate) async fn open_proposed_run(&mut self, spec: ImportRunSpec, source: &Path) -> Result<bool, PluginError> {
         let (dataset, template, reviewer) = spec.into_parts();
+        let template = template.reading(source);
         self.reviewer = Some(reviewer);
         let chosen = match dataset {
             RunDataset::Chosen(chosen) => chosen,

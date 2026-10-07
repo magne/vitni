@@ -7,8 +7,8 @@ use crate::i18n::Localizer;
 use crate::presentation::ConfidenceLevel;
 use crate::presentation::EvidenceAxis;
 use crate::presentation::RestrictionKind;
+use crate::view_model::ResumeVm;
 use std::collections::{BTreeSet, HashMap};
-use vitni_app::ImportRunId;
 use vitni_app::{
     ActivityDetail, AssociationRole, AssociationSummary, Calendar, ChangeLogEntry, CitationSummary, Confidence,
     DateModifier, DatePoint, DateQuality, EvidenceAnalysis, EvidenceHealth, EvidenceKind, EvidenceLevel, Fact,
@@ -16,6 +16,7 @@ use vitni_app::{
     OperatorKind, PersonName, PersonRow, PersonSummary, Restriction, RunRef, Sex, SourceQuality, Surname, TagRef,
     WorkspaceCounts,
 };
+use vitni_app::{DatasetId, ImportRunId, RunResume};
 
 /// The display names the dashboard tests label persons with: I0001 is "Ada Lovelace".
 fn ada() -> HashMap<String, String> {
@@ -55,6 +56,7 @@ fn run_ref(records: Option<u32>) -> RunRef {
         source_label: "tree.ged".to_owned(),
         plugin: "gedcom-import".to_owned(),
         records,
+        resume: None,
     }
 }
 
@@ -100,6 +102,49 @@ fn dashboard_renders_an_import_run_row_and_labels_records_by_name() {
     // Jump-back surfaces the same named record.
     assert_eq!(vm.jump_back.len(), 1);
     assert_eq!(vm.jump_back[0].record.label, "Ada Lovelace");
+}
+
+#[test]
+fn an_abandoned_run_row_reads_interrupted_and_offers_to_resume() {
+    let loc = Localizer::for_test("en");
+    let resume = RunResume {
+        plugin: "gedcom-import".to_owned(),
+        dataset: DatasetId::lineage("gedcom", uuid::Uuid::from_u128(5)),
+        source: "/home/ada/tree.ged".into(),
+    };
+    let mut import = log_entry("", None, OperatorKind::Software, "gedcom-import");
+    import.event_type = "ImportRun".to_owned();
+    import.detail = Some(ActivityDetail::ImportRun {
+        run: RunRef {
+            resume: Some(resume.clone()),
+            ..run_ref(Some(3))
+        },
+        count: 2,
+        children: vec![imported("I0002", "c", false)],
+    });
+    let vm = DashboardVm::build(no_stats(), &[import], &ada(), &loc, 4);
+
+    assert_eq!(vm.recent[0].count.as_deref(), Some("interrupted"));
+    assert_eq!(
+        vm.recent[0].resume,
+        Some(ResumeVm {
+            run: resume,
+            label: "Resume the import from tree.ged".to_owned(),
+        })
+    );
+}
+
+#[test]
+fn a_finished_run_row_offers_no_resume() {
+    let loc = Localizer::for_test("en");
+    let mut import = log_entry("", None, OperatorKind::Software, "gedcom-import");
+    import.detail = Some(ActivityDetail::ImportRun {
+        run: run_ref(Some(3)),
+        count: 2,
+        children: Vec::new(),
+    });
+    let vm = DashboardVm::build(no_stats(), &[import], &ada(), &loc, 4);
+    assert_eq!(vm.recent[0].resume, None);
 }
 
 #[test]

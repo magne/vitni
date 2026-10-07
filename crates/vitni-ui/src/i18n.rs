@@ -1812,6 +1812,36 @@ impl Localizer {
         fl!(self.loader, "history-import-run-records", count = i64::from(records))
     }
 
+    /// The muted status beside an abandoned import run's row, which offers *Resume* (ADR 0040 §5).
+    #[must_use]
+    pub fn import_run_interrupted(&self) -> String {
+        fl!(self.loader, "history-import-run-interrupted")
+    }
+
+    /// The muted status of an earlier import that ended without a record count.
+    #[must_use]
+    pub fn import_run_finished(&self) -> String {
+        fl!(self.loader, "history-import-run-done")
+    }
+
+    /// The muted status of an earlier import that has not ended.
+    #[must_use]
+    pub fn import_run_running(&self) -> String {
+        fl!(self.loader, "history-import-run-running")
+    }
+
+    /// The *Resume* button on an abandoned import run's row.
+    #[must_use]
+    pub fn import_run_resume(&self) -> String {
+        fl!(self.loader, "history-import-run-resume")
+    }
+
+    /// The accessible name of the *Resume* button on the row of a run that imported `source`.
+    #[must_use]
+    pub fn import_run_resume_aria(&self, source: &str) -> String {
+        fl!(self.loader, "history-import-run-resume-aria", source = source)
+    }
+
     /// The muted count beside an import-run row: the changes the row folds.
     #[must_use]
     pub fn import_run_changes(&self, count: u32) -> String {

@@ -1,4 +1,5 @@
 use super::prelude::*;
+use vitni_app::RunResume;
 
 /// The workspace dashboard (ADR 0008 §5; `app-shell.html`): stat cards, a workspace-wide recent
 /// activity feed, quick entry points, and the computable data-quality checks. Refetches whenever a
@@ -134,6 +135,13 @@ fn activity_feed(loc: &Localizer, recent: &[ActivityVm]) -> Element {
                         "{row.what}"
                         if let Some(count) = &row.count {
                             span { class: "muted tl-count", "{count}" }
+                        }
+                        if let Some(resume) = &row.resume {
+                            ResumeButton {
+                                label: loc.import_run_resume(),
+                                aria_label: resume.label.clone(),
+                                resume: resume.run.clone(),
+                            }
                         }
                         if let Some(record) = &row.record {
                             " — "
@@ -299,6 +307,23 @@ fn flagged_person_links(loc: &Localizer, records: &[RecordRef]) -> Element {
             if overflow > 0 {
                 span { class: "muted", "{loc.dashboard_more(overflow)}" }
             }
+        }
+    }
+}
+
+/// An interrupted import run's *Resume* (ADR 0040 §5): re-runs it in the Import tool. A component so
+/// it can resolve `NavState` from context, like [`ReviewButton`].
+#[component]
+fn ResumeButton(label: String, aria_label: String, resume: RunResume) -> Element {
+    let mut nav = use_context::<NavState>();
+    rsx! {
+        button {
+            class: "btn sm ghost",
+            style: "margin-left:var(--sp-2)",
+            r#type: "button",
+            aria_label: "{aria_label}",
+            onclick: move |_| nav.resume_import(resume.clone()),
+            "{label}"
         }
     }
 }

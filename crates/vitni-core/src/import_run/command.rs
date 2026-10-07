@@ -18,6 +18,9 @@ pub struct NewImportRun {
     pub dataset_label: String,
     /// What was imported: a file name, or an assisted session's request.
     pub source_label: String,
+    /// Where a bulk import read its file from, as an absolute path; `None` for an assisted session.
+    /// Resuming an abandoned run re-reads it (ADR 0040 §5).
+    pub source_path: Option<String>,
     /// The document's own export date, when its header carries one (ADR 0029 §2).
     pub file_asserted_at: Option<Timestamp>,
     /// The document header's fingerprint, when the importer declared one: compared with later

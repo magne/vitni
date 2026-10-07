@@ -707,6 +707,8 @@ bulk-import-summary-source = Imported from
 bulk-import-another = Import another
 bulk-import-error-heading = Import failed
 bulk-import-failed-unknown = The import ended without reporting a result.
+# The Source stage's list of the newest bulk runs into this workspace; an interrupted one offers Resume (ADR 0040 §5).
+bulk-import-earlier-heading = Earlier imports
 bulk-import-cancelled-heading = Import cancelled
 bulk-import-cancelled-message = The import stopped before it finished.
 bulk-import-confirm-title = Import into { $workspace }?

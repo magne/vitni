@@ -166,8 +166,8 @@ pub use import::{
 };
 pub use import_run::{
     ChosenDataset, DatasetCandidate, DatasetChoice, DatasetError, DatasetProposal, DatasetSummary, Fingerprint,
-    ImportRunSummary, abandon_import_run, choose_dataset, dataset_required, find_import_run, finish_import_run,
-    list_datasets, list_import_runs, propose_dataset, start_import_run,
+    ImportRunSummary, RunResume, abandon_import_run, choose_dataset, dataset_required, find_import_run,
+    finish_import_run, list_datasets, list_import_runs, propose_dataset, start_import_run,
 };
 pub use linked_records::{LinkedRecord, LinkedRecords, OriginRef, linked_records, record_url, unlink_person};
 pub use map_source::{MapBasemap, MapSource, google_viewport_copyright, refresh_map_attribution, resolve_map_source};

@@ -344,7 +344,7 @@ impl PluginHost {
             provenance_confidence,
             import,
         } = run;
-        let io = BulkIo::import(source, Box::new(progress));
+        let io = BulkIo::import(source.clone(), Box::new(progress));
         let mut store = self.build_store(
             workspace,
             session,
@@ -368,7 +368,7 @@ impl PluginHost {
             && !state.cancelled
             && !state.staged.is_empty()
         {
-            match Box::pin(state.open_proposed_run(spec)).await {
+            match Box::pin(state.open_proposed_run(spec, &source)).await {
                 Ok(true) => {}
                 Ok(false) => state.cancelled = true,
                 Err(error) => result = Err(error),

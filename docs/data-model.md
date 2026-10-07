@@ -686,7 +686,11 @@ around evidence and provenance.
    over runs, labelled by the earliest. File-local keys (a GEDCOM xref, a Gramps handle) are origin
    records only, and neither they nor a Gramps id (`I0001`) become `ExternalId`s, so two unrelated
    files that both hold an `@I1@` import two people. `ExternalId` is for identifiers that mean something outside the file: a GEDCOM `_UID`,
-   a Digitalarkivet record id.
+   a Digitalarkivet record id. A bulk import's `ImportRunStarted.source_path` records the file it read,
+   as a canonical path (an assisted session reads none), so an abandoned run can be **resumed**: its
+   plugin re-run over that file into its dataset, which resolves what it wrote as unchanged and writes
+   the rest. Only the newest run of a dataset is resumable, and only when its importer did not reject the
+file or exhaust its budget, which a re-run would repeat (ADR 0040 §5).
 
 5. **Re-import resolves by origin (ADR 0037 §4).** The `record_origins` projection index (both
    engines, rebuilt by replay) holds one row per imported event: its origin, the aggregate it landed

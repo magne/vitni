@@ -43,8 +43,8 @@ mod tag;
 
 pub use bulk_import::{
     BulkConfirmDialog, BulkConfirmLabels, BulkImportBody, BulkImportWizardLabels, BulkRunningLabels, BulkRunningStage,
-    BulkSourceLabels, BulkSourceStage, BulkSummaryLabels, BulkSummaryStage, DatasetQuestionView, ProposedDataset,
-    bulk_step_indicator, dataset_question,
+    BulkSourceLabels, BulkSourceStage, BulkSummaryLabels, BulkSummaryStage, DatasetQuestionView, EarlierImports,
+    EarlierImportsLabels, ProposedDataset, bulk_step_indicator, dataset_question,
 };
 pub use bulk_review::{
     BulkConfirmStage, BulkPlanLabels, BulkPlanStage, BulkReviewLabels, BulkReviewStage, PlanRecordGroupLabels,

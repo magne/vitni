@@ -2548,6 +2548,12 @@ impl Chrome {
         fl!(self.loader, "bulk-import-failed-unknown")
     }
 
+    /// The Source stage's *Earlier imports* heading (ADR 0040 §5).
+    #[must_use]
+    pub fn bulk_import_earlier_heading(&self) -> String {
+        fl!(self.loader, "bulk-import-earlier-heading")
+    }
+
     /// The cancelled-import heading.
     #[must_use]
     pub fn bulk_import_cancelled_heading(&self) -> String {

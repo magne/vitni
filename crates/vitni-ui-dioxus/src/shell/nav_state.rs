@@ -11,7 +11,7 @@ use std::fmt;
 use std::rc::Rc;
 
 use dioxus::prelude::*;
-use vitni_app::{DecidableKind, RecentItem, ThemeMode, push_recent};
+use vitni_app::{DecidableKind, RecentItem, RunResume, ThemeMode, push_recent};
 use vitni_ui::{
     Category, Destination, NavHistory, NavLocation, NavRecord, ProvenanceDraft, RecordDraft, RecordRef, Tool,
 };
@@ -466,6 +466,10 @@ pub struct NavState {
     /// `None`. Set by [`Self::open_match_compare`]; `MatchesScreen` consumes and clears it — the same
     /// one-shot handoff as [`Self::geography_focus`].
     pub match_focus: Signal<Option<(DecidableKind, String, String)>>,
+    /// The abandoned import run the Import tool should re-run on next mount (a run row's *Resume*,
+    /// ADR 0040 §5), or `None`. Set by [`Self::resume_import`]; `BulkImportBody` takes it — the same
+    /// one-shot handoff as [`Self::geography_focus`].
+    pub import_resume: Signal<Option<RunResume>>,
     /// The record whose *Find similar* panel is open, or `None`. Set by [`Self::show_similar`]; the
     /// record's detail slot renders the panel while it names that record.
     pub similar_panel: Signal<Option<RecordRef>>,
@@ -573,6 +577,7 @@ impl NavState {
             notice_seq: Signal::new(0),
             geography_focus: Signal::new(None),
             match_focus: Signal::new(None),
+            import_resume: Signal::new(None),
             similar_panel: Signal::new(None),
             research_note_subject: Signal::new(None),
             pending_close: Signal::new(None),
@@ -823,6 +828,13 @@ impl NavState {
         self.similar_panel.set(None);
         self.match_focus.set(Some((kind, left, right)));
         self.go_to(Destination::Tool(Tool::Matches));
+    }
+
+    /// Navigates to the Import tool and re-runs the abandoned import `resume` describes there:
+    /// stashes it in [`Self::import_resume`], which `BulkImportBody` takes on mount.
+    pub fn resume_import(&mut self, resume: RunResume) {
+        self.import_resume.set(Some(resume));
+        self.go_to(Destination::Tool(Tool::Import));
     }
 
     /// Opens the *Find similar* panel over `record`.

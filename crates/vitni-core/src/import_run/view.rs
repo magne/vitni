@@ -80,6 +80,12 @@ impl ImportRunView {
         &self.state.source_label
     }
 
+    /// Where a bulk import read its file from, if the run recorded it (ADR 0040 §5).
+    #[must_use]
+    pub fn source_path(&self) -> Option<&str> {
+        self.state.source_path.as_deref()
+    }
+
     /// The document's own export date, if it carries one.
     #[must_use]
     pub fn file_asserted_at(&self) -> Option<Timestamp> {

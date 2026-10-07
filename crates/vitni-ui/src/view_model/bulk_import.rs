@@ -14,9 +14,10 @@
 
 use std::path::{Component, Path, PathBuf};
 
-use vitni_app::{MatchQuestion, PlanSummary};
+use vitni_app::{ImportRunStatus, ImportRunSummary, MatchQuestion, PlanSummary};
 
 use crate::i18n::Localizer;
+use crate::view_model::history::ResumeVm;
 use crate::view_model::import::MatchStageVm;
 
 /// What a running bulk import is doing — the framework-free mirror of the plugin host's
@@ -346,15 +347,75 @@ impl ImportTargetChoice {
     }
 }
 
+/// How many earlier imports the Source stage lists.
+const EARLIER_IMPORTS: usize = 5;
+
+/// One earlier bulk import, listed on the Source stage so an interrupted one can be resumed
+/// (ADR 0040 §5).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EarlierImportVm {
+    /// When the run started (`YYYY-MM-DD HH:MM`, UTC).
+    pub when: String,
+    /// What the run imported (its file name).
+    pub source: String,
+    /// The importing plugin's id.
+    pub plugin: String,
+    /// The localized state of the run: the records it imported, *interrupted* or *running*.
+    pub status: String,
+    /// The row's *Resume*, when the run was interrupted.
+    pub resume: Option<ResumeVm>,
+}
+
+impl EarlierImportVm {
+    /// The newest runs of the bulk importers `importers` in `runs` (oldest first, as
+    /// `list_import_runs` returns them), newest first.
+    #[must_use]
+    pub fn list(runs: &[ImportRunSummary], importers: &[String], loc: &Localizer) -> Vec<Self> {
+        let mut rows = Vec::with_capacity(EARLIER_IMPORTS);
+        for run in runs.iter().rev() {
+            if rows.len() == EARLIER_IMPORTS {
+                break;
+            }
+            if importers.contains(&run.plugin) {
+                rows.push(Self::of(run, loc));
+            }
+        }
+        rows
+    }
+
+    fn of(run: &ImportRunSummary, loc: &Localizer) -> Self {
+        let started = run.started_at.into_inner();
+        let status = match (&run.status, run.counts.records) {
+            _ if run.resume.is_some() => loc.import_run_interrupted(),
+            (ImportRunStatus::Finished | ImportRunStatus::Abandoned { .. }, Some(records)) => {
+                loc.import_run_records(records)
+            }
+            (ImportRunStatus::Finished, None) => loc.import_run_finished(),
+            (ImportRunStatus::Abandoned { .. }, None) => loc.import_run_interrupted(),
+            (ImportRunStatus::NotStarted | ImportRunStatus::Running, _) => loc.import_run_running(),
+        };
+        Self {
+            when: format!("{} {:02}:{:02}", started.date(), started.hour(), started.minute()),
+            source: run.source_label.clone(),
+            plugin: run.plugin.clone(),
+            status,
+            resume: ResumeVm::of(run.resume.as_ref(), &run.source_label, loc),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::{Path, PathBuf};
 
-    use vitni_app::{KindCounts, MatchableKind, PlanCounts, PlanSummary};
+    use vitni_app::{
+        AbandonReason, DatasetId, ImportCounts, ImportRunId, ImportRunStatus, ImportRunSummary, KindCounts,
+        MatchableKind, PlanCounts, PlanSummary, RunResume, Timestamp,
+    };
 
     use super::{
-        BulkImportProgress, BulkImportSession, BulkImportStage, BulkImportStep, BulkImportSummary, ImportSourcePath,
-        ImportTargetChoice, ImportTargetError, plan_writes_nothing,
+        BulkImportProgress, BulkImportSession, BulkImportStage, BulkImportStep, BulkImportSummary, EarlierImportVm,
+        ImportSourcePath, ImportTargetChoice, ImportTargetError, plan_writes_nothing,
     };
     use crate::i18n::Localizer;
     use crate::view_model::import::tests::question;
@@ -653,5 +714,86 @@ mod tests {
             database_url: None,
         };
         assert_eq!(target.validate(&["other".to_owned()]), Ok(()));
+    }
+
+    /// A run of `plugin` over `n.ged`, started on day `n` of October 2026, in `status`.
+    fn run(n: u8, plugin: &str, status: ImportRunStatus) -> ImportRunSummary {
+        let resume = matches!(status, ImportRunStatus::Abandoned { .. }).then(|| RunResume {
+            plugin: plugin.to_owned(),
+            dataset: DatasetId::lineage("gedcom", uuid::Uuid::from_u128(5)),
+            source: PathBuf::from(format!("/home/ada/{n}.ged")),
+        });
+        ImportRunSummary {
+            id: ImportRunId::from_uuid(uuid::Uuid::from_u128(u128::from(n))),
+            plugin: plugin.to_owned(),
+            plugin_version: "0.1.0".to_owned(),
+            dataset: DatasetId::lineage("gedcom", uuid::Uuid::from_u128(5)),
+            dataset_label: "tree.ged".to_owned(),
+            source_label: format!("{n}.ged"),
+            source_path: Some(PathBuf::from(format!("/home/ada/{n}.ged"))),
+            dataset_hint: None,
+            operator_display: Some("Ada".to_owned()),
+            started_at: Timestamp::parse_rfc3339(&format!("2026-10-{n:02}T10:00:00Z")).expect("timestamp"),
+            status,
+            counts: ImportCounts {
+                records: Some(u32::from(n)),
+                ..ImportCounts::default()
+            },
+            resume,
+        }
+    }
+
+    fn abandoned() -> ImportRunStatus {
+        ImportRunStatus::Abandoned {
+            reason: AbandonReason::Cancelled,
+        }
+    }
+
+    #[test]
+    fn earlier_imports_list_the_bulk_runs_newest_first_with_resume_on_the_interrupted_one() {
+        let loc = Localizer::for_test("en");
+        let runs = vec![
+            run(1, "gedcom-import", ImportRunStatus::Finished),
+            run(2, "digitalarkivet-import", ImportRunStatus::Finished),
+            run(3, "gedcom-import", abandoned()),
+        ];
+        let rows = EarlierImportVm::list(&runs, &["gedcom-import".to_owned()], &loc);
+
+        let shown: Vec<_> = rows
+            .iter()
+            .map(|row| (row.source.as_str(), row.status.as_str()))
+            .collect();
+        assert_eq!(
+            shown,
+            [("3.ged", "interrupted"), ("1.ged", "1 record")],
+            "no assisted run"
+        );
+        assert_eq!(rows[0].when, "2026-10-03 10:00");
+        let resume = rows[0].resume.as_ref().expect("the interrupted run resumes");
+        assert_eq!(Some(&resume.run), runs[2].resume.as_ref());
+        assert_eq!(resume.label, "Resume the import from 3.ged");
+        assert_eq!(rows[1].resume, None);
+    }
+
+    #[test]
+    fn an_abandoned_run_that_cannot_be_resumed_shows_its_count() {
+        let loc = Localizer::for_test("en");
+        let mut stopped = run(4, "gedcom-import", abandoned());
+        stopped.resume = None;
+        let rows = EarlierImportVm::list(&[stopped], &["gedcom-import".to_owned()], &loc);
+        assert_eq!(rows[0].status, "4 records", "as its row on the Dashboard reads");
+    }
+
+    #[test]
+    fn earlier_imports_show_the_newest_five() {
+        let loc = Localizer::for_test("en");
+        let mut runs = Vec::new();
+        for n in 1..=7 {
+            runs.push(run(n, "gedcom-import", ImportRunStatus::Running));
+        }
+        let rows = EarlierImportVm::list(&runs, &["gedcom-import".to_owned()], &loc);
+        let shown: Vec<_> = rows.iter().map(|row| row.source.as_str()).collect();
+        assert_eq!(shown, ["7.ged", "6.ged", "5.ged", "4.ged", "3.ged"]);
+        assert_eq!(rows[0].status, "running");
     }
 }

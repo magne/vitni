@@ -181,6 +181,12 @@ history-import-run-changes = { $count ->
     [one] 1 endring
    *[other] { $count } endringer
 }
+# En avbrutt bulk-import viser «avbrutt» i stedet for antallet, og tilbyr Fortsett (ADR 0040 §5).
+history-import-run-interrupted = avbrutt
+history-import-run-done = fullført
+history-import-run-running = pågår
+history-import-run-resume = Fortsett
+history-import-run-resume-aria = Fortsett importen fra { $source }
 
 # Endringslogg-operatørlinje
 history-operator-human = { $name } · { $confidence }

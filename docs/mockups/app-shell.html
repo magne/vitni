@@ -41,6 +41,14 @@
             <div class="tl-what">Imported from tree.ged<span class="muted tl-count">142 records</span></div>
             <div class="tl-who">gedcom-import (software agent)</div>
           </div>
+          <!-- A bulk run cancelled while writing reads interrupted in place of its count and offers
+               Resume, which opens Import and re-runs its plugin over the same file into the same tree
+               (ADR 0040 §5). Once a later import of that tree starts, the row offers it no more. -->
+          <div class="tl-item">
+            <div class="tl-when">today 09:20</div>
+            <div class="tl-what">Imported from slekt-full.ged<span class="muted tl-count">interrupted</span><button class="btn sm ghost" style="margin-left:var(--sp-2)" type="button" aria-label="Resume the import from slekt-full.ged">Resume</button></div>
+            <div class="tl-who">gedcom-import (software agent)</div>
+          </div>
           <div class="tl-item">
             <div class="tl-when">yesterday</div>
             <div class="tl-what">Persona merged into <a href="person.html">John Smith</a></div>

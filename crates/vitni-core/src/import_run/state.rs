@@ -48,6 +48,9 @@ pub struct ImportRunState {
     pub dataset_label: String,
     /// What was imported.
     pub source_label: String,
+    /// Where a bulk import read its file from, if the run recorded it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_path: Option<String>,
     /// The document's own export date, if it carries one.
     pub file_asserted_at: Option<Timestamp>,
     /// The document header's fingerprint, if the importer declared one.

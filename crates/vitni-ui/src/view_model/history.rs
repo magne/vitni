@@ -1,4 +1,4 @@
-use vitni_app::ActivityDetail;
+use vitni_app::{ActivityDetail, RunRef, RunResume};
 
 use super::{Category, ChangeLogEntry, HashMap, Localizer, RecordRef};
 
@@ -59,6 +59,18 @@ impl HistoryEntryVm {
     }
 }
 
+/// The muted text beside a run row: *interrupted* for a run that can be resumed, else the records it
+/// imported once it ended, else the changes the row folds.
+fn run_count(run: &RunRef, changes: u32, loc: &Localizer) -> String {
+    if run.resume.is_some() {
+        return loc.import_run_interrupted();
+    }
+    run.records.map_or_else(
+        || loc.import_run_changes(changes),
+        |records| loc.import_run_records(records),
+    )
+}
+
 /// The newest undoable entry of a record's change log (the `⌘Z` target), or `None` when nothing can
 /// be undone. Change logs are newest-first, so this is the first entry with `can_undo` — an
 /// already-retracted assertion is skipped, but a collapsed import run is not: it carries its run's
@@ -105,24 +117,46 @@ pub struct ActivityVm {
     pub count: Option<String>,
     /// For an import-run row, the entries it folds, newest first; empty otherwise.
     pub children: Vec<ActivityVm>,
+    /// For an interrupted bulk run's row, its *Resume* (ADR 0040 §5).
+    pub resume: Option<ResumeVm>,
+}
+
+/// An interrupted import run's *Resume* (ADR 0040 §5): what it re-runs, and the button's accessible
+/// name, which names the run's file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResumeVm {
+    /// What *Resume* re-runs.
+    pub run: RunResume,
+    /// The button's accessible name.
+    pub label: String,
+}
+
+impl ResumeVm {
+    /// The *Resume* of a run that imported `source_label`, when `resume` says it can be resumed.
+    pub(crate) fn of(resume: Option<&RunResume>, source_label: &str, loc: &Localizer) -> Option<Self> {
+        resume.map(|run| Self {
+            run: run.clone(),
+            label: loc.import_run_resume_aria(source_label),
+        })
+    }
 }
 
 impl ActivityVm {
     /// Builds an activity row from an app [`ChangeLogEntry`], linking the affected record by name/id.
     #[must_use]
     pub(crate) fn from_entry(entry: &ChangeLogEntry, loc: &Localizer, names: &HashMap<String, String>) -> Self {
-        let (count, children) = match &entry.detail {
+        let (count, children, resume) = match &entry.detail {
             Some(ActivityDetail::ImportRun { run, count, children }) => (
-                Some(run.records.map_or_else(
-                    || loc.import_run_changes(*count),
-                    |records| loc.import_run_records(records),
-                )),
+                Some(run_count(run, *count, loc)),
                 children
                     .iter()
                     .map(|child| Self::from_entry(child, loc, names))
                     .collect(),
+                ResumeVm::of(run.resume.as_ref(), &run.source_label, loc),
             ),
-            Some(ActivityDetail::Fact { .. } | ActivityDetail::IdentityDecision { .. }) | None => (None, Vec::new()),
+            Some(ActivityDetail::Fact { .. } | ActivityDetail::IdentityDecision { .. }) | None => {
+                (None, Vec::new(), None)
+            }
         };
         Self {
             when: friendly_timestamp(&entry.occurred_at),
@@ -131,6 +165,7 @@ impl ActivityVm {
             record: record_for(entry, names),
             count,
             children,
+            resume,
         }
     }
 }

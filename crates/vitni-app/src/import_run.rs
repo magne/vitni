@@ -5,6 +5,9 @@
 //! importer's `Software` one. Datasets are not stored on their own: a dataset is the set of runs that
 //! name it, labelled by its earliest run.
 
+use std::collections::HashMap;
+use std::path::PathBuf;
+
 use vitni_core::ids::ImportRunId;
 use vitni_core::import_run::{
     AbandonReason, ImportCounts, ImportRunCommand, ImportRunCommandEnvelope, ImportRunStatus, ImportRunView,
@@ -35,6 +38,9 @@ pub struct ImportRunSummary {
     pub dataset_label: String,
     /// What was imported.
     pub source_label: String,
+    /// Where a bulk import read its file from, if the run recorded it: what *Resume* re-reads
+    /// (ADR 0040 §5).
+    pub source_path: Option<PathBuf>,
     /// The document header's fingerprint, if the importer declared one.
     pub dataset_hint: Option<String>,
     /// Who started the run, if the operator has a display name.
@@ -45,6 +51,59 @@ pub struct ImportRunSummary {
     pub status: ImportRunStatus,
     /// What the run wrote (zero until it has ended).
     pub counts: ImportCounts,
+    /// How to resume the run, when it is a bulk import that was abandoned (ADR 0040 §5).
+    pub resume: Option<RunResume>,
+}
+
+/// What resuming an abandoned bulk run re-runs: its plugin over its file, into its dataset (ADR 0040
+/// §5). Every record the run already wrote resolves as unchanged, so the re-run writes only the rest.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunResume {
+    /// The importing plugin's id.
+    pub plugin: String,
+    /// The dataset the run's records belong to.
+    pub dataset: DatasetId,
+    /// The file the run read.
+    pub source: PathBuf,
+}
+
+/// How to resume each run in `views` that can be resumed (ADR 0040 §5): one abandoned after reading
+/// a file, for a reason a re-run need not repeat, and still the newest run of its dataset. A later run
+/// — finished, running or itself abandoned — supersedes it.
+pub(crate) fn resumable(views: &[ImportRunView]) -> HashMap<ImportRunId, RunResume> {
+    let mut resumable = HashMap::new();
+    for view in views {
+        let (ImportRunStatus::Abandoned { reason }, Some(id), Some(dataset), Some(source), Some(started_at)) = (
+            view.status(),
+            view.run_id(),
+            view.dataset(),
+            view.source_path(),
+            view.started_at(),
+        ) else {
+            continue;
+        };
+        let superseded = views
+            .iter()
+            .any(|later| later.dataset() == Some(dataset) && later.started_at().is_some_and(|at| at > started_at));
+        if !superseded && rerun_may_finish(reason) {
+            let resume = RunResume {
+                plugin: view.plugin().to_owned(),
+                dataset: dataset.clone(),
+                source: PathBuf::from(source),
+            };
+            resumable.insert(id, resume);
+        }
+    }
+    resumable
+}
+
+/// Whether re-running a run abandoned for `reason` can get further: not when the importer rejected
+/// the file or exhausted its budget, which the same file does again.
+fn rerun_may_finish(reason: &AbandonReason) -> bool {
+    match reason {
+        AbandonReason::Cancelled | AbandonReason::Runtime { .. } | AbandonReason::Commit { .. } => true,
+        AbandonReason::GuestError { .. } | AbandonReason::ResourceLimit => false,
+    }
 }
 
 /// One dataset: the runs that name it, labelled by the earliest (ADR 0037 §5).
@@ -230,9 +289,11 @@ pub async fn abandon_import_run(
 /// A store error.
 pub async fn list_import_runs(workspace: &Workspace) -> Result<Vec<ImportRunSummary>, AppError> {
     let views = workspace.store().list_import_runs().await?;
+    let mut resumable = resumable(&views);
     let mut runs = Vec::with_capacity(views.len());
     for view in &views {
-        if let Some(run) = summarize(view) {
+        if let Some(mut run) = summarize(view) {
+            run.resume = resumable.remove(&run.id);
             runs.push(run);
         }
     }
@@ -505,11 +566,13 @@ fn summarize(view: &ImportRunView) -> Option<ImportRunSummary> {
         dataset: dataset.clone(),
         dataset_label: view.dataset_label().to_owned(),
         source_label: view.source_label().to_owned(),
+        source_path: view.source_path().map(PathBuf::from),
         dataset_hint: view.dataset_hint().map(str::to_owned),
         operator_display: view.operator().and_then(|agent| agent.display.clone()),
         started_at,
         status: view.status().clone(),
         counts: view.counts().clone(),
+        resume: None,
     })
 }
 

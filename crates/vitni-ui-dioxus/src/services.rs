@@ -19,8 +19,8 @@ use tokio::sync::{mpsc, oneshot};
 use unic_langid::LanguageIdentifier;
 use vitni_app::{
     AiConfig, BackupReport, BackupRequest, Confidence, Config, ConfigStore, DatasetChoice, DatasetProposal,
-    DatasetScope, FileConfigStore, IdFormats, LocaleDefaults, MapConfig, MapProvider, MapSource, MatchQuestion,
-    MatchReply, PlanReply, PlanSummary, PluginTrust, PluginTrustConfig, PreferenceLayers, ReplaceReport,
+    DatasetScope, FileConfigStore, IdFormats, ImportRunSummary, LocaleDefaults, MapConfig, MapProvider, MapSource,
+    MatchQuestion, MatchReply, PlanReply, PlanSummary, PluginTrust, PluginTrustConfig, PreferenceLayers, ReplaceReport,
     ReplaceRequest, ResolvedLocale, RestoreReport, RestoreRequest, Session, ShortcutConfig, SuretyLabelOverrides,
     TagSummary, Workspace, WorkspaceCounts, WorkspaceSummary, config, list_tags, list_workspaces,
     read_preference_layers, read_resolved_locale, read_resolved_surety_labels, read_surety_label_overrides,
@@ -1359,6 +1359,18 @@ pub struct ImportTargetProbe {
     pub persons: usize,
     /// The target's datasets of the plugin's scheme, in the order they were first imported.
     pub datasets: Vec<DatasetOption>,
+}
+
+/// Every import run into the open workspace, oldest first: the Source stage's *Earlier imports*.
+///
+/// # Errors
+/// A localized error if the workspace cannot be opened or read.
+pub async fn import_runs(services: Services) -> Result<Vec<ImportRunSummary>, String> {
+    let loc = services.localizer();
+    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
+    vitni_app::list_import_runs(&workspace)
+        .await
+        .map_err(|error| loc.error(&error))
 }
 
 /// Probes a registered workspace, opening it fresh by name, before an import of `plugin_id` into it.

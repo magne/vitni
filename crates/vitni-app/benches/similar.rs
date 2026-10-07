@@ -574,6 +574,7 @@ fn importer(operator: &Session) -> Session {
             dataset: DatasetId::lineage("bench", Uuid::from_u128(0xB)),
             dataset_label: "bench".to_owned(),
             source_label: "bench".to_owned(),
+            source_path: None,
             file_asserted_at: None,
             dataset_hint: None,
         },

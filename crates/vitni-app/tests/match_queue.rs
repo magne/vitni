@@ -55,6 +55,7 @@ fn importer(dataset: u128, label: &str) -> Session {
             dataset: DatasetId::lineage("gedcom", Uuid::from_u128(dataset)),
             dataset_label: label.to_owned(),
             source_label: label.to_owned(),
+            source_path: None,
             file_asserted_at: None,
             dataset_hint: None,
         },

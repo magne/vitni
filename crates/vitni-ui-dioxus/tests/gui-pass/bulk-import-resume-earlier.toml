@@ -1,0 +1,87 @@
+# #496: the Import tool's Earlier imports offers Resume on an interrupted bulk run too (ADR 0040 §5).
+# As `bulk-import-resume`, a cancel lands while `large.ged` is being written; *Import another* returns to
+# the Source stage, whose Earlier imports lists the run as interrupted with Resume, and Resume re-runs it
+# at once: its plan resolves what the cancelled run wrote as unchanged.
+#
+# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
+description = "An interrupted bulk import is resumed from the Import tool's Earlier imports (#496)"
+# Writing large.ged keeps the disk busy enough to starve the GUIs beside it.
+exclusive = true
+
+[[step]]
+do = "click"
+at = [70, 786]
+label = "rail: Import"
+
+[[step]]
+do = "click"
+at = [1394, 408]
+label = "source file field"
+
+[[step]]
+do = "text"
+text = "large.ged"
+label = "type: large.ged"
+
+[[step]]
+do = "click"
+at = [300, 642]
+label = "Import"
+
+[[step]]
+do = "wait"
+seconds = 3
+label = "let the file be read and planned"
+
+[[step]]
+do = "shot"
+name = "plan"
+
+[[step]]
+do = "click"
+at = [1730, 512]
+label = "Plan: Import"
+
+[[step]]
+do = "click"
+at = [303, 429]
+label = "Cancel while writing"
+
+[[step]]
+do = "click"
+at = [330, 478]
+label = "Import another"
+
+[[step]]
+do = "wait"
+seconds = 2
+label = "let the earlier imports load"
+
+[[step]]
+do = "shot"
+name = "earlier"
+
+[[step]]
+do = "click"
+at = [469, 788]
+label = "Earlier imports: Resume"
+
+[[step]]
+do = "wait"
+seconds = 4
+label = "let the file be read and planned again"
+
+[[step]]
+do = "shot"
+name = "resumed-plan"
+
+[[assert]]
+kind = "differ"
+shots = ["earlier", "resumed-plan"]
+because = "Resume must re-run the interrupted import at once, not leave the Source stage up"
+
+[[assert]]
+kind = "differ"
+shots = ["plan", "resumed-plan"]
+region = [248, 308, 1536, 240]
+because = "the resumed plan must resolve what the cancelled run wrote as unchanged, not plan it all as new"

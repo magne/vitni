@@ -28,8 +28,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use vitni_plugin_host::{PluginRole, ProgressStep, ReviewRequest};
 use vitni_ui::{
-    BulkImportProgress, BulkImportSession, BulkImportStage, BulkImportStep, BulkImportSummary, ImportSourcePath,
-    ImportTargetChoice, ImportTargetError, Localizer,
+    BulkImportProgress, BulkImportSession, BulkImportStage, BulkImportStep, BulkImportSummary, EarlierImportVm,
+    ImportSourcePath, ImportTargetChoice, ImportTargetError, Localizer,
 };
 
 use super::export::{NoticeStage, WizardNoticeTone};
@@ -41,10 +41,11 @@ use crate::screens::{
     BulkConfirmStage, BulkPlanStage, BulkReviewStage, bulk_confirm_labels, bulk_plan_labels, bulk_review_labels,
 };
 use crate::services::{
-    BulkImportHandle, DatasetQuestion, PluginRow, Services, discover_plugins, probe_import_target, start_bulk_import,
+    BulkImportHandle, DatasetQuestion, PluginRow, Services, discover_plugins, import_runs, probe_import_target,
+    start_bulk_import,
 };
 use tokio::sync::oneshot;
-use vitni_app::{DatasetChoice, DatasetProposal, PlanStep, ReviewReply};
+use vitni_app::{DatasetChoice, DatasetProposal, PlanStep, ReviewReply, RunResume};
 
 /// The wizard chrome shared across stages: the heading and the three step names.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -293,6 +294,18 @@ pub fn BulkImportBody() -> Element {
         review: use_signal(|| None),
     };
     let default_dir = state.services().dir.clone();
+    let mut resume = resumer(&state, &chrome, session, (cancel, asking));
+    // A run row's *Resume* hands its run over through `import_resume`; take it and re-run it at once.
+    use_effect(move || {
+        let Some(mut nav) = try_consume_context::<NavState>() else {
+            return;
+        };
+        let handed = nav.import_resume.read().clone();
+        if let Some(run) = handed {
+            nav.import_resume.set(None);
+            resume(run);
+        }
+    });
 
     let body = match session().stage().clone() {
         BulkImportStage::Source => bulk_source_body(
@@ -413,6 +426,8 @@ fn bulk_source_body(
         registered_names,
     );
     let new_workspace_fields = rsx! { {register_fields_form(chrome, register, "register")} };
+    let importers: Vec<String> = plugin_options.iter().map(|choice| choice.value.clone()).collect();
+    let onresume = resumer(state, chrome, session, (cancel, asking));
     rsx! {
         BulkSourceStage {
             labels: bulk_source_labels(chrome),
@@ -427,7 +442,73 @@ fn bulk_source_body(
             target_error,
             onrun,
         }
+        SourceEarlierImports { importers, onresume }
         {confirm_modal(chrome, pending, asking, session, cancel)}
+    }
+}
+
+/// The Source stage's [`EarlierImports`], loading the open workspace's runs of `importers` itself.
+#[component]
+fn SourceEarlierImports(importers: Vec<String>, onresume: EventHandler<RunResume>) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let chrome = use_context::<ChromeCtx>().0;
+    let services = state.services().clone();
+    let runs = use_resource(move || {
+        let services = services.clone();
+        async move {
+            import_runs(services)
+                .await
+                .inspect_err(|error| tracing::warn!(%error, "could not list the earlier imports"))
+                .unwrap_or_default()
+        }
+    });
+    let rows = runs
+        .read_unchecked()
+        .as_ref()
+        .map(|runs| EarlierImportVm::list(runs, &importers, state.data_loc()))
+        .unwrap_or_default();
+    rsx! {
+        EarlierImports {
+            labels: EarlierImportsLabels {
+                heading: chrome.bulk_import_earlier_heading(),
+                resume: state.data_loc().import_run_resume(),
+            },
+            rows,
+            onresume,
+        }
+    }
+}
+
+/// Re-runs an abandoned bulk run at once (ADR 0040 §5): its plugin over its file, into its dataset, in
+/// the open workspace, where what it already wrote resolves as unchanged.
+fn resumer(
+    state: &AppState,
+    chrome: &Chrome,
+    session: Signal<BulkImportSession>,
+    guards: (Signal<Option<Arc<AtomicBool>>>, Asking),
+) -> impl FnMut(RunResume) + Clone + 'static {
+    let services = state.services().clone();
+    let unknown_failure = chrome.bulk_import_failed_unknown();
+    move |resume: RunResume| {
+        let RunResume {
+            plugin,
+            dataset,
+            source,
+        } = resume;
+        let run = BulkRun {
+            target: ImportTargetChoice::Existing {
+                workspace: services.open_workspace.clone(),
+            },
+            services: services.clone(),
+            plugin_id: plugin,
+            source,
+            dataset: DatasetChoice::Existing(dataset.to_string()),
+            persons: 0,
+            unknown_failure: unknown_failure.clone(),
+        };
+        launch_bulk_import(run, session, guards);
     }
 }
 
@@ -723,6 +804,56 @@ pub fn BulkConfirmDialog(
             }
             if later_export {
                 p { class: "muted", "{labels.later_export}" }
+            }
+        }
+    }
+}
+
+/// The [`EarlierImports`] card's labels.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EarlierImportsLabels {
+    /// The card's heading.
+    pub heading: String,
+    /// The *Resume* button on an interrupted run.
+    pub resume: String,
+}
+
+/// The Source stage's *Earlier imports*: the newest bulk runs into this workspace, each with its state,
+/// and *Resume* on an interrupted one (ADR 0040 §5), which re-runs it through `onresume`. Renders
+/// nothing when there are none.
+#[component]
+pub fn EarlierImports(
+    labels: EarlierImportsLabels,
+    rows: Vec<EarlierImportVm>,
+    onresume: EventHandler<RunResume>,
+) -> Element {
+    if rows.is_empty() {
+        return rsx! {};
+    }
+    rsx! {
+        Card {
+            h3 { "{labels.heading}" }
+            div { class: "timeline", style: "margin-top:8px",
+                for row in rows {
+                    div { class: "tl-item",
+                        div { class: "tl-when", "{row.when}" }
+                        div { class: "tl-what",
+                            "{row.source}"
+                            span { class: "muted tl-count", "{row.status}" }
+                            if let Some(resume) = row.resume {
+                                button {
+                                    class: "btn sm ghost",
+                                    style: "margin-left:var(--sp-2)",
+                                    r#type: "button",
+                                    aria_label: "{resume.label}",
+                                    onclick: move |_| onresume.call(resume.run.clone()),
+                                    "{labels.resume}"
+                                }
+                            }
+                        }
+                        div { class: "tl-who", "{row.plugin}" }
+                    }
+                }
             }
         }
     }
