@@ -66,6 +66,9 @@ impl Held {
         if place::stated_place_type(view).is_some() {
             held.filled.insert("place_type");
         }
+        if view.coordinates().is_some() {
+            held.filled.insert("coordinates");
+        }
         held
     }
 
@@ -384,6 +387,9 @@ impl Writer<'_> {
         if let Some(place_type) = place_type {
             place::set_place_type(ws, session, human_id, place_type.clone(), meta()).await?;
         }
+        if let Some(coordinates) = fields.coordinates.filter(|_| held.filled.insert("coordinates")) {
+            place::assert_place_coordinates(ws, session, human_id, coordinates, meta()).await?;
+        }
         if let Some(restrictions) = held.widen(&fields.restrictions) {
             place::set_restrictions(ws, session, human_id, restrictions, meta()).await?;
         }
@@ -506,6 +512,9 @@ impl Writer<'_> {
             EntityFields::Place(fields) => {
                 if let Some(place_type) = &fields.place_type {
                     place::set_place_type(ws, session, human_id, place_type.clone(), meta()).await?;
+                }
+                if let Some(coordinates) = fields.coordinates {
+                    place::assert_place_coordinates(ws, session, human_id, coordinates, meta()).await?;
                 }
                 if !fields.restrictions.is_empty() {
                     place::set_restrictions(ws, session, human_id, fields.restrictions.clone(), meta()).await?;

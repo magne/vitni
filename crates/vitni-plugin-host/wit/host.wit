@@ -212,7 +212,12 @@
 // version. It reads what `list-*` already exposes, so it is granted with `query`. The `entity-kind` enum
 // moves from `staging` to `types`, so `query` can name a kind without importing `staging`; `staging`
 // uses it from there. Additive to `query` and `types`.
-package vitni:host-api@0.29.0;
+//
+// Version 0.30.0 carries a place's point into an import (#499): `staged-place` gains
+// `coordinates: option<coordinates>`, which GEDCOM `PLAC.MAP` and Gramps `<coord>` state, so a
+// re-import reconciles a moved point by the file's export date (ADR 0029). A breaking change to
+// `staging`.
+package vitni:host-api@0.30.0;
 
 interface types {
     // The kind of a name (data-model §7 / GEDCOM `NAME.TYPE`), mirroring `vitni_core::name::NameType`.
@@ -1047,7 +1052,7 @@ interface commands {
 // its name, and matches the rest against the workspace, so a re-import of an unchanged document writes
 // nothing. Granted with the `commands` capability.
 interface staging {
-    use types.{entity-kind, person-name, sex, fact, external-id, restriction, event-type, genealogical-date, address, place-type, confidence, note-type, participant-role, age, attribute, association-role, child-relationship, media-crop, source-media-type, origin-key, capability-error};
+    use types.{entity-kind, person-name, sex, fact, external-id, restriction, event-type, genealogical-date, address, place-type, confidence, note-type, participant-role, age, attribute, association-role, child-relationship, media-crop, source-media-type, origin-key, coordinates, capability-error};
 
     // Another graph's entity, by its origin: its kind, its record and its item.
     record origin-ref {
@@ -1090,6 +1095,7 @@ interface staging {
     record staged-place {
         name: string,
         place-type: option<place-type>,
+        coordinates: option<coordinates>,
         restrictions: list<restriction>,
     }
 

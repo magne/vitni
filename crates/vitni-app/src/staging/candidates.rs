@@ -279,6 +279,7 @@ impl Builder<'_> {
             EntityFields::Place(place) => Profile::Place(PlaceProfile {
                 names: vec![place_name(&place.name)],
                 place_type: place.place_type.clone(),
+                coordinates: place.coordinates,
                 origins,
                 ..PlaceProfile::default()
             }),

@@ -13,6 +13,7 @@ use vitni_app::{
     StagedEvent, StagedFamily, StagedLink, StagedMedia, StagedNote, StagedPerson, StagedPlace, StagedRepository,
     StagedSource, StagedTag, Timestamp,
 };
+use vitni_core::geo::GeoCoordinates;
 use vitni_core::matching::MatchableKind;
 
 use crate::bindings::imports::vitni::host_api::{staging, types};
@@ -343,6 +344,7 @@ fn to_entity(entity: staging::StagedEntity) -> StagedEntity {
             restrictions: to_restrictions(event.restrictions),
         }),
         staging::EntityFields::Place(place) => EntityFields::Place(StagedPlace {
+            coordinates: place.coordinates.and_then(|point| to_coordinates(&place.name, point)),
             name: place.name,
             place_type: place.place_type.map(to_place_type),
             restrictions: to_restrictions(place.restrictions),
@@ -381,6 +383,21 @@ fn to_entity(entity: staging::StagedEntity) -> StagedEntity {
         item: entity.item,
         fields,
     }
+}
+
+/// The point a guest staged for the place `name`, or `None`, with a warning, when it is not one: the
+/// importers parse only valid points, so this guards against a guest that does not.
+fn to_coordinates(name: &str, point: types::Coordinates) -> Option<GeoCoordinates> {
+    let coordinates = GeoCoordinates::from_degrees(point.latitude, point.longitude);
+    if coordinates.is_none() {
+        tracing::warn!(
+            place = name,
+            latitude = point.latitude,
+            longitude = point.longitude,
+            "dropping a staged place's point that is not finite degrees in range"
+        );
+    }
+    coordinates
 }
 
 fn to_fact(fact: types::Fact) -> NewFact {

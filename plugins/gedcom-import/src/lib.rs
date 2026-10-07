@@ -14,11 +14,11 @@ wit_bindgen::generate!({
     world: "bulk-import",
     path: "../../crates/vitni-plugin-host/wit",
     with: {
-        "vitni:host-api/types@0.29.0": vitni_plugin_api::types,
-        "vitni:host-api/log@0.29.0": vitni_plugin_api::log,
-        "vitni:host-api/staging@0.29.0": vitni_plugin_api::staging,
-        "vitni:host-api/progress@0.29.0": vitni_plugin_api::progress,
-        "vitni:host-api/import-source@0.29.0": vitni_plugin_api::import_source,
+        "vitni:host-api/types@0.30.0": vitni_plugin_api::types,
+        "vitni:host-api/log@0.30.0": vitni_plugin_api::log,
+        "vitni:host-api/staging@0.30.0": vitni_plugin_api::staging,
+        "vitni:host-api/progress@0.30.0": vitni_plugin_api::progress,
+        "vitni:host-api/import-source@0.30.0": vitni_plugin_api::import_source,
     },
 });
 
@@ -26,7 +26,7 @@ use std::collections::{HashMap, HashSet};
 
 use vitni_gedcom::{
     Age, Calendar, Citation, Date, DateModifier, Event, EventAssociation, Family, Header, Individual, MediaObject,
-    Repository, Source, Tree,
+    Place, Repository, Source, Tree,
 };
 use vitni_plugin_api::staging::{
     AssociationLink, ChildLink, EntityFields, EntityKind, EntityRef, LinkKind, MediaLink, MemberLink, PairLink,
@@ -72,12 +72,39 @@ impl Guest for Importer {
     }
 }
 
+/// For each place name in `tree` that states a point (`PLAC.MAP`), the first place stating a valid
+/// one, or else the first stating any, so its import can warn why it is left out.
+fn points(tree: &Tree) -> HashMap<&str, &Place> {
+    let valid = |place: &Place| {
+        let (latitude, longitude) = (place.latitude.as_deref(), place.longitude.as_deref());
+        vitni_interchange::Coordinates::parse(latitude.unwrap_or_default(), longitude.unwrap_or_default()).is_some()
+    };
+    let mut points: HashMap<&str, &Place> = HashMap::new();
+    let individuals = tree.individuals.iter().flat_map(|individual| &individual.events);
+    let families = tree.families.iter().flat_map(|family| &family.events);
+    for place in individuals.chain(families).filter_map(|event| event.place.as_ref()) {
+        if place.latitude.is_none() && place.longitude.is_none() {
+            continue;
+        }
+        match points.get(place.name.as_str()) {
+            Some(first) if valid(first) || !valid(place) => {}
+            Some(_) | None => {
+                points.insert(place.name.as_str(), place);
+            }
+        }
+    }
+    points
+}
+
 /// The records several records refer to — sources, repositories, places and media files — each
 /// submitted as a graph of its own the first time it is referred to.
 struct Shared<'a> {
     persons: HashSet<&'a str>,
     sources: HashMap<&'a str, &'a Source>,
     repositories: HashMap<&'a str, &'a Repository>,
+    /// The `PLAC.MAP` each place name takes from anywhere in the document ([`points`]), so a place
+    /// takes its point however late it is stated.
+    points: HashMap<&'a str, &'a Place>,
     /// The shared records submitted so far, by kind and record.
     submitted: HashSet<(&'static str, String)>,
 }
@@ -100,6 +127,7 @@ impl<'a> Shared<'a> {
                 .iter()
                 .map(|repo| (repo.xref.as_str(), repo))
                 .collect(),
+            points: points(tree),
             submitted: HashSet::new(),
         }
     }
@@ -120,12 +148,16 @@ impl<'a> Shared<'a> {
     fn place(&mut self, name: &str) -> Result<EntityRef, String> {
         let record = format!("plac:{name}");
         if self.first("place", &record) {
+            let point = self.points.get(name).and_then(|place| {
+                vitni_plugin_api::place_point(name, place.latitude.as_deref(), place.longitude.as_deref())
+            });
             let mut graph = Graph::new(&record);
             graph.entity(
                 None,
                 EntityFields::Place(StagedPlace {
                     name: name.to_owned(),
                     place_type: None,
+                    coordinates: point,
                     restrictions: Vec::new(),
                 }),
             );
@@ -409,8 +441,6 @@ fn add_event(
         }),
     );
     if let Some(place) = &event.place {
-        // The place's point/geometry (`PLAC.MAP`, ADR 0024) is not yet threaded through the plugin
-        // boundary — a follow-up; only the name is linked.
         let place = shared.place(&place.name)?;
         graph.link(
             Some(item),

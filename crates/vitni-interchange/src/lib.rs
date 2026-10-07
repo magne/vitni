@@ -12,8 +12,10 @@
 //! crate — only the value vocabulary lives here.
 
 mod age;
+mod coordinates;
 
 pub use age::{Age, AgeBound, age_value, parse_age};
+pub use coordinates::Coordinates;
 
 /// Biological sex as recorded.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -11,11 +11,11 @@ wit_bindgen::generate!({
     world: "bulk-import",
     path: "../../crates/vitni-plugin-host/wit",
     with: {
-        "vitni:host-api/types@0.29.0": vitni_plugin_api::types,
-        "vitni:host-api/log@0.29.0": vitni_plugin_api::log,
-        "vitni:host-api/staging@0.29.0": vitni_plugin_api::staging,
-        "vitni:host-api/progress@0.29.0": vitni_plugin_api::progress,
-        "vitni:host-api/import-source@0.29.0": vitni_plugin_api::import_source,
+        "vitni:host-api/types@0.30.0": vitni_plugin_api::types,
+        "vitni:host-api/log@0.30.0": vitni_plugin_api::log,
+        "vitni:host-api/staging@0.30.0": vitni_plugin_api::staging,
+        "vitni:host-api/progress@0.30.0": vitni_plugin_api::progress,
+        "vitni:host-api/import-source@0.30.0": vitni_plugin_api::import_source,
     },
 });
 
@@ -373,6 +373,11 @@ impl<'a> Resolver<'a> {
                 EntityFields::Place(StagedPlace {
                     name: place.name.clone().unwrap_or_default(),
                     place_type: place.place_type.as_deref().map(place_type_of),
+                    coordinates: vitni_plugin_api::place_point(
+                        place.name.as_deref().unwrap_or(handle),
+                        place.latitude.as_deref(),
+                        place.longitude.as_deref(),
+                    ),
                     restrictions: Vec::new(),
                 }),
             );

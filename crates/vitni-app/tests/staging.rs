@@ -9,12 +9,12 @@ use std::sync::Arc;
 use uuid::Uuid;
 use vitni_app::{
     AppDefaults, CommitControl, CommitOutcome, DatasetId, DateParts, Disposition, EntityFields, EntityRef, ExternalId,
-    IdentityDecision, ImportCounts, ImportPlan, ImportReview, LinkBasis, LinkKind, MatchGroup, MutationMeta, NewEvent,
-    NewFact, NewImportRun, NewParticipation, NewPerson, NewPlace, NewSource, OperatorConfig, PairAnswer, PairDecision,
-    PendingRun, PersonNameParts, PlaceType, PlanCounts, PlannedChange, PlannedField, PlannedRecord, Provenance,
-    RecordGraph, ResolutionDecision, RunToEnd, Session, StagedEntity, StagedEvent, StagedFamily, StagedLink,
-    StagedPerson, StagedPlace, StagedSource, StagedTag, Workspace, WorkspaceDefaults, WriteScope, commit_import,
-    gregorian_date, plan_import, record_origin,
+    GeoCoordinates, IdentityDecision, ImportCounts, ImportPlan, ImportReview, LinkBasis, LinkKind, MatchGroup,
+    MutationMeta, NewEvent, NewFact, NewImportRun, NewParticipation, NewPerson, NewPlace, NewSource, OperatorConfig,
+    PairAnswer, PairDecision, PendingRun, PersonNameParts, PlaceType, PlanCounts, PlannedChange, PlannedField,
+    PlannedRecord, Provenance, RecordGraph, ResolutionDecision, RunToEnd, Session, StagedEntity, StagedEvent,
+    StagedFamily, StagedLink, StagedPerson, StagedPlace, StagedSource, StagedTag, Workspace, WorkspaceDefaults,
+    WriteScope, commit_import, gregorian_date, plan_import, record_origin,
 };
 use vitni_core::enums::{EventType, EvidenceLevel, FactType, ParticipantRole, Restriction, Sex};
 use vitni_core::ids::AgentId;
@@ -188,6 +188,7 @@ fn place(record: &str, name: &str) -> RecordGraph {
             fields: EntityFields::Place(StagedPlace {
                 name: name.to_owned(),
                 place_type: None,
+                coordinates: None,
                 restrictions: BTreeSet::default(),
             }),
         }],
@@ -1864,4 +1865,122 @@ async fn a_reimport_keeps_an_author_the_user_typed_after_the_export_or_from_an_u
         assert_eq!(summary.author.as_deref(), Some("SSB"));
     }
     assert_eq!(events(&workspace).await, before, "nothing was written");
+}
+
+fn point(latitude: f64, longitude: f64) -> GeoCoordinates {
+    GeoCoordinates::from_degrees(latitude, longitude).expect("point")
+}
+
+fn located_place(record: &str, name: &str, at: GeoCoordinates) -> RecordGraph {
+    let mut graph = place(record, name);
+    if let EntityFields::Place(fields) = &mut graph.entities[0].fields {
+        fields.coordinates = Some(at);
+    }
+    graph
+}
+
+async fn only_place(workspace: &Workspace) -> String {
+    let places = vitni_app::list_places(workspace).await.expect("places");
+    assert_eq!(places.len(), 1, "expected one place: {places:?}");
+    places[0].human_id.clone()
+}
+
+#[tokio::test]
+async fn an_imported_place_carries_its_point() {
+    let (workspace, _dir) = workspace().await;
+    import(
+        &workspace,
+        &importer(dataset(1)),
+        vec![located_place("plac:Mandal", "Mandal", point(58.028, 7.46))],
+    )
+    .await;
+
+    let place = place_summary(&workspace, &only_place(&workspace).await).await;
+    assert_eq!(place.coordinates_point, Some(point(58.028, 7.46)));
+}
+
+#[tokio::test]
+async fn a_reimport_from_a_newer_file_moves_the_point() {
+    let (workspace, _dir) = workspace().await;
+    import(
+        &workspace,
+        &importer(dataset(1)),
+        vec![located_place("plac:Mandal", "Mandal", point(58.028, 7.46))],
+    )
+    .await;
+
+    let exported = at_year(2100);
+    let session = dated_importer(dataset(1), exported);
+    let graphs = vec![located_place("plac:Mandal", "Mandal", point(58.03, 7.455))];
+    let (plan, _) = dated_import(&workspace, &session, graphs, Some(exported)).await;
+
+    let Disposition::Update { fields, .. } = disposition(&plan, 0, 0) else {
+        panic!("expected an update: {:?}", disposition(&plan, 0, 0));
+    };
+    assert_eq!(fields, &["place.CoordinatesAsserted".to_owned()]);
+    let place = place_summary(&workspace, &only_place(&workspace).await).await;
+    assert_eq!(place.coordinates_point, Some(point(58.03, 7.455)));
+}
+
+#[tokio::test]
+async fn a_reimport_from_an_older_or_undated_file_keeps_the_point() {
+    let (workspace, _dir) = workspace().await;
+    import(
+        &workspace,
+        &importer(dataset(1)),
+        vec![located_place("plac:Mandal", "Mandal", point(58.028, 7.46))],
+    )
+    .await;
+    let before = events(&workspace).await;
+
+    for exported in [Some(at_year(2000)), None] {
+        let session = match exported {
+            Some(exported) => dated_importer(dataset(1), exported),
+            None => importer(dataset(1)),
+        };
+        let graphs = vec![located_place("plac:Mandal", "Mandal", point(58.03, 7.455))];
+        let (plan, _) = dated_import(&workspace, &session, graphs, exported).await;
+
+        let Disposition::Unchanged { .. } = disposition(&plan, 0, 0) else {
+            panic!("{exported:?}: expected unchanged: {:?}", disposition(&plan, 0, 0));
+        };
+    }
+    let place = place_summary(&workspace, &only_place(&workspace).await).await;
+    assert_eq!(place.coordinates_point, Some(point(58.028, 7.46)));
+    assert_eq!(events(&workspace).await, before, "nothing was written");
+}
+
+#[tokio::test]
+async fn a_place_decided_same_gains_the_point_it_lacks() {
+    let (workspace, _dir) = workspace().await;
+    import(&workspace, &importer(dataset(2)), vec![place("plac:Mandal", "Mandal")]).await;
+    let stored = only_place(&workspace).await;
+    decide_same(
+        &workspace,
+        vec![located_place("plac:Mandal", "Mandal", point(58.028, 7.46))],
+    )
+    .await;
+
+    assert_eq!(
+        place_summary(&workspace, &stored).await.coordinates_point,
+        Some(point(58.028, 7.46))
+    );
+}
+
+#[tokio::test]
+async fn a_place_decided_same_keeps_the_point_it_has() {
+    let (workspace, _dir) = workspace().await;
+    let graph = located_place("plac:Mandal", "Mandal", point(58.028, 7.46));
+    import(&workspace, &importer(dataset(2)), vec![graph]).await;
+    let stored = only_place(&workspace).await;
+    decide_same(
+        &workspace,
+        vec![located_place("plac:Mandal", "Mandal", point(58.03, 7.455))],
+    )
+    .await;
+
+    assert_eq!(
+        place_summary(&workspace, &stored).await.coordinates_point,
+        Some(point(58.028, 7.46))
+    );
 }

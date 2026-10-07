@@ -62,6 +62,7 @@ import-plan-field-address = address
 import-plan-field-place = place
 import-plan-field-type = type
 import-plan-field-enclosure = location
+import-plan-field-coordinates = coordinates
 import-plan-field-title = title
 import-plan-field-author = author
 import-plan-field-publication = publication

@@ -220,6 +220,7 @@ name = "vitni-gedcom-import"
 version = "0.1.0"
 dependencies = [
  "vitni-gedcom",
+ "vitni-interchange",
  "vitni-plugin-api",
  "wit-bindgen",
 ]
