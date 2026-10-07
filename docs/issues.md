@@ -409,6 +409,17 @@ in its own area: research notes (*Notes & research notes*). The one gap running 
   interactive picker), and listed it in the Gate-2 exit criteria. `import.html` has no such view: the
   ADR 0029 supersede path is invisible in the mockups, so there is no agreed design for showing a user
   that an import overwrote one of their values.
+- **An unreadable file export date is ignored without notice** — ADR 0029 §3 makes an unparseable date
+  additive-only, but nothing says it applied, so a re-import of a newer file updates nothing unseen.
+  `begin_run` in `crates/vitni-plugin-host/src/staging.rs` drops a date that fails
+  `Timestamp::parse_rfc3339` (an impossible day such as Gramps `2024-02-30`) with no log, and Gramps
+  `date_point` loses the day of a `<created>` with a time part. *Shape:* `warn!` and note on the run that
+  the file's date was not used. *Exit:* a re-import with an impossible date that surfaces the note. — #528
+- **No test covers an export date equal to the live value's time** — ADR 0029 §1's "at least as recent"
+  boundary is `>` in `import_assert_sex` (`crates/vitni-app/src/import.rs`) and `<=` in
+  `origin_gate.rs`; every test uses dates well before or after, so flipping either stays green.
+  *Shape:* read the live assertion's `occurred_at` back and re-import with that exact instant. *Exit:* a
+  test per comparison that fails when the boundary flips. — #529
 
 ### Assisted import
 
