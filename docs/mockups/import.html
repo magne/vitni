@@ -31,7 +31,11 @@
       which <span class="mono">--yes</span> accepts). Cancel there writes nothing. Every import is
       recorded as an import run. The plugin
       reads the whole file first, naming its own steps; Vitni then writes the records, and a cancel
-      before then writes nothing.
+      before then writes nothing. A cancel while writing leaves the run <b>interrupted</b>: <b>Resume</b>,
+      on its row in the Dashboard's Recent activity or in the Source stage's <b>Earlier imports</b>, re-runs
+      its plugin over the same file into the same tree at once, so its plan resolves what was written as
+      unchanged and writes the rest (ADR 0040 §5). Only a tree's newest import can be resumed, and
+      not one whose importer rejected the file, which a re-run would repeat.
     </div>
 
     <!-- Mode switch -->
@@ -89,6 +93,27 @@
       </div>
       <div style="margin-top:var(--sp-3)">
         <button class="btn primary">Import</button>
+      </div>
+    </div>
+
+    <!-- Earlier imports: the newest five bulk runs into the open workspace, by the installed bulk
+         importers, newest first. Rendered under the Source card, and only when there is one. An
+         interrupted run (abandoned after reading a file, still its tree's newest run, and not rejected
+         by its importer) offers Resume, which starts the import at once: its plugin, its file, its tree
+         (ADR 0040 §5). Any other run shows its record count. -->
+    <div class="card">
+      <h3>Earlier imports</h3>
+      <div class="timeline" style="margin-top:8px">
+        <div class="tl-item">
+          <div class="tl-when">2026-10-07 11:48</div>
+          <div class="tl-what">slekt-full.ged<span class="muted tl-count">interrupted</span><button class="btn sm ghost" style="margin-left:var(--sp-2)" type="button" aria-label="Resume the import from slekt-full.ged">Resume</button></div>
+          <div class="tl-who">gedcom-import</div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-when">2026-09-30 09:12</div>
+          <div class="tl-what">slekt.gramps<span class="muted tl-count">1,284 records</span></div>
+          <div class="tl-who">gramps-import</div>
+        </div>
       </div>
     </div>
 
@@ -311,7 +336,7 @@
 
     <!-- Specimen: the plan is answered; Vitni now writes its records (ADR 0040 §4). -->
     <div class="card">
-      <h3>Stage 2 · Running <span class="muted faint" style="font-weight:400;text-transform:none;letter-spacing:0">— specimen, writing: the plan is answered and Vitni writes its records; Cancel stops between two writes, and importing the same file again finishes the rest</span></h3>
+      <h3>Stage 2 · Running <span class="muted faint" style="font-weight:400;text-transform:none;letter-spacing:0">— specimen, writing: the plan is answered and Vitni writes its records; Cancel stops between two writes, and Resume — or importing the same file again — finishes the rest</span></h3>
       <div class="wrap" style="align-items:baseline">
         <span class="grow">Writing records</span>
         <span class="muted mono">2 140 of 9 860</span>
@@ -353,7 +378,7 @@
 
     <!-- ===================== BULK STAGE 4c — CANCELLED ===================== -->
     <div class="card">
-      <h3>Stage 4 · Cancelled <span class="muted faint" style="font-weight:400;text-transform:none;letter-spacing:0">— specimen</span></h3>
+      <h3>Stage 4 · Cancelled <span class="muted faint" style="font-weight:400;text-transform:none;letter-spacing:0">— specimen; a cancel while writing leaves an interrupted run, which Earlier imports offers to resume</span></h3>
       <p class="empty" role="status">The import stopped before it finished.</p>
       <div style="margin-top:var(--sp-3)">
         <button class="btn primary">Import another</button>

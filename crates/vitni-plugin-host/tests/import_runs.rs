@@ -593,7 +593,7 @@ async fn a_bulk_import_cancelled_while_writing_abandons_its_run() {
         .run_bulk_import(
             &common::component("gedcom-import"),
             invocation(workspace, Some(spec("gedcom-import", dataset, "tree.ged"))),
-            source,
+            source.clone(),
             |update| cancel_mid_commit(&update),
         )
         .await
@@ -605,6 +605,42 @@ async fn a_bulk_import_cancelled_while_writing_abandons_its_run() {
             reason: AbandonReason::Cancelled
         }
     );
+    let file = source.canonicalize().expect("canonical source");
+    assert_eq!(
+        run.source_path,
+        Some(file),
+        "the run keeps its file, so it can be resumed"
+    );
+}
+
+#[tokio::test]
+async fn a_bulk_run_records_its_source_as_an_absolute_path() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let workspace = workspace(dir.path()).await;
+    let source = write_file(dir.path(), "tree.ged", GEDCOM);
+    let cwd = std::env::current_dir().expect("cwd");
+    let relative = pathdiff(&source, &cwd);
+    let dataset = DatasetId::lineage("gedcom", Uuid::from_u128(5));
+    let (_, workspace) = common::host()
+        .run_bulk_import(
+            &common::component("gedcom-import"),
+            invocation(workspace, Some(spec("gedcom-import", dataset, "tree.ged"))),
+            relative,
+            proceed,
+        )
+        .await
+        .expect("import");
+    let run = only_run(&workspace).await;
+    assert_eq!(run.source_path, Some(source.canonicalize().expect("canonical source")));
+}
+
+/// `path` relative to `base`, through `..` steps: a relative path the import must resolve.
+fn pathdiff(path: &Path, base: &Path) -> PathBuf {
+    let mut ups = PathBuf::new();
+    for _ in base.components().skip(1) {
+        ups.push("..");
+    }
+    ups.join(path.strip_prefix("/").expect("absolute tempdir"))
 }
 
 #[tokio::test]

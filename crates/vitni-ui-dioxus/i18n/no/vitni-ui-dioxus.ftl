@@ -706,6 +706,8 @@ bulk-import-summary-source = Importert fra
 bulk-import-another = Importer en til
 bulk-import-error-heading = Importen mislyktes
 bulk-import-failed-unknown = Importen avsluttet uten å rapportere et resultat.
+# Kildesteget lister de nyeste bulk-importene i dette arbeidsområdet; en avbrutt import tilbyr Fortsett (ADR 0040 §5).
+bulk-import-earlier-heading = Tidligere importer
 bulk-import-cancelled-heading = Importen ble avbrutt
 bulk-import-cancelled-message = Importen stoppet før den var ferdig.
 bulk-import-confirm-title = Importere til { $workspace }?

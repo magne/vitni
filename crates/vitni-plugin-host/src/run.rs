@@ -11,6 +11,8 @@
 //! behind. It is closed once the guest returns, finished or abandoned.
 
 use std::fmt;
+use std::fs;
+use std::path::Path;
 use std::pin::Pin;
 use std::sync::Arc;
 
@@ -84,6 +86,7 @@ impl ImportRunSpec {
         let template = RunTemplate {
             operator,
             source_label,
+            source_path: None,
             plugin,
             plugin_version,
         };
@@ -96,6 +99,7 @@ impl ImportRunSpec {
 pub(crate) struct RunTemplate {
     operator: Session,
     source_label: String,
+    source_path: Option<String>,
     plugin: String,
     plugin_version: String,
 }
@@ -109,6 +113,16 @@ impl RunTemplate {
     /// What is being imported.
     pub(crate) fn source_label(&self) -> &str {
         &self.source_label
+    }
+
+    /// The template for a bulk import reading `source`, which records the file's canonical path so
+    /// an abandoned run can be resumed (ADR 0040 §5). A path that cannot be resolved, or is not
+    /// UTF-8, records none.
+    pub(crate) fn reading(self, source: &Path) -> Self {
+        let source_path = fs::canonicalize(source)
+            .ok()
+            .and_then(|path| path.to_str().map(str::to_owned));
+        Self { source_path, ..self }
     }
 }
 
@@ -132,6 +146,7 @@ impl ActiveRun {
         let RunTemplate {
             operator,
             source_label,
+            source_path,
             plugin,
             plugin_version,
         } = template;
@@ -141,6 +156,7 @@ impl ActiveRun {
             dataset: dataset.id,
             dataset_label: dataset.label,
             source_label,
+            source_path,
             file_asserted_at: None,
             dataset_hint,
         };

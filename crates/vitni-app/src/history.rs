@@ -26,7 +26,6 @@ use vitni_core::family::{FamilyEventBody, FamilyView};
 use vitni_core::ids::{
     AssertionId, CitationId, EventId, FamilyId, ImportRunId, MediaId, NoteId, PersonId, PlaceId, RepositoryId, SourceId,
 };
-use vitni_core::import_run::ImportRunView;
 use vitni_core::matching::MatchEvidence;
 use vitni_core::media::command::{MediaCommand, MediaCommandEnvelope};
 use vitni_core::media::{MediaEventBody, MediaView};
@@ -47,6 +46,7 @@ use vitni_core::source::{SourceEventBody, SourceView};
 use vitni_db::{DbError, Store, StoredEvent};
 
 use crate::error::AppError;
+use crate::import_run::{self, RunResume};
 use crate::session::Session;
 use crate::use_case::{Provenance, map_command_error};
 use crate::workspace::Workspace;
@@ -102,6 +102,8 @@ pub struct RunRef {
     pub plugin: String,
     /// The importer's own record count, once the run has ended.
     pub records: Option<u32>,
+    /// How to resume the run, when it is a bulk import that was abandoned (ADR 0040 §5).
+    pub resume: Option<RunResume>,
 }
 
 /// One entry in an aggregate's change log: a single event rendered for an audit timeline.
@@ -1050,6 +1052,7 @@ fn entry(event: &StoredEvent, header: &EnvelopeHeader, human_id: Option<String>,
             source_label: String::new(),
             plugin: String::new(),
             records: None,
+            resume: None,
         }),
     }
 }
@@ -1069,27 +1072,35 @@ fn entry_run(event: &StoredEvent, header: &EnvelopeHeader) -> Option<ImportRunId
 /// The `Aggregate::TYPE` of an import run.
 const IMPORT_RUN: &str = "import_run";
 
-/// Fills each entry's [`RunRef`] with its run's labels, reading each distinct run once.
+/// Fills each entry's [`RunRef`] with its run's labels and resume, reading the runs once when an entry
+/// names one.
 ///
 /// # Errors
 ///
 /// [`AppError`] on a store read failure.
 async fn label_runs(store: &Store, mut entries: Vec<ChangeLogEntry>) -> Result<Vec<ChangeLogEntry>, AppError> {
-    let mut labels: HashMap<ImportRunId, Option<ImportRunView>> = HashMap::new();
+    if !entries.iter().any(|entry| entry.run.is_some()) {
+        return Ok(entries);
+    }
+    let all = store.list_import_runs().await?;
+    let resumable = import_run::resumable(&all);
+    let mut views = HashMap::with_capacity(all.len());
+    for view in all {
+        if let Some(id) = view.run_id() {
+            views.insert(id, view);
+        }
+    }
     for entry in &mut entries {
         let Some(run) = &mut entry.run else {
             continue;
         };
-        let view = match labels.entry(run.id) {
-            Entry::Occupied(known) => known.into_mut(),
-            Entry::Vacant(unknown) => unknown.insert(store.find_import_run(&run.id.to_string()).await?),
-        };
-        let Some(view) = view else {
+        let Some(view) = views.get(&run.id) else {
             continue;
         };
         view.source_label().clone_into(&mut run.source_label);
         view.plugin().clone_into(&mut run.plugin);
         run.records = view.counts().records;
+        run.resume = resumable.get(&run.id).cloned();
     }
     Ok(entries)
 }
@@ -1549,7 +1560,7 @@ mod tests {
     };
     use super::{change_log_for_research_note, undo_research_note_assertion};
     use crate::config::{AppDefaults, IdFormats, OperatorConfig, WorkspaceDefaults};
-    use crate::import_run::{finish_import_run, start_import_run};
+    use crate::import_run::{RunResume, abandon_import_run, finish_import_run, start_import_run};
     use crate::person::{NewFact, NewPerson, assert_fact, assert_sex, create_person, set_restrictions, show_person};
     use crate::research_note::{
         NewResearchNote, NewResearchNoteSubject, create_research_note, set_research_note_body, show_research_note,
@@ -1558,12 +1569,13 @@ mod tests {
     use crate::use_case::{MutationMeta, Provenance};
     use crate::workspace::Workspace;
     use std::collections::BTreeSet;
+    use std::path::PathBuf;
     use tempfile::TempDir;
     use uuid::Uuid;
     use vitni_core::enums::{EvidenceLevel, FactType, Restriction, Sex};
     use vitni_core::ids::AgentId;
     use vitni_core::ids::ImportRunId;
-    use vitni_core::import_run::{ImportCounts, NewImportRun};
+    use vitni_core::import_run::{AbandonReason, ImportCounts, NewImportRun};
     use vitni_core::origin::{DatasetId, RecordOrigin};
     use vitni_core::provenance::{Agent, AgentKind, Confidence};
 
@@ -1692,6 +1704,7 @@ mod tests {
             source_label: format!("tree-{n}.ged"),
             plugin: "gedcom-import".to_owned(),
             records: Some(7),
+            resume: None,
         }
     }
 
@@ -1914,24 +1927,26 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn recent_activity_folds_an_import_run_into_one_row_with_its_children() {
-        let (workspace, human, _dir) = setup().await;
-        // A human change first — it must stay visible beside the run's row.
-        let _ = person_with_sex(&workspace, &human).await;
-        let dataset = DatasetId::lineage("gedcom", Uuid::from_u128(5));
+    /// Starts a run over `dataset` reading `source_path`, which imports `persons` bare persons.
+    async fn run_importing(
+        workspace: &Workspace,
+        human: &Session,
+        (dataset, source_path): (&DatasetId, Option<&str>),
+        persons: u32,
+    ) -> ImportRunId {
         let new_run = NewImportRun {
             plugin: "gedcom-import".to_owned(),
             plugin_version: "0.1.0".to_owned(),
             dataset: dataset.clone(),
             dataset_label: "tree.ged".to_owned(),
             source_label: "tree.ged".to_owned(),
+            source_path: source_path.map(str::to_owned),
             file_asserted_at: None,
             dataset_hint: None,
         };
-        let run = start_import_run(&workspace, &human, new_run).await.expect("start");
+        let run = start_import_run(workspace, human, new_run).await.expect("start");
         let importer = software_session();
-        for n in 0..4 {
+        for n in 0..persons {
             let provenance = Provenance {
                 origin: Some(RecordOrigin {
                     dataset: dataset.clone(),
@@ -1948,10 +1963,162 @@ mod tests {
                 evidence_level: EvidenceLevel::Conclusion,
                 external_ids: Vec::new(),
             };
-            create_person(&workspace, &importer, new, provenance, &[])
+            create_person(workspace, &importer, new, provenance, &[])
                 .await
                 .expect("create");
         }
+        run
+    }
+
+    /// The one import-run row in `workspace`'s recent activity.
+    async fn only_run_row(workspace: &Workspace) -> RunRef {
+        let activity = recent_activity(workspace, 10).await.expect("activity");
+        let mut runs = Vec::new();
+        for entry in activity {
+            if let Some(ActivityDetail::ImportRun { run, .. }) = entry.detail {
+                runs.push(run);
+            }
+        }
+        assert_eq!(runs.len(), 1, "one run row: {runs:#?}");
+        runs.remove(0)
+    }
+
+    #[tokio::test]
+    async fn an_abandoned_run_that_read_a_file_offers_to_resume_over_it() {
+        let (workspace, human, _dir) = setup().await;
+        let dataset = DatasetId::lineage("gedcom", Uuid::from_u128(5));
+        let run = run_importing(&workspace, &human, (&dataset, Some("/home/ada/tree.ged")), 2).await;
+        abandon_import_run(
+            &workspace,
+            &human,
+            run,
+            Vec::new(),
+            ImportCounts::default(),
+            AbandonReason::Cancelled,
+        )
+        .await
+        .expect("abandon");
+
+        let run_ref = only_run_row(&workspace).await;
+        assert_eq!(
+            run_ref.resume,
+            Some(RunResume {
+                plugin: "gedcom-import".to_owned(),
+                dataset,
+                source: PathBuf::from("/home/ada/tree.ged"),
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn an_abandoned_run_a_later_run_finished_offers_no_resume() {
+        let (workspace, human, _dir) = setup().await;
+        let dataset = DatasetId::lineage("gedcom", Uuid::from_u128(5));
+        let run = run_importing(&workspace, &human, (&dataset, Some("/home/ada/tree.ged")), 1).await;
+        abandon_import_run(
+            &workspace,
+            &human,
+            run,
+            Vec::new(),
+            ImportCounts::default(),
+            AbandonReason::Cancelled,
+        )
+        .await
+        .expect("abandon");
+        let resumed = run_importing(&workspace, &human, (&dataset, Some("/home/ada/tree.ged")), 0).await;
+        finish_import_run(&workspace, &human, resumed, Vec::new(), ImportCounts::default())
+            .await
+            .expect("finish");
+
+        let summaries = crate::import_run::list_import_runs(&workspace).await.expect("runs");
+        assert!(summaries.iter().all(|run| run.resume.is_none()), "{summaries:#?}");
+        let activity = recent_activity(&workspace, 10).await.expect("activity");
+        for entry in activity {
+            if let Some(ActivityDetail::ImportRun { run, .. }) = entry.detail {
+                assert_eq!(run.resume, None, "the resumed run finished it: {run:?}");
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn only_the_newest_run_of_a_dataset_offers_resume() {
+        let (workspace, human, _dir) = setup().await;
+        let dataset = DatasetId::lineage("gedcom", Uuid::from_u128(5));
+        let mut runs = Vec::new();
+        for _ in 0..2 {
+            let run = run_importing(&workspace, &human, (&dataset, Some("/home/ada/tree.ged")), 1).await;
+            abandon_import_run(
+                &workspace,
+                &human,
+                run,
+                Vec::new(),
+                ImportCounts::default(),
+                AbandonReason::Cancelled,
+            )
+            .await
+            .expect("abandon");
+            runs.push(run);
+        }
+
+        let summaries = crate::import_run::list_import_runs(&workspace).await.expect("runs");
+        let resumable: Vec<_> = summaries
+            .iter()
+            .filter(|run| run.resume.is_some())
+            .map(|run| run.id)
+            .collect();
+        assert_eq!(resumable, [runs[1]], "the second run superseded the first");
+    }
+
+    #[tokio::test]
+    async fn a_run_its_importer_failed_offers_no_resume() {
+        let (workspace, human, _dir) = setup().await;
+        let dataset = DatasetId::lineage("gedcom", Uuid::from_u128(5));
+        let run = run_importing(&workspace, &human, (&dataset, Some("/home/ada/tree.ged")), 1).await;
+        let reason = AbandonReason::GuestError {
+            message: "malformed GEDCOM".to_owned(),
+        };
+        abandon_import_run(&workspace, &human, run, Vec::new(), ImportCounts::default(), reason)
+            .await
+            .expect("abandon");
+        assert_eq!(
+            only_run_row(&workspace).await.resume,
+            None,
+            "a re-run reads the same malformed file"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_finished_run_or_one_without_a_file_offers_no_resume() {
+        let (workspace, human, _dir) = setup().await;
+        let dataset = DatasetId::lineage("gedcom", Uuid::from_u128(5));
+        let run = run_importing(&workspace, &human, (&dataset, Some("/home/ada/tree.ged")), 1).await;
+        finish_import_run(&workspace, &human, run, Vec::new(), ImportCounts::default())
+            .await
+            .expect("finish");
+        assert_eq!(only_run_row(&workspace).await.resume, None, "a finished run");
+
+        let (workspace, human, _dir) = setup().await;
+        let run = run_importing(&workspace, &human, (&dataset, None), 1).await;
+        abandon_import_run(
+            &workspace,
+            &human,
+            run,
+            Vec::new(),
+            ImportCounts::default(),
+            AbandonReason::Cancelled,
+        )
+        .await
+        .expect("abandon");
+        assert_eq!(only_run_row(&workspace).await.resume, None, "a run that read no file");
+    }
+
+    #[tokio::test]
+    async fn recent_activity_folds_an_import_run_into_one_row_with_its_children() {
+        let (workspace, human, _dir) = setup().await;
+        // A human change first — it must stay visible beside the run's row.
+        let _ = person_with_sex(&workspace, &human).await;
+        let dataset = DatasetId::lineage("gedcom", Uuid::from_u128(5));
+        let run = run_importing(&workspace, &human, (&dataset, None), 4).await;
         let counts = ImportCounts {
             records: Some(4),
             ..ImportCounts::default()

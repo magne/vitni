@@ -1,0 +1,144 @@
+# #496: a bulk import cancelled while it writes is resumed from the Dashboard's Recent activity
+# (ADR 0040 §5). `large.ged` holds 784 persons and their births, so writing it outlasts a step's settle
+# and Cancel lands mid-write. The abandoned run's row reads *interrupted* and offers Resume, which
+# re-runs the plugin over the same file into the same dataset: the plan resolves what the first run wrote
+# as unchanged (a few persons it did not reach come back as possible matches, compared before any birth
+# is written), and Import writes the rest. Once that run has started, the interrupted row offers
+# Resume no more, and the Import tool's Earlier imports lists both runs. SSR renders the row and the
+# list; only the live app shows the click handing the run to the wizard and the wizard re-running it.
+#
+# The fixture seeds `large.ged` beside the workspace's data without importing it. Coordinates are
+# window pixels at 1800x1200, read off the shots this scenario writes.
+description = "A bulk import cancelled while writing is resumed from History (#496)"
+# Writing large.ged keeps the disk busy enough to starve the GUIs beside it.
+exclusive = true
+
+[[step]]
+do = "click"
+at = [70, 786]
+label = "rail: Import"
+
+[[step]]
+do = "click"
+at = [1394, 408]
+label = "source file field"
+
+[[step]]
+do = "text"
+text = "large.ged"
+label = "type: large.ged"
+
+[[step]]
+do = "click"
+at = [300, 642]
+label = "Import"
+
+[[step]]
+do = "wait"
+seconds = 3
+label = "let the file be read and planned"
+
+[[step]]
+do = "shot"
+name = "plan"
+
+[[step]]
+do = "click"
+at = [1730, 512]
+label = "Plan: Import"
+
+[[step]]
+do = "click"
+at = [303, 429]
+label = "Cancel while writing"
+
+[[step]]
+do = "shot"
+name = "cancelled"
+
+[[step]]
+do = "click"
+at = [70, 135]
+label = "rail: Dashboard"
+
+[[step]]
+do = "wait"
+seconds = 2
+label = "let the dashboard load"
+
+[[step]]
+do = "shot"
+name = "dashboard"
+
+[[step]]
+do = "click"
+at = [574, 417]
+label = "Resume"
+
+[[step]]
+do = "wait"
+seconds = 4
+label = "let the file be read and planned again"
+
+[[step]]
+do = "shot"
+name = "resumed-plan"
+
+[[step]]
+do = "click"
+at = [1417, 554]
+label = "Decide all later and import"
+
+[[step]]
+do = "wait"
+seconds = 20
+label = "let the rest be written"
+
+[[step]]
+do = "shot"
+name = "resumed-done"
+
+[[step]]
+do = "click"
+at = [70, 135]
+label = "rail: Dashboard"
+
+[[step]]
+do = "wait"
+seconds = 3
+label = "let the dashboard load"
+
+[[step]]
+do = "shot"
+name = "dashboard-after"
+
+[[step]]
+do = "click"
+at = [70, 786]
+label = "rail: Import"
+
+[[step]]
+do = "wait"
+seconds = 2
+label = "let the earlier imports load"
+
+[[step]]
+do = "shot"
+name = "earlier"
+
+[[assert]]
+kind = "differ"
+shots = ["plan", "resumed-plan"]
+region = [248, 308, 1536, 240]
+because = "the resumed plan must resolve what the cancelled run wrote as unchanged, not plan it all as new"
+
+[[assert]]
+kind = "differ"
+shots = ["resumed-plan", "resumed-done"]
+because = "importing the resumed plan must write the rest and end on the summary"
+
+[[assert]]
+kind = "differ"
+shots = ["dashboard", "dashboard-after"]
+region = [256, 340, 760, 120]
+because = "once the resumed run has written the rest, the interrupted row must no longer offer Resume"

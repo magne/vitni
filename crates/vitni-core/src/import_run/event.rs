@@ -111,6 +111,10 @@ pub enum ImportRunEventBody {
         dataset_label: String,
         /// What was imported.
         source_label: String,
+        /// Where a bulk import read its file from, as an absolute path (ADR 0040 §5). Absent for an
+        /// assisted session, and from runs recorded before runs kept it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        source_path: Option<String>,
         /// The document's own export date, if it carries one.
         file_asserted_at: Option<Timestamp>,
         /// The document header's fingerprint, if the importer declared one (ADR 0037 §3). Absent

@@ -103,6 +103,7 @@ async fn an_unmatched_kind_is_never_dirty(store: &Store) {
             dataset: DatasetId::global("gedcom"),
             dataset_label: "tree.ged".to_owned(),
             source_label: "tree.ged".to_owned(),
+            source_path: None,
             file_asserted_at: None,
             dataset_hint: None,
         },

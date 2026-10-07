@@ -67,6 +67,7 @@ fn started(run_id: ImportRunId, run: NewImportRun) -> ImportRunEventBody {
         dataset,
         dataset_label,
         source_label,
+        source_path,
         file_asserted_at,
         dataset_hint,
     } = run;
@@ -77,6 +78,7 @@ fn started(run_id: ImportRunId, run: NewImportRun) -> ImportRunEventBody {
         dataset,
         dataset_label,
         source_label,
+        source_path,
         file_asserted_at,
         dataset_hint,
     }
@@ -132,6 +134,7 @@ pub fn evolve(state: &mut ImportRunState, event: &ImportRunEvent) {
             dataset,
             dataset_label,
             source_label,
+            source_path,
             file_asserted_at,
             dataset_hint,
         } => {
@@ -144,6 +147,7 @@ pub fn evolve(state: &mut ImportRunState, event: &ImportRunEvent) {
             state.dataset = Some(dataset.clone());
             state.dataset_label.clone_from(dataset_label);
             state.source_label.clone_from(source_label);
+            state.source_path.clone_from(source_path);
             state.file_asserted_at = *file_asserted_at;
             state.dataset_hint.clone_from(dataset_hint);
         }
@@ -210,6 +214,7 @@ mod tests {
                 dataset: dataset(),
                 dataset_label: "tree.ged".to_owned(),
                 source_label: "tree.ged".to_owned(),
+                source_path: Some("/home/ada/tree.ged".to_owned()),
                 file_asserted_at: None,
                 dataset_hint: Some("GRAMPS|tree.ged".to_owned()),
             },
@@ -247,6 +252,7 @@ mod tests {
         assert_eq!(state.run_id, Some(run_id()));
         assert_eq!(state.dataset, Some(dataset()));
         assert_eq!(state.source_label, "tree.ged");
+        assert_eq!(state.source_path.as_deref(), Some("/home/ada/tree.ged"));
         assert_eq!(state.dataset_hint.as_deref(), Some("GRAMPS|tree.ged"));
         assert_eq!(state.operator.and_then(|agent| agent.display).as_deref(), Some("Ada"));
     }
@@ -263,6 +269,20 @@ mod tests {
             panic!("not a start: {:?}", event.body);
         };
         assert_eq!(dataset_hint, None);
+    }
+
+    #[test]
+    fn a_run_started_before_source_paths_decodes_without_one() {
+        let mut event = decide(&ImportRunState::default(), start(), &meta())
+            .expect("start")
+            .remove(0);
+        let mut json = serde_json::to_value(&event.body).expect("encode");
+        json.as_object_mut().expect("object").remove("source_path");
+        event.body = serde_json::from_value(json).expect("an event without the field decodes");
+        let ImportRunEventBody::ImportRunStarted { source_path, .. } = event.body else {
+            panic!("not a start: {:?}", event.body);
+        };
+        assert_eq!(source_path, None);
     }
 
     #[test]

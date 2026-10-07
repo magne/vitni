@@ -4,9 +4,10 @@
 //! render-and-inspect — no window, no workspace — the same pattern as `person_detail.rs`.
 
 use dioxus::prelude::*;
-use vitni_app::{DecidableKind, RecentItem};
+use vitni_app::{DatasetId, DecidableKind, RecentItem, RunResume};
 use vitni_ui::{
     ActivityVm, Category, DashboardStats, DashboardVm, DataQualityVm, JumpVm, Localizer, QueuedMatchVm, RecordRef,
+    ResumeVm,
 };
 use vitni_ui_dioxus::components::{HistoryEntry, HistoryTimeline};
 use vitni_ui_dioxus::screens::dashboard_view;
@@ -149,6 +150,7 @@ fn dashboard() -> Element {
                 }),
                 count: None,
                 children: Vec::new(),
+                resume: None,
             },
             ActivityVm {
                 when: "2026-06-22 14:30".to_owned(),
@@ -157,6 +159,23 @@ fn dashboard() -> Element {
                 record: None,
                 count: Some("142 records".to_owned()),
                 children: Vec::new(),
+                resume: None,
+            },
+            ActivityVm {
+                when: "2026-06-22 14:20".to_owned(),
+                what: "Imported from big.ged".to_owned(),
+                who: "gedcom-import (software agent)".to_owned(),
+                record: None,
+                count: Some("interrupted".to_owned()),
+                children: Vec::new(),
+                resume: Some(ResumeVm {
+                    run: RunResume {
+                        plugin: "gedcom-import".to_owned(),
+                        dataset: DatasetId::lineage("gedcom", uuid::Uuid::from_u128(5)),
+                        source: "/home/ada/big.ged".into(),
+                    },
+                    label: "Resume the import from big.ged".to_owned(),
+                }),
             },
         ],
         jump_back: vec![JumpVm {
@@ -266,6 +285,18 @@ fn data_quality_card_shows_a_loading_state_until_the_check_pass_resolves() {
 }
 
 #[test]
+fn only_an_interrupted_run_offers_resume() {
+    let mut vdom = VirtualDom::new(dashboard);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    assert_eq!(
+        html.matches(">Resume<").count(),
+        1,
+        "the finished run offers none:\n{html}"
+    );
+}
+
+#[test]
 fn dashboard_renders_stats_activity_and_data_quality() {
     let mut vdom = VirtualDom::new(dashboard);
     vdom.rebuild_in_place();
@@ -282,6 +313,8 @@ fn dashboard_renders_stats_activity_and_data_quality() {
         "Name asserted",                                      // an activity row
         "Imported from tree.ged",                             // an import run's row
         r#"<span class="muted tl-count">142 records</span>"#, // its count, muted beside it
+        r#"<span class="muted tl-count">interrupted</span>"#, // an abandoned run reads interrupted
+        r#"aria-label="Resume the import from big.ged""#,     // and offers Resume, named by its file
         "John Smith",           // the linked record + the jump-back button, by display name
         "👤",                   // the entity icon prefixes the record links
         r#"class="no-source""#, // the computable data-quality check

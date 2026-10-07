@@ -598,6 +598,7 @@ async fn a_backup_keeps_every_record_origin_and_import_run() {
         dataset: dataset.clone(),
         dataset_label: "tree.ged".to_owned(),
         source_label: "tree.ged".to_owned(),
+        source_path: None,
         file_asserted_at: None,
         dataset_hint: None,
     };

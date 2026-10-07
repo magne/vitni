@@ -54,6 +54,7 @@ fn run_over(dataset: DatasetId, label: &str) -> NewImportRun {
         dataset,
         dataset_label: label.to_owned(),
         source_label: label.to_owned(),
+        source_path: None,
         file_asserted_at: None,
         dataset_hint: None,
     }

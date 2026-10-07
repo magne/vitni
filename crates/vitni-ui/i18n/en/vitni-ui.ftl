@@ -181,6 +181,13 @@ history-import-run-changes = { $count ->
     [one] 1 change
    *[other] { $count } changes
 }
+# An abandoned bulk run's row reads interrupted in place of its count, and offers Resume, which re-runs its
+# plugin over its file into its dataset (ADR 0040 §5).
+history-import-run-interrupted = interrupted
+history-import-run-done = finished
+history-import-run-running = running
+history-import-run-resume = Resume
+history-import-run-resume-aria = Resume the import from { $source }
 
 # Change-log operator line
 history-operator-human = { $name } · { $confidence }

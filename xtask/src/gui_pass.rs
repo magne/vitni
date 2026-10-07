@@ -38,7 +38,8 @@
 //! Scenarios run [`default_jobs`] at a time (`--jobs N` to change it), each [`Worker`] on its own Xvfb
 //! display with its own isolated home and workspace, restored from one shared seed. A scenario's
 //! progress lines are held and printed with its verdict, so parallel scenarios never interleave; with
-//! one worker they print live.
+//! one worker they print live. A scenario marked `exclusive = true` loads the machine enough to starve
+//! the GUIs beside it, so it runs alone on the first worker once the others are done.
 //!
 //! The driving machinery is parameterised by a [`Fixture`], because a second caller needs the same
 //! harness over different data: `cargo xtask screenshots` (see [`crate::screenshots`]) drives a demo
@@ -74,7 +75,7 @@ const GUI_PASS: Fixture = Fixture {
     workspace_dir: "workspace",
     seed: seed_gui_pass,
     required_media: &[SEED_MEDIA_REL, SEED_MEDIA_NORDIC_REL],
-    required_files: &[SEED_IMPORT_FILE],
+    required_files: &[SEED_IMPORT_FILE, SEED_LARGE_IMPORT_FILE],
     env: &[],
     serve_archive: true,
 };
@@ -85,6 +86,13 @@ const GUI_PASS: Fixture = Fixture {
 const SEED_IMPORT_FILE: &str = "rerun.ged";
 /// Where [`SEED_IMPORT_FILE`] is copied from: the invented re-run fixture the importers are tested on.
 const SEED_IMPORT_SOURCE: &str = "crates/vitni-plugin-host/tests/fixtures/rerun/tree.ged";
+
+/// A GEDCOM file of [`SEED_LARGE_PERSONS`] invented persons, written beside the fixture workspace's data
+/// like [`SEED_IMPORT_FILE`] — large enough that writing it outlasts a step's settle, so
+/// `bulk-import-resume` can cancel the import while it writes and resume it (ADR 0040 §5).
+const SEED_LARGE_IMPORT_FILE: &str = "large.ged";
+/// How many persons [`SEED_LARGE_IMPORT_FILE`] holds.
+const SEED_LARGE_PERSONS: usize = 784;
 
 /// The `vitni` launcher (ADR 0035), which both halves of a run drive: spawned with no arguments it is
 /// the GUI under test, and invoked with arguments it is the CLI that seeds the fixture — so one build
@@ -201,6 +209,10 @@ struct Script {
     /// [`WINDOW`]. `deny_unknown_fields` on this struct is what makes a typo'd key (e.g. `windwo`)
     /// fail to parse instead of silently running the scenario at the default window.
     window: Option<[u32; 2]>,
+    /// Whether the scenario loads the machine enough to starve the GUIs beside it (a long import
+    /// writes many records): it then runs alone, once the parallel scenarios are done.
+    #[serde(default)]
+    exclusive: bool,
     #[serde(default, rename = "step")]
     steps: Vec<Step>,
     #[serde(default, rename = "assert")]
@@ -402,16 +414,20 @@ pub fn run_fixture(options: &Options, fixture: &Fixture) -> Result<PathBuf> {
     for index in 0..jobs {
         workers.push(Worker::new(options, fixture, &out, index, archive.clone())?);
     }
-    let outcomes = run_queue(jobs, &scripts, |index, path| {
+    let (shared, exclusive) = split_exclusive(&scripts)?;
+    let run = |index: usize, path: &PathBuf| {
         let mut log = Log::new(jobs == 1);
         let outcome = workers
             .get(index)
             .context("gui-pass: no worker for this job")
             .and_then(|worker| run_one(options, fixture, worker, path, &mut log));
         report(fixture, &script_name(path), &log, outcome)
-    });
+    };
     let mut failed = Vec::new();
-    for name in outcomes.into_iter().flatten() {
+    for name in run_queue(jobs, &shared, run).into_iter().flatten() {
+        failed.push(name);
+    }
+    for name in run_queue(1, &exclusive, run).into_iter().flatten() {
         failed.push(name);
     }
     if !failed.is_empty() {
@@ -425,6 +441,26 @@ pub fn run_fixture(options: &Options, fixture: &Fixture) -> Result<PathBuf> {
     }
     println!("{}: {} scenarios passed.", fixture.name, scripts.len());
     Ok(out)
+}
+
+/// Splits `scripts` into those that share the machine with the other workers and those marked
+/// [`Script::exclusive`], which run one at a time after them.
+///
+/// # Errors
+///
+/// Fails if a scenario cannot be read or parsed.
+fn split_exclusive(scripts: &[PathBuf]) -> Result<(Vec<PathBuf>, Vec<PathBuf>)> {
+    let (mut shared, mut exclusive) = (Vec::new(), Vec::new());
+    for path in scripts {
+        let text = fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+        let script: Script = toml::from_str(&text).with_context(|| format!("parsing {}", path.display()))?;
+        if script.exclusive {
+            exclusive.push(path.clone());
+        } else {
+            shared.push(path.clone());
+        }
+    }
+    Ok((shared, exclusive))
 }
 
 /// Runs one scenario end to end, from a fresh copy of the seeded workspace and an empty shot
@@ -869,12 +905,45 @@ fn seed_gui_pass(fixture: &Fixture, home: &Path, workspace: &Path) -> Result<()>
     seed_media(fixture, home, workspace)?;
     let import = workspace.join(SEED_IMPORT_FILE);
     fs::copy(SEED_IMPORT_SOURCE, &import).with_context(|| format!("seeding {}", import.display()))?;
+    let large = workspace.join(SEED_LARGE_IMPORT_FILE);
+    fs::write(&large, large_gedcom(SEED_LARGE_PERSONS)).with_context(|| format!("seeding {}", large.display()))?;
     let config = config_file(home);
     let mut text = fs::read_to_string(&config).with_context(|| format!("reading {}", config.display()))?;
     text.push_str(DEMO_MAP_PROVIDER);
     fs::write(&config, text).with_context(|| format!("writing {}", config.display()))?;
     println!("gui-pass: seeded place {place}");
     Ok(())
+}
+
+/// An invented GEDCOM document of up to 784 `persons` individuals and their births. No two given names
+/// and no two surnames share an initial, and every birth year differs, so the workspace holds no
+/// possible match once it is written; a resumed import's plan still proposes a few of the persons the
+/// cancelled run did not reach, as their births are not yet written to compare.
+fn large_gedcom(persons: usize) -> String {
+    use std::fmt::Write as _;
+
+    const GIVEN: [&str; 28] = [
+        "Anne", "Bjørn", "Cecilie", "Dag", "Eli", "Frode", "Gro", "Hege", "Ivar", "Jon", "Kari", "Lars", "Mona",
+        "Nils", "Ola", "Per", "Randi", "Siri", "Tor", "Unni", "Vidar", "Wenche", "Xenia", "Yngve", "Zara", "Ædel",
+        "Øystein", "Åse",
+    ];
+    const SURNAMES: [&str; 28] = [
+        "Aasen", "Berge", "Celius", "Dahl", "Eide", "Fjeld", "Gjerde", "Haug", "Iversen", "Jensvoll", "Kvam", "Lund",
+        "Moen", "Nordby", "Opsahl", "Pedersen", "Ruud", "Strand", "Tveit", "Ulven", "Vik", "Wold", "Xavier", "Ystad",
+        "Zahl", "Æsøy", "Øien", "Åkre",
+    ];
+    let mut text = String::from("0 HEAD\n1 SOUR gui-pass\n1 GEDC\n2 VERS 5.5.1\n1 CHAR UTF-8\n");
+    for n in 0..persons {
+        let given = GIVEN[n % GIVEN.len()];
+        let surname = SURNAMES[(n / GIVEN.len()) % SURNAMES.len()];
+        let year = 1000 + n;
+        let _ = write!(
+            text,
+            "0 @I{n}@ INDI\n1 NAME {given} /{surname}/\n1 BIRT\n2 DATE {year}\n"
+        );
+    }
+    text.push_str("0 TRLR\n");
+    text
 }
 
 /// Writes two images into the fixture workspace's media library and records a Media object pointing at
@@ -1670,6 +1739,13 @@ mod tests {
 
     fn script(toml: &str) -> Script {
         toml::from_str(toml).expect("the scenario parses")
+    }
+
+    #[test]
+    fn a_scenario_shares_the_machine_unless_it_is_marked_exclusive() {
+        assert!(!script(r#"description = "a scenario""#).exclusive);
+        let heavy = script("description = \"a scenario\"\nexclusive = true");
+        assert!(heavy.exclusive, "a heavy scenario runs alone");
     }
 
     #[test]

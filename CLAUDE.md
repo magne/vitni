@@ -194,7 +194,9 @@ Writing one:
   `target/gui-pass/`, the rest under `target/gui-pass/workers/<n>/`, all restored from one shared seed.
   `--keep` and `--real-config`/`--workspace` drive a single GUI, so they run with one worker. A
   scenario that depends on wall-clock time (a toast's 6 s lifetime) is the first to fail under
-  contention, so give such a scenario margin rather than raising the worker count past four.
+  contention, so give such a scenario margin rather than raising the worker count past four. A scenario
+  that itself loads the machine — `bulk-import-resume` writes ~1500 records, and the disk traffic made
+  the other workers' GUIs drop keystrokes — declares `exclusive = true` and runs alone after the rest.
 - Runs are **isolated by default**: a throwaway `XDG_CONFIG_HOME`/`XDG_DATA_HOME` plus a seeded fixture
   workspace under `target/gui-pass/`. Keep it that way — a scripted click run writes events, and
   `--real-config`/`--workspace` point it at real genealogy data.

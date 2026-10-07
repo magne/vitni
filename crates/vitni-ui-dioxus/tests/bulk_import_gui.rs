@@ -7,14 +7,14 @@
 use std::path::PathBuf;
 
 use dioxus::prelude::*;
-use vitni_app::{DatasetCandidate, DatasetId, DatasetProposal, Fingerprint};
-use vitni_ui::{BulkImportProgress, BulkImportStep};
+use vitni_app::{DatasetCandidate, DatasetId, DatasetProposal, Fingerprint, RunResume};
+use vitni_ui::{BulkImportProgress, BulkImportStep, EarlierImportVm, ResumeVm};
 use vitni_ui_dioxus::components::SelectChoice;
 use vitni_ui_dioxus::i18n::Chrome;
 use vitni_ui_dioxus::screens::{
     BulkConfirmDialog, BulkConfirmLabels, BulkRunningLabels, BulkRunningStage, BulkSourceLabels, BulkSourceStage,
-    BulkSummaryLabels, BulkSummaryStage, ImportModeLabels, ImportModeSwitch, NoticeStage, ProposedDataset,
-    RegisterFields, WizardNoticeTone, dataset_question, register_fields_form,
+    BulkSummaryLabels, BulkSummaryStage, EarlierImports, EarlierImportsLabels, ImportModeLabels, ImportModeSwitch,
+    NoticeStage, ProposedDataset, RegisterFields, WizardNoticeTone, dataset_question, register_fields_form,
 };
 
 fn render(view: fn() -> Element) -> String {
@@ -687,4 +687,80 @@ fn without_a_proposal_the_question_starts_unanswered() {
     let question = dataset_question(&chrome, &proposal(None));
     assert_eq!(question.value, "");
     assert_eq!(question.proposed, None);
+}
+
+// ----- Earlier imports -----
+
+fn earlier_imports_view() -> Element {
+    let resume = RunResume {
+        plugin: "gedcom-import".to_owned(),
+        dataset: DatasetId::lineage("gedcom", uuid::Uuid::from_u128(5)),
+        source: PathBuf::from("/home/ada/big.ged"),
+    };
+    rsx! {
+        EarlierImports {
+            labels: EarlierImportsLabels {
+                heading: "Earlier imports".to_owned(),
+                resume: "Resume".to_owned(),
+            },
+            rows: vec![
+                EarlierImportVm {
+                    when: "2026-10-03 10:00".to_owned(),
+                    source: "big.ged".to_owned(),
+                    plugin: "gedcom-import".to_owned(),
+                    status: "interrupted".to_owned(),
+                    resume: Some(ResumeVm {
+                        run: resume,
+                        label: "Resume the import from big.ged".to_owned(),
+                    }),
+                },
+                EarlierImportVm {
+                    when: "2026-10-01 10:00".to_owned(),
+                    source: "tree.ged".to_owned(),
+                    plugin: "gedcom-import".to_owned(),
+                    status: "142 records".to_owned(),
+                    resume: None,
+                },
+            ],
+            onresume: |_| {},
+        }
+    }
+}
+
+fn no_earlier_imports_view() -> Element {
+    rsx! {
+        EarlierImports {
+            labels: EarlierImportsLabels {
+                heading: "Earlier imports".to_owned(),
+                resume: "Resume".to_owned(),
+            },
+            rows: Vec::new(),
+            onresume: |_| {},
+        }
+    }
+}
+
+#[test]
+fn earlier_imports_offer_resume_only_on_the_interrupted_run() {
+    let html = render(earlier_imports_view);
+    assert!(html.contains("Earlier imports"), "the card heading: {html}");
+    assert!(
+        html.contains("big.ged") && html.contains("tree.ged"),
+        "both runs: {html}"
+    );
+    assert!(
+        html.contains(r#"<span class="muted tl-count">interrupted</span>"#),
+        "the status, muted: {html}"
+    );
+    assert_eq!(html.matches(">Resume<").count(), 1, "one Resume: {html}");
+    assert!(
+        html.contains(r#"aria-label="Resume the import from big.ged""#),
+        "{html}"
+    );
+}
+
+#[test]
+fn no_earlier_imports_render_nothing() {
+    let html = render(no_earlier_imports_view);
+    assert!(!html.contains("Earlier imports"), "no empty card: {html}");
 }

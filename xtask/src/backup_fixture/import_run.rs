@@ -74,6 +74,7 @@ fn push_run(builder: &mut Builder, run_id: ImportRunId, dataset: &DatasetId, fil
                 dataset: dataset.clone(),
                 dataset_label: "hansen-tree.ged".to_owned(),
                 source_label: file.to_owned(),
+                source_path: None,
                 file_asserted_at: None,
                 dataset_hint: Some("GRAMPS|hansen-tree.ged".to_owned()),
             },

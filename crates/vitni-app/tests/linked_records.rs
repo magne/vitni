@@ -74,6 +74,7 @@ async fn run(ws: &Workspace) -> ImportRunId {
         dataset: DatasetId::global("digitalarkivet"),
         dataset_label: "Digitalarkivet".to_owned(),
         source_label: "1910 census".to_owned(),
+        source_path: None,
         file_asserted_at: None,
         dataset_hint: None,
     };

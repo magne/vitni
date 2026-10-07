@@ -62,6 +62,7 @@ fn importer(dataset: DatasetId) -> Session {
             dataset,
             dataset_label: "tree.ged".to_owned(),
             source_label: "tree.ged".to_owned(),
+            source_path: None,
             file_asserted_at: None,
             dataset_hint: None,
         },

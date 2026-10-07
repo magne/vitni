@@ -407,6 +407,10 @@ async fn assert_census_run(root: &Path, workspace: &Workspace) {
     assert_eq!(runs.len(), 1, "the session wrote one import run");
     assert_eq!(runs[0].status, ImportRunStatus::Finished);
     assert_eq!(runs[0].dataset, DatasetId::global("digitalarkivet"));
+    assert_eq!(
+        runs[0].source_path, None,
+        "an assisted session reads no file to resume from"
+    );
     assert!(
         events_contain(root, r#""item":"citation","record":"pf01099901000101""#).await,
         "the citation names the census record it was read from"
