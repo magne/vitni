@@ -466,6 +466,13 @@ resuming an abandoned import from History (#496), which have landed.
 The rule every bullet keeps is that only deterministic identity acts without the user. A score never
 does.
 
+- **The Matches table sometimes lacks the fixture's media pair in gui-pass** — on 2026-10-07 three
+  consecutive runs of `matches-filter`, `matches-keyboard` and `matches-distinguish` opened the Matches
+  tool without the seeded checksum pair, then five runs passed. `refresh_pairs` drains every dirty record
+  synchronously, so the untested suspect is two concurrent refreshes losing pairs, else harness timing.
+  *Shape:* reproduce under disk load and with concurrent refreshes; serialise the refresh if pairs can be
+  lost, else make the scenarios wait. *Exit:* a concurrent-refresh test that keeps every pair, or the
+  harness cause documented, and the three scenarios pass in repeated runs. — #525
 - **More name-culture packs** — ADR 0038 §5. `pl` and `pl-en`, `sv`, `de`, `fi` …, each one a TOML file
   plus corpus cases, with no code change. File one when a user's data needs it. Unfiled by design.
 
