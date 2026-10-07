@@ -389,12 +389,6 @@ in its own area: research notes (*Notes & research notes*). The one gap running 
 
 ### Bulk import, export & sync
 
-- **Gramps `<header created>` is parsed but never threaded to `begin-run`** — ADR 0029's
-  timestamp-gated reconciliation is only wired on the GEDCOM side (`plugins/gedcom-import/src/lib.rs`,
-  `staging.begin-run`). `plugins/gramps-import/src/lib.rs` goes straight from
-  `parse` to the person loop and never reads `db.header`, though `vitni-gramps-xml/src/parse.rs:400`
-  does parse the date — so a Gramps re-import gets no timestamp gating at all. Found while verifying
-  the Phase 10 completion claim, which described both formats as wired. — #497
 - **Source merge/sync reconciliation prerequisite** — `set-source-title`/`set-source-abbrev` WIT verbs,
   GEDCOM `ABBR` / Gramps `<sabbrev>` round-trip, and a field-level `AssertionId` + `occurred_at` read
   path. The ADR 0029 timestamp-gated rule cannot target Source's bibliographic fields
