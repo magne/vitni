@@ -546,7 +546,9 @@
     imported, which is the Dashboard's count for the same run and would overstate what happened here.
     The row is stamped from the run's <i>newest</i> change, so it still carries an <b>↩ Undo</b> control:
     <span class="mono">⌘Z</span> retracts that assertion rather than skipping past the whole run to an
-    older entry behind it.</p>
+    older entry behind it. A <b>What it changed</b> disclosure beside it opens the row to the run's changes,
+    each with who and when but no undo of its own; a supersession the run made says why, from the run's
+    file and export date (ADR 0049).</p>
   <p class="muted">Every tab that lists <b>records attached to (or referencing) this record</b> renders
     one shape: a <span class="mono">table.tbl</span> whose <i>first</i> column is a link opening that
     record, then the columns that tab is about, then the row's actions. That covers Citations, Notes, a
