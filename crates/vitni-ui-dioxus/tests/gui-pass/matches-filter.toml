@@ -5,14 +5,12 @@
 # The fixture seeds two media of one checksum, which the engine proposes as a probable match, and no
 # persons, so the scenario creates John Smith and John Smyth, as matches-distinguish.toml does.
 #
-# Every assertion is scoped to the matches table card, y 211-451, below the filters.
-#
-# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
+# Every assertion is scoped to the matches table card, a region of `main` below the filters.
 description = "The kind filter narrows the possible-matches queue (#414)"
 
 [[step]]
 do = "click"
-at = [85, 175]
+at = { role = "listitem", text = "People" }
 label = "rail: People"
 
 [[step]]
@@ -22,7 +20,7 @@ label = "⌘N: a new Person draft"
 
 [[step]]
 do = "click"
-at = [1150, 486]
+at = { id = "given" }
 label = "field: Given name"
 
 [[step]]
@@ -32,7 +30,7 @@ label = "type: John"
 
 [[step]]
 do = "click"
-at = [1150, 636]
+at = { id = "surname" }
 label = "field: Surname"
 
 [[step]]
@@ -42,22 +40,22 @@ label = "type: Smith"
 
 [[step]]
 do = "click"
-at = [1754, 151]
+at = { role = "button", text = "Save" }
 label = "New person: Save"
 
 [[step]]
 do = "click"
-at = [756, 101]
+at = { role = "button", text = "Create a new record" }
 label = "tabstrip: +"
 
 [[step]]
 do = "click"
-at = [825, 148]
+at = { role = "menuitem", text = "New person" }
 label = "menu: New person"
 
 [[step]]
 do = "click"
-at = [1150, 486]
+at = { id = "given" }
 label = "field: Given name"
 
 [[step]]
@@ -67,7 +65,7 @@ label = "type: John"
 
 [[step]]
 do = "click"
-at = [1150, 636]
+at = { id = "surname" }
 label = "field: Surname"
 
 [[step]]
@@ -77,7 +75,7 @@ label = "type: Smyth"
 
 [[step]]
 do = "click"
-at = [1754, 151]
+at = { role = "button", text = "Save" }
 label = "New person: Save"
 
 [[step]]
@@ -87,7 +85,7 @@ label = "let the Created notice expire"
 
 [[step]]
 do = "click"
-at = [108, 749]
+at = { role = "listitem", text = "Matches" }
 label = "rail: Matches"
 
 [[step]]
@@ -96,7 +94,7 @@ name = "every-kind"
 
 [[step]]
 do = "click"
-at = [1015, 131]
+at = { id = "matches-kind" }
 label = "filter: Kind"
 
 [[step]]
@@ -115,7 +113,7 @@ name = "persons"
 
 [[step]]
 do = "click"
-at = [1015, 131]
+at = { id = "matches-kind" }
 label = "filter: Kind — again"
 
 [[step]]
@@ -136,10 +134,10 @@ name = "every-kind-again"
 kind = "differ"
 shots = ["every-kind", "persons"]
 because = "the Person filter drops the media pair from the table"
-region = [232, 211, 1568, 240]
+region = { role = "main", offset = [0, 136], size = [1568, 240] }
 
 [[assert]]
 kind = "match"
 shots = ["every-kind", "every-kind-again"]
 because = "Every kind lists both pairs again"
-region = [232, 211, 1568, 240]
+region = { role = "main", offset = [0, 136], size = [1568, 240] }

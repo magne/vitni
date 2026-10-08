@@ -34,7 +34,7 @@ pub fn Explorer() -> Element {
     // single grid cell of the `.app.has-explorer` layout (rail | list | work-area) — it must wrap the
     // list here (not inside `ExplorerList`) so the column exists even while the list is still loading.
     rsx! {
-        aside { class: "list", inert: behind_panel, aria_hidden: behind_panel,
+        aside { class: "list", "data-hook": "explorer", inert: behind_panel, aria_hidden: behind_panel,
             ExplorerList { key: "{category.id()}", category }
         }
     }

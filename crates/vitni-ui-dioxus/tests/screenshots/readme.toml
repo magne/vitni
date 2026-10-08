@@ -12,8 +12,6 @@
 # Marit (I0005) is the pedigree's focus on purpose: she is the only person with two researched
 # generations above her, so the chart has depth. Three generations rather than the default four, so
 # the unresearched lines do not crowd out the researched ones.
-#
-# Coordinates are window pixels at 1800x1200, read off this scenario's own shots.
 description = "The README images: the workspace at a glance, the pedigree chart, and the map"
 
 [[step]]
@@ -22,22 +20,22 @@ name = "hero"
 
 [[step]]
 do = "click"
-at = [85, 173]
+at = { role = "listitem", text = "People" }
 label = "rail: People"
 
 [[step]]
 do = "click"
-at = [350, 323]
+at = { role = "option", text = "Marit Olsdotter Vestheim" }
 label = "explorer: Marit Olsdotter Vestheim (I0005), the pedigree's focus"
 
 [[step]]
 do = "click"
-at = [85, 713]
+at = { role = "listitem", text = "Pedigree" }
 label = "rail: Pedigree"
 
 [[step]]
 do = "click"
-at = [479, 171]
+at = { role = "textbox", text = "Generations" }
 label = "pedigree: the generations field"
 
 [[step]]
@@ -52,7 +50,7 @@ label = "type: 3"
 
 [[step]]
 do = "click"
-at = [572, 171]
+at = { role = "button", text = "Show" }
 label = "pedigree: Show"
 
 [[step]]
@@ -61,12 +59,12 @@ name = "pedigree"
 
 [[step]]
 do = "click"
-at = [85, 861]
+at = { role = "listitem", text = "Geography" }
 label = "rail: Geography"
 
 [[step]]
 do = "click"
-at = [1567, 110]
+at = { role = "button", text = "Fit" }
 label = "map toolbar: Fit, framing the plotted places"
 
 [[step]]

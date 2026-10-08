@@ -5,23 +5,21 @@
 # The summary is proven by its Import another, which returns the wizard to its first stage: the step
 # indicator then matches the one shot there before the import. Had a Match stage come up instead, the
 # click would land inside the compare view and the indicator would still show Match.
-#
-# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
 description = "A record with no possible match goes from Save scan straight to the summary (#412)"
 
 [[step]]
 do = "click"
-at = [70, 786]
+at = { role = "listitem", text = "Import" }
 label = "rail: Import"
 
 [[step]]
 do = "click"
-at = [455, 169]
+at = { role = "radio", text = "Assisted online import" }
 label = "mode: Assisted online import"
 
 [[step]]
 do = "click"
-at = [1394, 435]
+at = { id = "import-url" }
 label = "field: Record or search URL"
 
 [[step]]
@@ -40,7 +38,7 @@ label = "type: the census person's URL"
 
 [[step]]
 do = "click"
-at = [297, 482]
+at = { role = "button", text = "Fetch" }
 label = "Fetch"
 
 [[step]]
@@ -50,7 +48,7 @@ label = "let the plugin fetch the record"
 
 [[step]]
 do = "click"
-at = [1706, 775]
+at = { role = "button", text = "Import & next" }
 label = "Confirm: Import & next"
 
 [[step]]
@@ -59,7 +57,7 @@ name = "save"
 
 [[step]]
 do = "click"
-at = [1168, 596]
+at = { role = "button", text = "Save scan" }
 label = "Save scan"
 
 [[step]]
@@ -73,7 +71,7 @@ name = "after-save"
 
 [[step]]
 do = "click"
-at = [330, 480]
+at = { role = "button", text = "Import another" }
 label = "Summary: Import another"
 
 [[step]]
@@ -88,5 +86,5 @@ because = "saving the scan writes the record and closes the dialog"
 [[assert]]
 kind = "match"
 shots = ["source", "again"]
-region = [248, 278, 700, 40]
+region = { role = "main", offset = [16, 203], size = [700, 40] }
 because = "the record went straight to the summary, whose Import another starts over at Source"

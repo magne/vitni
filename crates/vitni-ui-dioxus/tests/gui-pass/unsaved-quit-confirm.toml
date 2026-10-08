@@ -20,13 +20,11 @@
 # The click on empty list space before the second `⌘Q` is not cosmetic: dismissing a modal with `Esc`
 # leaves nothing in the webview focused, and a chord that reaches no focused element reaches no
 # dispatcher either.
-#
-# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
 description = "The quit confirm lists both unsaved tabs, and a partial Save all keeps the app up (#244, #261)"
 
 [[step]]
 do = "click"
-at = [85, 283]
+at = { role = "listitem", text = "Places" }
 label = "rail: Places"
 
 [[step]]
@@ -36,7 +34,7 @@ label = "⌘N: a new Place draft"
 
 [[step]]
 do = "click"
-at = [1150, 495]
+at = { id = "place-latitude" }
 label = "field: Latitude"
 
 [[step]]
@@ -87,17 +85,17 @@ label = "confirm: Esc"
 
 [[step]]
 do = "click"
-at = [300, 99]
+at = { role = "option", text = "Kristiansand Municipality P0001" }
 label = "explorer: Kristiansand, in a second tab"
 
 [[step]]
 do = "click"
-at = [1740, 145]
+at = { role = "button", text = "Edit" }
 label = "detail head: Edit"
 
 [[step]]
 do = "click"
-at = [1150, 438]
+at = { id = "place-id" }
 label = "field: ID input"
 
 [[step]]
@@ -112,7 +110,7 @@ label = "Type: Municipality → Parish"
 
 [[step]]
 do = "click"
-at = [300, 1100]
+at = { hook = "explorer", offset = [68, 1073] }
 label = "park the pointer on empty list space"
 
 [[step]]
@@ -139,7 +137,7 @@ name = "after-esc"
 
 [[step]]
 do = "click"
-at = [300, 1100]
+at = { hook = "explorer", offset = [68, 1073] }
 label = "empty list space: put keyboard focus back in the app after Esc"
 
 [[step]]
@@ -153,7 +151,7 @@ name = "quit-confirm-2"
 
 [[step]]
 do = "click"
-at = [1061, 473]
+at = { role = "button", text = "Save all" }
 label = "quit confirm: Save all"
 
 [[step]]
@@ -198,14 +196,14 @@ because = "Save all must dismiss the dialog and leave the app running — a quit
 [[assert]]
 kind = "differ"
 # Kristiansand's tab alone; the rest of the window repaints on any save, which would fake this.
-region = [728, 85, 155, 40]
+region = { role = "tab", text = "Kristiansand", offset = [-22, 1], size = [155, 40] }
 shots = ["two-dirty", "after-save-all"]
 because = "the record Save all could save loses its unsaved marker"
 
 [[assert]]
 kind = "match"
 # The draft's tab alone, in the same frame.
-region = [588, 85, 135, 40]
+region = { role = "tab", text = "New place", offset = [-24, 1], size = [135, 40] }
 shots = ["two-dirty", "after-save-all"]
 tolerance = 0.001
 because = "the record it could not save is left open, still marked unsaved — not saved, and not discarded"

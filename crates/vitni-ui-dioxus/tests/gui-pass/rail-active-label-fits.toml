@@ -16,7 +16,7 @@ window = [1460, 900]
 
 [[step]]
 do = "click"
-at = [85, 468]
+at = { role = "listitem", text = "Notes" }
 label = "rail: Notes"
 
 [[step]]
@@ -25,7 +25,7 @@ name = "notes-active"
 
 [[step]]
 do = "click"
-at = [85, 504]
+at = { role = "listitem", text = "Research notes" }
 label = "rail: Research notes"
 
 [[step]]
@@ -40,5 +40,5 @@ because = "the click reached Research notes (the Explorer switches list)"
 [[assert]]
 kind = "match"
 shots = ["notes-active", "research-active"]
-region = [0, 530, 200, 370]
+region = { role = "navigation", offset = [0, 503], size = [200, 370] }
 because = "a bold active label must not wrap and push the rows below it down"

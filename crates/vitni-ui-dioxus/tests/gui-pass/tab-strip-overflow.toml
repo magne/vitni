@@ -19,12 +19,12 @@ window = [1280, 840]
 
 [[step]]
 do = "click"
-at = [85, 283]
+at = { role = "listitem", text = "Places" }
 label = "rail: Places"
 
 [[step]]
 do = "click"
-at = [300, 99]
+at = { role = "option", text = "Kristiansand Municipality P0001" }
 label = "explorer: Kristiansand"
 
 [[step]]
@@ -33,7 +33,7 @@ name = "overview"
 
 [[step]]
 do = "click"
-at = [712, 249]
+at = { id = "tab-names" }
 label = "Names tab, at the painted label's centre"
 
 [[step]]
@@ -43,6 +43,6 @@ name = "names"
 [[assert]]
 kind = "differ"
 shots = ["overview", "names"]
-region = [532, 268, 748, 480]
+region = { id = "panel-overview", offset = [0, 7], size = [748, 480] }
 tolerance = 0.02
 because = "clicking the painted label must switch the tab, not scroll the strip (#285)"

@@ -6,14 +6,13 @@
 # window's own standard deviation high with the map blank. Hence the `painted` asserts below, scoped to
 # a rectangle wholly inside the canvas in both the tall (Pan) and short (Polygon) layouts.
 #
-# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes. The canvas fills
-# x 485..1797, y 159..1057 with Pan armed and y 159..1018 with Polygon armed; [500, 200, 1250, 700]
-# sits inside both.
+# The `painted` region is a 1250x700 rectangle inset into `geography-map`; it sits inside the canvas in
+# both layouts, since the canvas is shorter with Polygon armed.
 description = "Arming a draw tool leaves the map painted, and re-arming the active one changes nothing (#252)"
 
 [[step]]
 do = "click"
-at = [85, 861]
+at = { role = "listitem", text = "Geography" }
 label = "rail: Geography"
 
 [[step]]
@@ -22,9 +21,7 @@ name = "map"
 
 [[step]]
 do = "click"
-# Pan's pill spans x 1192..1234 â€” column-scanned, because the toolbar moved and 1249 had drifted onto
-# the left edge of Drop / move a point, which armed the Point tool instead of re-clicking Pan.
-at = [1213, 110]
+at = { role = "button", text = "Pan" }
 label = "toolbar: Pan (already active)"
 
 [[step]]
@@ -33,7 +30,7 @@ name = "pan-reclick"
 
 [[step]]
 do = "click"
-at = [1348, 110]
+at = { role = "button", text = "Drop / move a point" }
 label = "toolbar: Drop / move a point"
 
 [[step]]
@@ -42,7 +39,7 @@ name = "point-armed"
 
 [[step]]
 do = "click"
-at = [1480, 110]
+at = { role = "button", text = "Draw polygon" }
 label = "toolbar: Draw polygon"
 
 [[step]]
@@ -51,7 +48,7 @@ name = "polygon-armed"
 
 [[step]]
 do = "click"
-at = [1213, 110]
+at = { role = "button", text = "Pan" }
 label = "toolbar: Pan"
 
 [[step]]
@@ -66,19 +63,19 @@ because = "clicking the tool that is already active must change nothing at all â
 [[assert]]
 kind = "match"
 shots = ["map", "point-armed"]
-region = [500, 200, 1250, 700]
+region = { id = "geography-map", offset = [15, 42], size = [1250, 700] }
 because = "the Point tool inserts no row, so the surface keeps its size and the canvas must be untouched"
 
 [[assert]]
 kind = "painted"
 shot = "point-armed"
-region = [500, 200, 1250, 700]
+region = { id = "geography-map", offset = [15, 42], size = [1250, 700] }
 because = "arming the Point tool must not blank the canvas"
 
 [[assert]]
 kind = "painted"
 shot = "polygon-armed"
-region = [500, 200, 1250, 700]
+region = { id = "geography-map", offset = [15, 42], size = [1250, 700] }
 # The canvas measures ~0.089 at this view and a blanked one measures exactly 0. The floor sits 6x above
 # the 0.005 default, so a mostly-blank canvas fails too and not only a perfectly uniform one, but far
 # enough below 0.089 that a lighter tile area or a different default centre cannot trip it.

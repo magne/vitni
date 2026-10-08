@@ -443,6 +443,7 @@ pub fn MapZoomReadout(zoom: Signal<f64>) -> Element {
     rsx! {
         span {
             class: "map-zoom-readout",
+            "data-hook": "zoom-readout",
             aria_label: chrome.0.geography_zoom_aria(&level),
             "{chrome.0.geography_zoom_readout(&level)}"
         }

@@ -8,15 +8,12 @@
 # dispatcher sits on `.app`, and every overlay renders as a *sibling* of `.app`, so an `onkeydown` on
 # the overlay is the only thing that dismisses one).
 #
-# Coordinates are window pixels at the default 1800x1200, read off this scenario's own shots — not
-# `media-preview.toml`'s, even though it drives the same fixture to the same record. The click on the
-# preview lands at (1150, 490): inside the seeded image, which paints x 995-1312 / y 335-652 on the
-# Overview, and clear of the frame's dead margins on either side of it.
+# The click targets the preview frame's own button, which is where the handler is attached.
 #
 # The `painted` region is a 200x120 rectangle wholly inside the *dialog's* image, which is a different
-# box: at Fit it paints x 639-1119 / y 325-807. The region crosses the red circle's top arc against the
+# box from the preview's. The region crosses the red circle's top arc against the
 # sky above it, which is why a loaded image measures 0.1725 there. It stays 15px clear of the image's
-# top edge and well clear of its centre (880, 567), where a glyph placeholder or WebKit's broken-image
+# top edge and well clear of its centre, where a glyph placeholder or WebKit's broken-image
 # marker would paint and answer for the image with their own texture. The frame in the dialog carries no
 # `.img-photo` gradient (`.mv-canvas .img-frame` strips its border, and the viewer's frame never gets
 # that class), so the only gradient inside the region is the image's own; the modal body behind it is
@@ -28,12 +25,12 @@ description = "The Media preview frame opens the viewer dialog, and Esc dismisse
 
 [[step]]
 do = "click"
-at = [85, 431]
+at = { role = "listitem", text = "Media" }
 label = "rail: Media"
 
 [[step]]
 do = "click"
-at = [300, 99]
+at = { role = "option", text = "portrait.png O0001" }
 label = "explorer: the seeded portrait.png row"
 
 [[step]]
@@ -42,7 +39,7 @@ name = "media-detail"
 
 [[step]]
 do = "click"
-at = [1150, 490]
+at = { role = "button", text = "Open portrait.png" }
 label = "overview: the preview frame"
 
 [[step]]
@@ -70,7 +67,7 @@ because = "clicking the preview frame must open the viewer dialog — the handle
 [[assert]]
 kind = "painted"
 shot = "viewer-open"
-region = [780, 340, 200, 120]
+region = { role = "button", text = "Open portrait.png", offset = [211, 6], size = [200, 120] }
 min_deviation = 0.05
 because = "the dialog must load the image's own bytes, not a placeholder or a broken img"
 

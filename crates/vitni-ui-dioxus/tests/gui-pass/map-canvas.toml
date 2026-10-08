@@ -1,6 +1,5 @@
 # The interactive MapLibre canvas (#203) — the one thing SSR cannot reach at all: it renders no
-# canvas, fetches no tiles, and has no pointer. Coordinates are window pixels at 1800x1200, read off
-# the shots this scenario writes; re-read them if the rail or toolbar layout changes.
+# canvas, fetches no tiles, and has no pointer.
 description = "The map canvas renders tiles and responds to pan, zoom and the point tool (#203)"
 
 [[step]]
@@ -9,7 +8,7 @@ name = "dashboard"
 
 [[step]]
 do = "click"
-at = [85, 861]
+at = { role = "listitem", text = "Geography" }
 label = "rail: Geography"
 
 [[step]]
@@ -18,7 +17,7 @@ name = "map"
 
 [[step]]
 do = "drag"
-from = [1100, 600]
+from = { id = "geography-map", offset = [615, 442] }
 by = [-300, -120]
 label = "map: drag to pan"
 
@@ -28,7 +27,7 @@ name = "panned"
 
 [[step]]
 do = "wheel"
-at = [1070, 686]
+at = { id = "geography-map", offset = [585, 528] }
 clicks = 2
 label = "map: wheel zoom in"
 
@@ -38,7 +37,7 @@ name = "zoomed"
 
 [[step]]
 do = "click"
-at = [1348, 110]
+at = { role = "button", text = "Drop / move a point" }
 label = "toolbar: Drop / move a point"
 
 [[step]]
@@ -47,7 +46,7 @@ name = "point-tool-armed"
 
 [[step]]
 do = "click"
-at = [900, 500]
+at = { id = "geography-map", offset = [415, 342] }
 label = "map: drop a point"
 
 [[step]]

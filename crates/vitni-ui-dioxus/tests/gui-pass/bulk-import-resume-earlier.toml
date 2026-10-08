@@ -2,20 +2,18 @@
 # As `bulk-import-resume`, a cancel lands while `large.ged` is being written; *Import another* returns to
 # the Source stage, whose Earlier imports lists the run as interrupted with Resume, and Resume re-runs it
 # at once: its plan resolves what the cancelled run wrote as unchanged.
-#
-# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
 description = "An interrupted bulk import is resumed from the Import tool's Earlier imports (#496)"
 # Writing large.ged keeps the disk busy enough to starve the GUIs beside it.
 exclusive = true
 
 [[step]]
 do = "click"
-at = [70, 786]
+at = { role = "listitem", text = "Import" }
 label = "rail: Import"
 
 [[step]]
 do = "click"
-at = [1394, 408]
+at = { id = "bulk-import-source" }
 label = "source file field"
 
 [[step]]
@@ -25,7 +23,7 @@ label = "type: large.ged"
 
 [[step]]
 do = "click"
-at = [300, 642]
+at = { role = "button", text = "Import" }
 label = "Import"
 
 [[step]]
@@ -39,17 +37,17 @@ name = "plan"
 
 [[step]]
 do = "click"
-at = [1730, 512]
+at = { role = "button", text = "Import" }
 label = "Plan: Import"
 
 [[step]]
 do = "click"
-at = [303, 429]
+at = { role = "button", text = "Cancel" }
 label = "Cancel while writing"
 
 [[step]]
 do = "click"
-at = [330, 478]
+at = { role = "button", text = "Import another" }
 label = "Import another"
 
 [[step]]
@@ -63,7 +61,7 @@ name = "earlier"
 
 [[step]]
 do = "click"
-at = [469, 788]
+at = { role = "button", text = "Resume" }
 label = "Earlier imports: Resume"
 
 [[step]]
@@ -83,5 +81,5 @@ because = "Resume must re-run the interrupted import at once, not leave the Sour
 [[assert]]
 kind = "differ"
 shots = ["plan", "resumed-plan"]
-region = [248, 308, 1536, 240]
+region = { role = "main", offset = [16, 233], size = [1536, 240] }
 because = "the resumed plan must resolve what the cancelled run wrote as unchanged, not plan it all as new"

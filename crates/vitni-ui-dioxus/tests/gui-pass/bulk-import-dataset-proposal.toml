@@ -5,18 +5,17 @@
 # progress stream and the host's question together.
 #
 # The fixture seeds `rerun.ged` beside the workspace's data without importing it, so the workspace is
-# empty and the first import asks nothing. Coordinates are window pixels at 1800x1200, read off the
-# shots this scenario writes.
+# empty and the first import asks nothing.
 description = "Re-importing a file opens the confirm on the proposed tree once the file is read (#408, #413)"
 
 [[step]]
 do = "click"
-at = [70, 786]
+at = { role = "listitem", text = "Import" }
 label = "rail: Import"
 
 [[step]]
 do = "click"
-at = [1394, 408]
+at = { id = "bulk-import-source" }
 label = "source file field"
 
 [[step]]
@@ -26,7 +25,7 @@ label = "type: rerun.ged"
 
 [[step]]
 do = "click"
-at = [300, 642]
+at = { role = "button", text = "Import" }
 label = "Import"
 
 [[step]]
@@ -36,7 +35,7 @@ label = "let the file be read and planned"
 
 [[step]]
 do = "click"
-at = [1730, 696]
+at = { role = "button", text = "Import" }
 label = "Import, at the plan"
 
 [[step]]
@@ -50,7 +49,7 @@ name = "first-done"
 
 [[step]]
 do = "click"
-at = [330, 486]
+at = { role = "button", text = "Import another" }
 label = "Import another"
 
 [[step]]
@@ -59,7 +58,7 @@ name = "again"
 
 [[step]]
 do = "click"
-at = [300, 642]
+at = { role = "button", text = "Import" }
 label = "Import the same file again"
 
 [[step]]
@@ -73,7 +72,7 @@ name = "asked"
 
 [[step]]
 do = "click"
-at = [1153, 543]
+at = { role = "button", text = "Import anyway" }
 label = "Import anyway, into the proposed tree"
 
 [[step]]
@@ -87,7 +86,7 @@ name = "replanned"
 
 [[step]]
 do = "click"
-at = [1730, 737]
+at = { role = "button", text = "Import" }
 label = "Import, at the plan that writes nothing"
 
 [[step]]

@@ -13,49 +13,43 @@
 # layout rather than for the rows. Detaching restores the geometry exactly; the citation record stays.
 #
 # The panel is scrolled to the bottom of its body **once**, before anything is clicked, and every
-# coordinate below is read there. #310's one-line record rows shortened the succession form above the
+# target below is resolved there. #310's one-line record rows shortened the succession form above the
 # provenance block, but the Date editor stacks four controls in one row's value cell, so the block still
 # runs past the window: before the scroll the new-citation card's Add button was off screen entirely.
 # Scrolling once and never again is what keeps the two picker shots comparable — the `differ` below is
 # over a region, and a second scroll between them would move the floating list for the scroll rather than
 # for the row it is asserting on, the same trap the chip detach below avoids.
-#
-# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes, and were
-# re-measured for #310: with the panel scrolled, the citations picker input is y 803-840 (click 821), its
-# floating list y 858-950 with "+ New citation" on 916-942 (click 929), the card's Source input y 939-972
-# (click 955), that picker's "+ New source" row y 1052-1078 (click 1065 — its centre, not the y=1047 top
-# edge the old coordinate happened to still hit) and Add citation y 1070-1095 (click 1082).
 description = "An open picker sees a record created beside it, and the create updates the rail count (#266)"
 
 [[step]]
 do = "click"
-at = [85, 283]
+at = { role = "listitem", text = "Places" }
 label = "rail: Places"
 
 [[step]]
 do = "click"
-at = [300, 99]
+at = { role = "option", text = "Kristiansand Municipality P0001" }
 label = "explorer: Kristiansand"
 
 [[step]]
 do = "click"
-at = [827, 248]
+at = { id = "tab-hierarchy" }
 label = "detail tab: Hierarchy"
 
 [[step]]
 do = "click"
-at = [1698, 610]
+at = { role = "button", text = "Add succession" }
 label = "Hierarchy: Add succession"
 
 [[step]]
 do = "wheel"
-at = [1663, 700]
+at = { id = "succession-date-original", offset = [118, 28] }
 clicks = -15
-label = "panel: scroll its body to the bottom, once — every coordinate below is read there"
+label = "panel: scroll its body to the bottom, once"
 
 [[step]]
 do = "click"
-at = [1670, 821]
+at = { id = "prov-citation" }
 label = "provenance: open the citations picker"
 
 [[step]]
@@ -64,12 +58,12 @@ name = "picker-before"
 
 [[step]]
 do = "click"
-at = [1630, 929]
+at = { id = "prov-citation-opt-0" }
 label = "citations picker: + New citation"
 
 [[step]]
 do = "click"
-at = [1675, 955]
+at = { id = "prov-new-source" }
 label = "new citation card: the source picker"
 
 [[step]]
@@ -79,7 +73,7 @@ label = "type: s"
 
 [[step]]
 do = "click"
-at = [1680, 1065]
+at = { id = "prov-new-source-opt-0" }
 label = "source picker: + New source \"s\""
 
 [[step]]
@@ -88,7 +82,7 @@ name = "rail-before"
 
 [[step]]
 do = "click"
-at = [1650, 1082]
+at = { role = "button", text = "Add citation" }
 label = "new citation card: Add citation — commits S0001 + C0001"
 
 [[step]]
@@ -97,12 +91,12 @@ name = "rail-after"
 
 [[step]]
 do = "click"
-at = [1633, 778]
+at = { role = "button", text = "Detach citation" }
 label = "detach the C0001 chip, restoring the picker's on-screen position"
 
 [[step]]
 do = "click"
-at = [1670, 821]
+at = { id = "prov-citation" }
 label = "provenance: reopen the citations picker"
 
 [[step]]
@@ -115,11 +109,11 @@ shots = ["picker-before", "picker-after"]
 because = "the reopened picker must list the citation created in it, not 'No matches' (#266)"
 # The floating result list only — the panel around it repaints for the detach either way, and the list
 # is where "No matches" becomes a C0001 row.
-region = [1560, 860, 210, 88]
+region = { role = "group", offset = [123, 181], size = [210, 88] }
 
 [[assert]]
 kind = "differ"
 shots = ["rail-before", "rail-after"]
 because = "an inline create marks the workspace changed, so the rail's Citations count goes 0 → 1 (#207)"
 # The rail's Citations row alone: the panel behind the pointer repaints on Add regardless.
-region = [0, 335, 232, 45]
+region = { role = "navigation", offset = [0, 308], size = [232, 45] }

@@ -369,6 +369,7 @@ pub fn MatchesTable(
                         let left = pair.a.human_id.clone();
                         let right = pair.b.human_id.clone();
                         let compare_label = chrome.0.merge_compare();
+                        let compare_name = chrome.0.merge_compare_pair(&pair.a.label, &pair.b.label);
                         rsx! {
                             tr {
                                 td { "{pair.kind_label}" }
@@ -402,6 +403,7 @@ pub fn MatchesTable(
                                 td {
                                     Button {
                                         label: compare_label,
+                                        aria_label: compare_name,
                                         small: true,
                                         onclick: move |_| oncompare.call((kind, left.clone(), right.clone())),
                                     }

@@ -287,6 +287,16 @@ Residuals from the shortcuts work (ADR 0030); see
 - **No keyboard topic in the in-app Help browser.** `vitni-ui::help.rs`'s `HelpSection::Reference`
   is documented as "Lookup material (shortcuts, glossaries)" and `Run::Kbd` is unused — no authored doc
   covers shortcuts; the `?` overlay is the only in-app reference today.
+- **Closing the command palette strands focus on `<body>`, so the next shell chord is dropped.** The
+  palette takes focus with `autofocus` on its input and mounts no `DialogFocus`, so nothing restores
+  the previously focused element when it closes (the help sheet and side panels do mount it). Once the
+  palette unmounts, focus is on `<body>`, outside the `.app` whose `onkeydown` is the shell dispatcher,
+  so `⌘K`, `?` and the `g`-prefix do nothing until the user clicks back into the app. `gui-pass` shows
+  it: in `overlay-dismiss`, `⌘K`, `Esc`, `⌘K` opens no second palette (the probe reports `active:
+  body`), and closing it with a scrim click strands focus the same way, so the scenario clicks the top
+  bar after each close. It went unnoticed because the scenario's
+  old pixel click on the scrim passed whether or not the palette had reopened; the scrim is now a
+  target, which fails when the palette is absent.
 
 ### Pedigree & charts
 
@@ -647,23 +657,23 @@ The `area/docs` label already existed with no `###` home; this is it.
   1`, and `overlay-dismiss` failed its first `differ` at RMSE 0.0000 because `⌘K` opened no palette —
   both passed on an immediate re-run of the scenario alone, so the window was not yet focusable when the
   harness aimed at it. All three are the same missing capability: the harness waits a fixed time instead
-  of waiting for the thing it is about to assert on — a paint, or a window that will take input. — #503
-- **`gui-pass` steps address elements by window pixels, so every layout change recalibrates the
-  scenarios.** `click`, `drag` and `wheel` take `at`/`from`, and assertions take `region`, all window
-  pixels read off a shot (`xtask/src/gui_pass.rs`, `Step` and `Assertion`); the 56 scenarios under
-  `crates/vitni-ui-dioxus/tests/gui-pass/` and `tests/screenshots/readme.toml` hold about 556 of them.
-  Moving the rail or a toolbar breaks scenarios that test something else, and the fix is re-reading
-  pixels by column scan. *Shape:* a step names a target — a DOM `id`, or a test-hook attribute where no
-  id exists, with an optional text match or index for list rows and an optional offset — and the
-  harness resolves it to the element's window rect at run time. Candidate mechanism: an env-gated probe
-  in `vitni-ui-dioxus` that, only when `gui-pass` launches the GUI, reports element rects through
-  `document::eval` to a file the harness reads after each settle. Alternatives to rule out first: AT-SPI
-  (needs an accessibility bus on the Xvfb display, and exposes accessible names, not ids) and WebDriver
-  (wry does not enable WebKit's automation mode). Canvas points stay coordinates, relative to the canvas
-  element's rect. The same probe can tell the harness an element is present, which is the wait #503 is
-  missing. *Exit:* `at`, `from` and `region` accept a target; an unresolved target fails naming the
-  target and the scenario; every non-canvas coordinate in the scenarios is converted; CLAUDE.md
-  *Testing the GUI* and `docs/development.md` describe targets first. — #533
+  of waiting for the thing it is about to assert on — a paint, or a window that will take input. Since
+  #533 the harness waits for the GUI's probe to report the page ready before its focus click, and fails
+  unless the document then has keyboard focus, so the third class now either cannot happen or fails
+  naming the cause; a target that is not yet rendered is re-probed until it appears. The blank first
+  shot and the undrawn canvas remain: the probe reports elements, not paints — a map-idle flag
+  (`map.loaded() && !map.isMoving()`) beside the snapshot is the candidate for the second. — #503
+- **`gui-pass` assertions still measure pixels where the probe could answer directly.** Since #533 the
+  GUI's probe (`crates/vitni-ui-dioxus/src/shell/gui_probe.rs`) reports every element's rect, role and
+  text plus `document.activeElement`, but the assertions are still `differ`/`match`/`painted` over
+  screenshots. Two checks would read the probe instead: a `focus` assertion naming the element that must
+  hold focus (today proved indirectly, by a focus ring's RMSE), and a `present`/`absent` assertion for an
+  element such as a toast (today an RMSE over the area it occupies, with a tolerance tuned per scenario).
+  Both are additive `Assertion` kinds over the snapshot the harness already saves beside each shot.
+  Target resolution has a matching gap: the probe skips only zero-size elements, so an element
+  scrolled out of an overflow container, covered by an overlay, or inert behind a panel still resolves,
+  and the click lands on whatever is drawn there. Reporting whether `document.elementFromPoint` at the
+  resolved point is the element (or inside it) would let the harness refuse a covered target. — #539
 - **`main` is protected without required status checks, and that is a choice.** `ci.yml` filters
   `docs/**`, `*.md` and `LICENSE*` out of its triggers, so a documentation-only pull request starts no
   run at all — a required context would sit unfulfilled forever on exactly the changes this repository

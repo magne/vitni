@@ -159,17 +159,46 @@ because a scripted click run writes real events. Parallel workers each get their
 workspace (`target/gui-pass/workers/<n>/`), restored from the same seed. Shots land in
 `target/gui-pass/shots/<scenario>/` and the GUI's own log in `gui.log` beside them.
 
+**A step names the element it acts on, not a window pixel.** `at`, `from` and an assertion's `region`
+are targets — an element picked by `id`, `data-hook` or ARIA `role`, narrowed by visible `text`, an
+enclosing `within` and, as a last resort, an `index`, with an optional `offset` (and, for a region, a
+`size`) counted from its top-left corner:
+
+```toml
+at = { role = "button", text = "Save", within = "detail-head" }
+at = { id = "geography-map", offset = [415, 242] }        # a map vertex: canvas points stay offsets
+region = { hook = "record-tabs", offset = [0, 5], size = [1268, 45] }
+```
+
+The harness resolves each target at run time from the GUI's **probe**: a debug build started with
+`VITNI_GUI_PROBE=127.0.0.1:<port>` serves `GET /elements` (`crates/vitni-ui-dioxus/src/shell/gui_probe.rs`)
+with every element carrying an `id`, a `data-hook` or a role — explicit, or implied by its tag — its
+rect, text, `aria-label` and the ids, hooks and roles above it, plus whether the page is ready and
+focused. Resolution is pure Rust over that list (`xtask/src/gui_pass/target.rs`), so a target that
+matches nothing, or several elements, fails naming the target and listing what the probe saw, after
+re-probing until the settle cap in case the element was still rendering. The harness also waits for
+the page to report ready before its focus click, and checks the document took focus. The probe only
+observes — it never clicks, types, scrolls or focuses — so every input still reaches the webview as a
+real X event. A release build ignores the variable and never listens.
+
+Two other ways to find elements were ruled out: AT-SPI needs an accessibility bus on the Xvfb display
+and exposes accessible names rather than ids, and WebDriver needs WebKit's automation mode, which wry
+does not enable.
+
+Every shot has a `NN-<name>.json` beside its PNG: the probe's snapshot at that moment, in window pixels.
+Read an element's rect, role or text there when writing a target, rather than measuring the PNG.
+
 The assisted-import scenarios (`assisted-match-*`) never reach Digitalarkivet. The harness serves the
 bundled census pages from a local stand-in (`xtask/src/archive_server.rs`) and hands the GUI its origin
 in `VITNI_ASSISTED_NET_REROUTE`. A debug build then sends every permitted fetch there instead, keeping
 its path, while the plugin still asks for, and sees, `https://www.digitalarkivet.no/…`. A release build
 ignores the variable.
 
-When a screenshot disagrees with your reading of it, column-scan instead of squinting:
+When a screenshot disagrees with what its snapshot says, crop or column-scan it rather than squinting:
 
 ```bash
-convert <shot> -crop 1xH+X+Y +repage txt:-     # exact pixel rows
 convert <in> -crop WxH+X+Y +repage <out>       # crop a region to inspect
+convert <shot> -crop 1xH+X+Y +repage txt:-     # exact pixel rows
 ```
 
 Some things remain human-only, and the `manual-verify` label in

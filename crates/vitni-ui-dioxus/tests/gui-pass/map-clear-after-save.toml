@@ -5,47 +5,47 @@
 # behind, Clear would still have a ring to erase and the shots would differ. This depends on (b) being
 # correct (`map-clear-draft.toml`), which is why that scenario exists separately.
 #
-# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
+# The vertices are canvas points, given as offsets from the `geography-map` element's top-left.
 description = "A successful geometry save clears the draft, so a follow-up Clear finds nothing left (#282c)"
 
 [[step]]
 do = "click"
-at = [85, 861]
+at = { role = "listitem", text = "Geography" }
 label = "rail: Geography"
 
 [[step]]
 do = "click"
-at = [324, 220]
+at = { role = "option", text = "Kristiansand Municipality" }
 label = "place list: Kristiansand"
 
 [[step]]
 do = "click"
-at = [1480, 110]
+at = { role = "button", text = "Draw polygon" }
 label = "toolbar: Draw polygon"
 
 [[step]]
 do = "click"
-at = [900, 400]
+at = { id = "geography-map", offset = [415, 242] }
 label = "map: first vertex"
 
 [[step]]
 do = "click"
-at = [1200, 420]
+at = { id = "geography-map", offset = [715, 262] }
 label = "map: second vertex"
 
 [[step]]
 do = "click"
-at = [1100, 700]
+at = { id = "geography-map", offset = [615, 542] }
 label = "map: third vertex"
 
 [[step]]
 do = "click"
-at = [541, 1048]
+at = { role = "button", text = "Finish polygon" }
 label = "Finish polygon"
 
 [[step]]
 do = "click"
-at = [1467, 674]
+at = { role = "button", text = "Save" }
 label = "geometry panel: Save"
 
 [[step]]
@@ -54,7 +54,7 @@ name = "saved"
 
 [[step]]
 do = "click"
-at = [636, 1048]
+at = { role = "button", text = "Clear" }
 label = "Clear"
 
 [[step]]
@@ -64,5 +64,5 @@ name = "after-clear"
 [[assert]]
 kind = "match"
 shots = ["saved", "after-clear"]
-region = [500, 200, 1250, 700]
+region = { id = "geography-map", offset = [15, 42], size = [1250, 700] }
 because = "a successful save already cleared the draft, so Clear finds no ring left to erase"

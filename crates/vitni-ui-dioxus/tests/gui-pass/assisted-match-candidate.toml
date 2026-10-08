@@ -10,14 +10,12 @@
 #
 # The merge is proven on the Matches queue: without a person pair before the namesake exists, and again
 # after Same — had the record been imported as new (Decide later), the pair would be listed. That
-# assertion is scoped to the matches table card, y 211-451, as in matches-keyboard.toml.
-#
-# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
+# assertion is scoped to the matches table card, a region of `main` as in matches-keyboard.toml.
 description = "A record with a possible match stops at the Match stage, and Same merges it (#412)"
 
 [[step]]
 do = "click"
-at = [108, 749]
+at = { role = "listitem", text = "Matches" }
 label = "rail: Matches"
 
 [[step]]
@@ -26,7 +24,7 @@ name = "queue-before"
 
 [[step]]
 do = "click"
-at = [85, 175]
+at = { role = "listitem", text = "People" }
 label = "rail: People"
 
 [[step]]
@@ -36,7 +34,7 @@ label = "⌘N: a new Person draft"
 
 [[step]]
 do = "click"
-at = [1150, 486]
+at = { id = "given" }
 label = "field: Given name"
 
 [[step]]
@@ -46,7 +44,7 @@ label = "type: Ola Eksempelsen"
 
 [[step]]
 do = "click"
-at = [1150, 636]
+at = { id = "surname" }
 label = "field: Surname"
 
 [[step]]
@@ -56,22 +54,22 @@ label = "type: Fjellstue"
 
 [[step]]
 do = "click"
-at = [1754, 151]
+at = { role = "button", text = "Save" }
 label = "New person: Save"
 
 [[step]]
 do = "click"
-at = [70, 786]
+at = { role = "listitem", text = "Import" }
 label = "rail: Import"
 
 [[step]]
 do = "click"
-at = [455, 169]
+at = { role = "radio", text = "Assisted online import" }
 label = "mode: Assisted online import"
 
 [[step]]
 do = "click"
-at = [1394, 435]
+at = { id = "import-url" }
 label = "field: Record or search URL"
 
 [[step]]
@@ -81,7 +79,7 @@ label = "type: the census person's URL"
 
 [[step]]
 do = "click"
-at = [297, 482]
+at = { role = "button", text = "Fetch" }
 label = "Fetch"
 
 [[step]]
@@ -91,7 +89,7 @@ label = "let the plugin fetch the record"
 
 [[step]]
 do = "click"
-at = [1706, 775]
+at = { role = "button", text = "Import & next" }
 label = "Confirm: Import & next"
 
 [[step]]
@@ -100,7 +98,7 @@ name = "save"
 
 [[step]]
 do = "click"
-at = [1168, 596]
+at = { role = "button", text = "Save scan" }
 label = "Save scan"
 
 [[step]]
@@ -128,7 +126,7 @@ name = "summary"
 
 [[step]]
 do = "click"
-at = [108, 749]
+at = { role = "listitem", text = "Matches" }
 label = "rail: Matches"
 
 [[step]]
@@ -148,5 +146,5 @@ because = "y answers the Match stage and the session moves on to its summary"
 [[assert]]
 kind = "match"
 shots = ["queue-before", "queue-after"]
-region = [232, 211, 1568, 240]
+region = { role = "main", offset = [0, 136], size = [1568, 240] }
 because = "Same merged the record into its namesake, so no pair is left to review"

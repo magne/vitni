@@ -42,6 +42,7 @@ pub fn MasterDetail(
         div { class: "{root_class}",
             section {
                 class: "{detail_class}",
+                "data-hook": "record-pane",
                 ondragover: move |event| {
                     // `prevent_default` is required or the drop never fires; only while a tab drag
                     // is live, so ordinary content drags are unaffected.
@@ -61,7 +62,7 @@ pub fn MasterDetail(
                 {detail}
             }
             if docked.is_some() {
-                section { class: "detail docked", DockedRecordDetail {} }
+                section { class: "detail docked", "data-hook": "docked-pane", DockedRecordDetail {} }
             }
         }
     }
@@ -264,7 +265,7 @@ pub fn DetailContainer(
     // container with no shell in context.
     let behind_panel = try_consume_context::<NavState>().and_then(|nav| nav.panel_inert());
     rsx! {
-        div { class: "detail-head", inert: behind_panel, aria_hidden: behind_panel,
+        div { class: "detail-head", "data-hook": "detail-head", inert: behind_panel, aria_hidden: behind_panel,
             if let Some(color) = avatar_color {
                 div { class: "avatar-lg", style: "background:transparent",
                     span { class: "dot", style: "width:28px;height:28px;border-radius:var(--r-pill);background:{color}" }

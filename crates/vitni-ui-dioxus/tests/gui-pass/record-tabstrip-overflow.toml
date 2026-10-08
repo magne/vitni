@@ -36,12 +36,12 @@ window = [1280, 840]
 
 [[step]]
 do = "click"
-at = [85, 283]
+at = { role = "listitem", text = "Places" }
 label = "rail: Places"
 
 [[step]]
 do = "click"
-at = [300, 99]
+at = { role = "option", text = "Kristiansand Municipality P0001" }
 label = "explorer: Kristiansand"
 
 [[step]]
@@ -51,7 +51,7 @@ label = "⌘N: a new Place draft"
 
 [[step]]
 do = "click"
-at = [85, 175]
+at = { role = "listitem", text = "People" }
 label = "rail: People"
 
 [[step]]
@@ -61,7 +61,7 @@ label = "⌘N: a new Person draft"
 
 [[step]]
 do = "click"
-at = [85, 211]
+at = { role = "listitem", text = "Families" }
 label = "rail: Families"
 
 [[step]]
@@ -71,7 +71,7 @@ label = "⌘N: a new Family draft"
 
 [[step]]
 do = "click"
-at = [85, 247]
+at = { role = "listitem", text = "Events" }
 label = "rail: Events"
 
 [[step]]
@@ -81,7 +81,7 @@ label = "⌘N: a new Event draft"
 
 [[step]]
 do = "click"
-at = [85, 319]
+at = { role = "listitem", text = "Sources" }
 label = "rail: Sources"
 
 [[step]]
@@ -95,7 +95,7 @@ name = "filled"
 
 [[step]]
 do = "click"
-at = [889, 103]
+at = { role = "tab", text = "New person" }
 label = "record tab: New person, at the painted label's centre"
 
 [[step]]
@@ -104,7 +104,7 @@ name = "people-clicked"
 
 [[step]]
 do = "click"
-at = [658, 103]
+at = { role = "tab", text = "Kristiansand" }
 label = "record tab: Kristiansand, at the painted label's centre"
 
 [[step]]
@@ -113,7 +113,7 @@ name = "kristiansand-clicked"
 
 [[step]]
 do = "click"
-at = [717, 103]
+at = { role = "button", text = "Close Kristiansand" }
 label = "record tab: Kristiansand's close ✕, at its painted centre"
 
 [[step]]
@@ -123,20 +123,20 @@ name = "kristiansand-closed"
 [[assert]]
 kind = "differ"
 shots = ["filled", "people-clicked"]
-region = [532, 130, 748, 600]
+region = { hook = "record-pane", offset = [0, 8], size = [748, 600] }
 tolerance = 0.02
 because = "clicking a record tab's painted label must switch records, not scroll the tabstrip (#285)"
 
 [[assert]]
 kind = "differ"
 shots = ["people-clicked", "kristiansand-clicked"]
-region = [532, 130, 748, 600]
+region = { hook = "record-pane", offset = [0, 8], size = [748, 600] }
 tolerance = 0.02
 because = "a second tab's painted label, to prove the first hit was not a one-off"
 
 [[assert]]
 kind = "differ"
 shots = ["kristiansand-clicked", "kristiansand-closed"]
-region = [532, 130, 748, 600]
+region = { hook = "record-pane", offset = [0, 8], size = [748, 600] }
 tolerance = 0.02
 because = "the close ✕ sits in the same dead band as the label — closing the active record's tab must move the pane to another record (#285)"

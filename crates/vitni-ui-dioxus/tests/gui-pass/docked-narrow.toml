@@ -17,28 +17,19 @@
 # future regression back to a fully blank pane.
 #
 # The fixture seeds exactly one record (place Kristiansand); this scenario opens a second (Oslo) to
-# have two tabs to dock, following the same steps `docked-detail-tabs.toml` measured (its own header
-# comment covers the create-form field order). This pane's `.tabs` box is y 224-260, the painted label
-# centre y=242 — 31px above where this scenario first measured it, because #315 took the three
-# restriction toggles out of the header: an unrestricted record now renders no chips there at all, and at
-# 374px wide those chips were what wrapped the badge row onto a second line.
+# have two tabs to dock, following the same steps `docked-detail-tabs.toml` uses (its own header
+# comment covers the create-form field order).
 #
-# The `differ` is scoped to the tab *body* (below the strip's border-bottom at y=260), never the whole
-# pane. Before the #285 fix this click landed on `.tabs`' horizontal scrollbar and scrolled the strip
-# sideways without switching the tab — and a whole-pane region cannot tell those two apart, so the
-# assertion passed on the scroll alone.
-#
-# Regions and coordinates were read off this scenario's own `docked-narrow` shot, never carried over from
-# `docked-detail-tabs.toml`'s 1800x1200 ones — a narrower window is a different layout, not a crop. The
-# click into Name is the exception that proves it: #310's one-line record rows moved it in both windows,
-# but to y=620 here (the input spans 603-638, column-scanned at x=700) against y=627 there — measured
-# separately, because a narrow pane reflows the rows above it rather than cropping them.
+# The `differ` is scoped to the tab body (`panel-overview`), never the whole pane. Before the #285 fix
+# this click landed on `.tabs`' horizontal scrollbar and scrolled the strip sideways without switching
+# the tab — and a whole-pane region cannot tell those two apart, so the assertion passed on the scroll
+# alone.
 description = "The default 1280x840 window keeps a docked split as two columns, not a clipped single one (#279)"
 window = [1280, 840]
 
 [[step]]
 do = "click"
-at = [85, 283]
+at = { role = "listitem", text = "Places" }
 label = "rail: Places"
 
 [[step]]
@@ -48,7 +39,7 @@ label = "⌘N: a new Place draft"
 
 [[step]]
 do = "click"
-at = [630, 620]
+at = { id = "place-name" }
 label = "field: Name"
 
 [[step]]
@@ -58,12 +49,12 @@ label = "type: Oslo"
 
 [[step]]
 do = "click"
-at = [1236, 150]
+at = { role = "button", text = "Save" }
 label = "New place: Save"
 
 [[step]]
 do = "click"
-at = [300, 99]
+at = { role = "option", text = "Kristiansand Municipality P0001" }
 label = "explorer: Kristiansand, in a second tab"
 
 [[step]]
@@ -77,8 +68,8 @@ name = "docked-narrow"
 
 [[step]]
 do = "click"
-at = [730, 242]
-label = "active pane (Kristiansand): Names tab, at the painted label's centre"
+at = { id = "tab-names" }
+label = "active pane (Kristiansand): Names tab"
 
 [[step]]
 do = "shot"
@@ -87,18 +78,18 @@ name = "active-clicked"
 [[assert]]
 kind = "painted"
 shot = "docked-narrow"
-region = [906, 92, 374, 720]
+region = { hook = "docked-pane" }
 because = "the docked pane is on screen at the app's own default window, not clipped off it (#279)"
 
 [[assert]]
 kind = "differ"
 shots = ["docked-narrow", "active-clicked"]
-region = [532, 263, 374, 500]
+region = { id = "panel-overview" }
 tolerance = 0.02
 because = "the active pane's own tab strip is operable at the default window (#279, #285)"
 
 [[assert]]
 kind = "match"
 shots = ["docked-narrow", "active-clicked"]
-region = [906, 92, 374, 720]
+region = { hook = "docked-pane" }
 because = "clicking the active pane's tab must not disturb the docked pane"

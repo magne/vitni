@@ -1,6 +1,6 @@
 # ⌘N raises the from-anywhere new-record picker on destinations with no category to create in
 # (issue #300): the fixture starts on the Dashboard, where the tabstrip (and its own `+` menu) never
-# mounts at all. Coordinates are window pixels at 1800x1200, read off this scenario's own shots.
+# mounts at all.
 #
 # A chord that reaches no focused element reaches no dispatcher either (`unsaved-quit-confirm.toml`),
 # so the first step clicks the already-active Dashboard rail item purely to plant keyboard focus in the
@@ -9,7 +9,7 @@ description = "⌘N raises the new-record picker on the Dashboard and on a tool 
 
 [[step]]
 do = "click"
-at = [85, 135]
+at = { role = "listitem", text = "Dashboard" }
 label = "rail: Dashboard (plant keyboard focus)"
 
 [[step]]
@@ -36,7 +36,7 @@ name = "after-esc"
 
 [[step]]
 do = "click"
-at = [85, 935]
+at = { role = "listitem", text = "Preferences" }
 label = "rail: Preferences"
 
 [[step]]

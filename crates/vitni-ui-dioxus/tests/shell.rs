@@ -509,6 +509,10 @@ fn palette_renders_as_a_modal_dialog() {
     let html = render(palette_open);
     assert!(html.contains(r#"class="overlay""#), "palette backdrop:\n{html}");
     assert!(html.contains(r#"class="palette""#), "palette surface:\n{html}");
+    assert!(
+        html.contains(r#"data-hook="palette-overlay""#),
+        "gui-pass clicks the backdrop by its hook:\n{html}"
+    );
     assert!(html.contains(r#"role="dialog""#), "palette dialog role:\n{html}");
     assert!(html.contains(r#"aria-modal="true""#), "palette is modal:\n{html}");
     assert!(

@@ -1,23 +1,21 @@
 # #282(a) — the Point tool couldn't commit at all: `open_geometry_panel`'s only caller built a
 # `Polygon`, so a dropped point never reached the geometry panel. `draft_geometry` (`map_shared.rs`)
 # now drives both tools, so "Use this point" opens the same panel Finish polygon does.
-#
-# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
 description = "The Point tool commits a dropped point to the geometry panel, same as Finish polygon (#282a)"
 
 [[step]]
 do = "click"
-at = [85, 861]
+at = { role = "listitem", text = "Geography" }
 label = "rail: Geography"
 
 [[step]]
 do = "click"
-at = [1348, 110]
+at = { role = "button", text = "Drop / move a point" }
 label = "toolbar: Drop / move a point"
 
 [[step]]
 do = "click"
-at = [900, 500]
+at = { id = "geography-map", offset = [415, 342] }
 label = "map: drop a point"
 
 [[step]]
@@ -26,7 +24,7 @@ name = "point-dropped"
 
 [[step]]
 do = "click"
-at = [552, 1048]
+at = { role = "button", text = "Use this point" }
 label = "Use this point"
 
 [[step]]
@@ -35,17 +33,17 @@ name = "create-here-panel"
 
 [[step]]
 do = "click"
-at = [1780, 60]
+at = { role = "button", text = "Close", within = "dialog" }
 label = "close the New place here panel"
 
 [[step]]
 do = "click"
-at = [324, 220]
+at = { role = "option", text = "Kristiansand Municipality" }
 label = "place list: Kristiansand"
 
 [[step]]
 do = "click"
-at = [1000, 550]
+at = { id = "geography-map", offset = [515, 392] }
 label = "map: drop a second point, with a draw target selected"
 
 [[step]]
@@ -54,7 +52,7 @@ name = "point-dropped-targeted"
 
 [[step]]
 do = "click"
-at = [552, 1048]
+at = { role = "button", text = "Use this point" }
 label = "Use this point (targeted)"
 
 [[step]]

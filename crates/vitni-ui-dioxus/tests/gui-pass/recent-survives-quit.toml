@@ -18,19 +18,16 @@
 # `unsaved-quit-confirm.toml`. `await-exit` then waits for the GUI process itself to exit, and the
 # `manifest` assertion reads `target/gui-pass/workspace/workspace.toml` off disk, not a screenshot —
 # the only way to prove the write reached disk rather than just the in-memory signal.
-#
-# Coordinates are window pixels at 1800x1200, read off `sidepanel-focus.toml` /
-# `unsaved-quit-confirm.toml`, whose "rail: Places" and "explorer: Kristiansand" clicks match.
 description = "The recent list survives a quit, not just an in-memory signal (#205)"
 
 [[step]]
 do = "click"
-at = [85, 283]
+at = { role = "listitem", text = "Places" }
 label = "rail: Places"
 
 [[step]]
 do = "click"
-at = [300, 99]
+at = { role = "option", text = "Kristiansand Municipality P0001" }
 label = "explorer: Kristiansand"
 
 [[step]]

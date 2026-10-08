@@ -162,25 +162,52 @@ Scenarios are **TOML, not Rust** — `crates/vitni-ui-dioxus/tests/gui-pass/*.to
 needs no rebuild. Each lists `[[step]]`s (`shot`, `click`, `key`, `text` to type a word, `drag`,
 `wheel`, `wait` to sleep and let a timed effect fire, `await-exit` to wait for the GUI process to quit)
 and `[[assert]]`s over the shots by name: `differ` for "the UI reacted",
-`match` for "the UI came back to this state", both with an RMSE tolerance and an optional
-`region = [x, y, w, h]` to compare one window sub-rectangle instead of the whole shot; `manifest`
-checks the running worker's `workspace/workspace.toml` on disk for a substring instead, proving a write
-reached disk rather than only an in-memory signal (unavailable under `--real-config`, whose workspace
-path is the caller's own). Read the PNGs under `target/gui-pass/shots/<scenario>/`; crop with
-`convert <in> -crop WxH+X+Y +repage <out>`, and **column-scan rather than eyeball** when a coordinate
-is in question — `convert <shot> -crop 1xH+X+Y +repage txt:-` prints exact pixel rows; a band read
-off a screenshot by eye is often wrong by several pixels. The GUI child's own stdout/stderr land in
-`gui.log` in the same directory, at `RUST_LOG=info`.
+`match` for "the UI came back to this state", both with an RMSE tolerance and an optional `region` to
+compare one element's area instead of the whole shot; `manifest` checks the running worker's
+`workspace/workspace.toml` on disk for a substring instead, proving a write reached disk rather than only
+an in-memory signal (unavailable under `--real-config`, whose workspace path is the caller's own).
+
+**Steps and regions name elements, never window pixels.** A debug GUI started by the harness serves a
+read-only **probe** (`crates/vitni-ui-dioxus/src/shell/gui_probe.rs`, `VITNI_GUI_PROBE`) that reports
+every element with an `id`, a `data-hook` or an ARIA role — rect, text, `aria-label`, ancestors — and
+the harness resolves each target over it just before the step that uses it, once the previous step has
+settled. A target is a TOML inline table:
+
+```toml
+at = { role = "button", text = "Save", within = "detail-head" }   # a button by its visible text
+at = { role = "listitem", text = "People" }                       # a rail item
+at = { id = "given" }                                             # a form field
+at = { id = "geography-map", offset = [415, 242] }                # a canvas point, from its top-left
+region = { hook = "explorer" }                                    # an element's whole rect
+region = { hook = "record-tabs", offset = [0, 5], size = [1268, 45] }  # a sub-rectangle of one
+```
+
+Exactly one of `id`, `hook`, `role`; `text` is a substring of the element's text or `aria-label`;
+`within` names an ancestor's id, hook or role (`dialog`, `navigation`); `index` (from 0) picks among
+what is left, a last resort. No `offset` clicks the centre. A target that matches nothing, or more than
+one element, is re-probed until the settle cap and then fails naming the target and listing what the
+probe saw. The probe only observes: every input is still a real X event from `xdotool`.
+
+Read the PNGs under `target/gui-pass/shots/<scenario>/`; **each shot has a `NN-<name>.json` beside it**
+— what the probe saw then, in window pixels — so read a rect, role or text from there instead of
+measuring the PNG. The GUI child's own stdout/stderr land in `gui.log` in the same directory, at
+`RUST_LOG=info`.
 
 Writing one:
 
-- **Coordinates are window pixels at the scenario's `window`, 1800×1200 by default**, read straight off
-  an earlier shot. Re-read them when the rail or a toolbar moves, and never carry one scenario's
-  coordinates into another `window` size — a narrow-window layout reflows, it doesn't just crop.
+- **Prefer what a user sees: `role` + `text`**, then an existing `id`. Add a `data-hook` only for a
+  container or a non-semantic element (the Explorer list, a canvas wrapper), and assert it in an SSR
+  test so a refactor that drops it fails fast. If two buttons read the same, give them an accessible
+  name that tells them apart (the Matches table's `Compare I0001 with I0002`) before reaching
+  for `index`. Targets match English text; the fixture pins `VITNI_LANGUAGE=en`.
+- **Offsets only where the point is the point**: a canvas (map vertices, crop drags), or a deliberate
+  off-centre click (a scrim, whose centre is under the dialog). A point's offset must stay inside its
+  element; a region's `offset`/`size` may extend past it.
 - **`match` against the shot taken immediately before the change**, never against the first shot — focus
   rings are real pixels and move as a scenario runs.
 - **`region` when a whole-window compare can't isolate the change** — e.g. a repaint elsewhere in the
-  window (the tabstrip on every Save) would otherwise mask or fake a `differ`/`match` result.
+  window (the tabstrip on every Save) would otherwise mask or fake a `differ`/`match` result. A pair's
+  region resolves at its first shot, so both shots are cropped to the same pixels.
 - **Steps settle on a quiet screen, not a fixed sleep.** Each input step waits until the window stops
   changing for 600 ms (4 s at most), so steps are fast and a timed effect no longer expires between two
   steps by accident. Most often that is a notice (the *Saved* toast lives 6 s, `NOTICE_TTL`). If a

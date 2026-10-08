@@ -425,6 +425,7 @@ merge-col-why = Why
 merge-col-score = Match score
 merge-score-tooltip = Matching-engine score — not the 5-level assertion Confidence
 merge-compare = Compare
+merge-compare-pair = Compare { $a } with { $b }
 merge-empty-duplicates = No possible matches: every pair the engine proposes here is decided.
 merge-wizard-heading = Compare & merge — { $a } ⟷ { $b }
 merge-survivor-label = survivor · keeps id

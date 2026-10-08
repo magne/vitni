@@ -19,17 +19,17 @@ window = [1800, 600]
 
 [[step]]
 do = "click"
-at = [85, 283]
+at = { role = "listitem", text = "Places" }
 label = "rail: Places"
 
 [[step]]
 do = "click"
-at = [300, 99]
+at = { role = "option", text = "Kristiansand Municipality P0001" }
 label = "explorer: Kristiansand"
 
 [[step]]
 do = "click"
-at = [841, 244]
+at = { id = "tab-hierarchy" }
 label = "Hierarchy tab"
 
 [[step]]
@@ -38,7 +38,7 @@ name = "hierarchy-fresh"
 
 [[step]]
 do = "click"
-at = [597, 244]
+at = { id = "tab-overview" }
 label = "Overview tab"
 
 [[step]]
@@ -47,7 +47,7 @@ name = "overview-top"
 
 [[step]]
 do = "wheel"
-at = [1160, 450]
+at = { hook = "record-pane", offset = [628, 327] }
 clicks = -30
 label = "Overview: scroll to the bottom"
 
@@ -57,7 +57,7 @@ name = "overview-scrolled"
 
 [[step]]
 do = "click"
-at = [841, 244]
+at = { id = "tab-hierarchy" }
 label = "Hierarchy tab"
 
 [[step]]
@@ -67,13 +67,13 @@ name = "hierarchy-after-scroll"
 [[assert]]
 kind = "differ"
 shots = ["overview-top", "overview-scrolled"]
-region = [533, 265, 1255, 306]
+region = { id = "panel-overview" }
 tolerance = 0.02
 because = "the wheel must scroll Overview, or the match below proves nothing"
 
 [[assert]]
 kind = "match"
 shots = ["hierarchy-fresh", "hierarchy-after-scroll"]
-region = [533, 265, 1255, 306]
+region = { id = "panel-hierarchy" }
 tolerance = 0.01
 because = "a tab opened after scrolling Overview must start at the top, exactly as when opened unscrolled (#374)"

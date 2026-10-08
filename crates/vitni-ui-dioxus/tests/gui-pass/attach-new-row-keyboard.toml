@@ -11,28 +11,26 @@
 # meaningful test of it. The Media tab has the fixture's two seeded objects instead
 # (`xtask/src/gui_pass.rs` ~:587), so `ArrowDown` genuinely walks the highlight across two real rows
 # before reaching "+ New …".
-#
-# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
 description = "The picker's + New row is reachable by keyboard and keeps focus inside the panel (#314)"
 
 [[step]]
 do = "click"
-at = [85, 283]
+at = { role = "listitem", text = "Places" }
 label = "rail: Places"
 
 [[step]]
 do = "click"
-at = [300, 99]
+at = { role = "option", text = "Kristiansand Municipality P0001" }
 label = "explorer: Kristiansand"
 
 [[step]]
 do = "click"
-at = [1030, 248]
+at = { id = "tab-media" }
 label = "detail tab: Media"
 
 [[step]]
 do = "click"
-at = [1724, 357]
+at = { role = "button", text = "Attach media" }
 label = "Attach media"
 
 [[step]]
@@ -41,7 +39,7 @@ name = "panel-open"
 
 [[step]]
 do = "click"
-at = [1608, 242]
+at = { id = "media" }
 label = "picker: click the search input"
 
 [[step]]
@@ -106,13 +104,13 @@ name = "reopened"
 kind = "differ"
 shots = ["keyboard-before", "highlighted"]
 because = "ArrowDown must move the highlight onto the second matched row"
-region = [1436, 270, 350, 130]
+region = { role = "dialog", offset = [16, 147], size = [350, 130] }
 
 [[assert]]
 kind = "differ"
 shots = ["highlighted", "highlighted-new"]
 because = "ArrowDown must walk past the matched rows onto + New media object…"
-region = [1436, 270, 350, 130]
+region = { role = "dialog", offset = [16, 147], size = [350, 130] }
 
 [[assert]]
 kind = "differ"
@@ -128,7 +126,7 @@ shots = ["card-focused", "card-tabbed"]
 # instead of re-entering the panel's trap, Tab would leave this icon (and everything else) unchanged —
 # `<body>` has nowhere of its own to cycle within.
 because = "Tab must move focus onto the card's own ✕, proving focus followed the row into the card"
-region = [1680, 210, 120, 80]
+region = { role = "dialog", offset = [260, 87], size = [120, 80] }
 
 [[assert]]
 kind = "differ"

@@ -7,13 +7,11 @@
 # its repository by hand, unlinked. Both are then possible matches; Same on each reuses them, and the
 # stored source gains the repository the record holds it in: "reused · adds repository". (A link to a
 # repository the import creates is not planned, so the repository has to be in the tree too.)
-#
-# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
 description = "A record that adds to a stored record shows what it adds before it is written (#512)"
 
 [[step]]
 do = "click"
-at = [90, 394]
+at = { role = "listitem", text = "Repositories" }
 label = "rail: Repositories"
 
 [[step]]
@@ -23,7 +21,7 @@ label = "⌘N: a new Repository draft"
 
 [[step]]
 do = "click"
-at = [1226, 436]
+at = { id = "repository-name" }
 label = "field: Name"
 
 [[step]]
@@ -48,12 +46,12 @@ label = "key: )"
 
 [[step]]
 do = "click"
-at = [1754, 151]
+at = { role = "button", text = "Save" }
 label = "New repository: Save"
 
 [[step]]
 do = "click"
-at = [85, 319]
+at = { role = "listitem", text = "Sources" }
 label = "rail: Sources"
 
 [[step]]
@@ -63,7 +61,7 @@ label = "⌘N: a new Source draft"
 
 [[step]]
 do = "click"
-at = [1226, 386]
+at = { id = "source-title" }
 label = "field: Title"
 
 [[step]]
@@ -73,22 +71,22 @@ label = "type: the census source's title"
 
 [[step]]
 do = "click"
-at = [1754, 151]
+at = { role = "button", text = "Save" }
 label = "New source: Save"
 
 [[step]]
 do = "click"
-at = [70, 786]
+at = { role = "listitem", text = "Import" }
 label = "rail: Import"
 
 [[step]]
 do = "click"
-at = [455, 169]
+at = { role = "radio", text = "Assisted online import" }
 label = "mode: Assisted online import"
 
 [[step]]
 do = "click"
-at = [1394, 435]
+at = { id = "import-url" }
 label = "field: Record or search URL"
 
 [[step]]
@@ -98,7 +96,7 @@ label = "type: the census person's URL"
 
 [[step]]
 do = "click"
-at = [297, 482]
+at = { role = "button", text = "Fetch" }
 label = "Fetch"
 
 [[step]]
@@ -108,12 +106,12 @@ label = "let the plugin fetch the record"
 
 [[step]]
 do = "click"
-at = [1706, 775]
+at = { role = "button", text = "Import & next" }
 label = "Confirm: Import & next"
 
 [[step]]
 do = "click"
-at = [1168, 596]
+at = { role = "button", text = "Save scan" }
 label = "Save scan"
 
 [[step]]
@@ -155,7 +153,7 @@ name = "plan"
 
 [[step]]
 do = "click"
-at = [1730, 476]
+at = { role = "button", text = "Import" }
 label = "Ready to import: Import"
 
 [[step]]

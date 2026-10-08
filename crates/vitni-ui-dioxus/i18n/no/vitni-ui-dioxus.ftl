@@ -424,6 +424,7 @@ merge-col-why = Hvorfor
 merge-col-score = Treffscore
 merge-score-tooltip = Sammenligningsmotorens treffscore — ikke den 5-nivåers påstands-sikkerheten
 merge-compare = Sammenlign
+merge-compare-pair = Sammenlign { $a } med { $b }
 merge-empty-duplicates = Ingen mulige treff: hvert par motoren foreslår her, er avgjort.
 merge-wizard-heading = Sammenlign & slå sammen — { $a } ⟷ { $b }
 merge-survivor-label = overlevende · behold id

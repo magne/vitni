@@ -350,3 +350,18 @@ fn empty_matches_state_is_localized_in_norwegian() {
         "expected the Norwegian empty state:\n{html}"
     );
 }
+
+#[test]
+fn each_rows_compare_button_is_named_after_its_pair() {
+    // Every row's button reads "Compare"; its accessible name tells a screen reader (and a
+    // `gui-pass` target) which pair it opens.
+    let mut vdom = VirtualDom::new(matches_table);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    for name in ["Compare I0042 with I0099", "Compare P0003 with P0007"] {
+        assert!(
+            html.contains(&format!(r#"aria-label="{name}""#)),
+            "the Compare button is named {name:?}:\n{html}"
+        );
+    }
+}

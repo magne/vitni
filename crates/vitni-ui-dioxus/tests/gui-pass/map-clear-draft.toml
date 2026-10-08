@@ -7,36 +7,34 @@
 # pattern the #252 resize observer already uses. See the #282 PR report for how this was diagnosed.
 #
 # No toast fires in this path (there is a draw target the whole time — nothing here ever finishes with
-# none selected), so the Finish/Clear row stays at the pre-toast `y = 1048` throughout
-# (`map-draw-target.toml`'s own header documents the post-toast shift to y=995). Clear sits right of
-# Finish; its x was read off this scenario's own `ring-closed` shot.
-#
-# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
+# none selected), so the Finish/Clear row never shifts under the pointer
+# (`map-draw-target.toml`'s own header documents the shift a toast causes). Clear is targeted by its role
+# and text, not by its position beside Finish.
 description = "Clicking Clear after drawing a polygon erases the ring from the canvas (#282b)"
 
 [[step]]
 do = "click"
-at = [85, 861]
+at = { role = "listitem", text = "Geography" }
 label = "rail: Geography"
 
 [[step]]
 do = "click"
-at = [1480, 110]
+at = { role = "button", text = "Draw polygon" }
 label = "toolbar: Draw polygon"
 
 [[step]]
 do = "click"
-at = [900, 400]
+at = { id = "geography-map", offset = [415, 242] }
 label = "map: first vertex"
 
 [[step]]
 do = "click"
-at = [1200, 420]
+at = { id = "geography-map", offset = [715, 262] }
 label = "map: second vertex"
 
 [[step]]
 do = "click"
-at = [1100, 700]
+at = { id = "geography-map", offset = [615, 542] }
 label = "map: third vertex"
 
 [[step]]
@@ -45,7 +43,7 @@ name = "ring-closed"
 
 [[step]]
 do = "click"
-at = [636, 1048]
+at = { role = "button", text = "Clear" }
 label = "Clear"
 
 [[step]]
@@ -55,5 +53,5 @@ name = "cleared"
 [[assert]]
 kind = "differ"
 shots = ["ring-closed", "cleared"]
-region = [500, 200, 1250, 700]
+region = { id = "geography-map", offset = [15, 42], size = [1250, 700] }
 because = "Clear must erase the drawn ring from the canvas, not just the draft state"
