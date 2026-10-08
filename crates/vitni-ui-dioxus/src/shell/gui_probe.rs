@@ -1,10 +1,13 @@
 //! The `gui-pass` probe: a debug build started with [`PROBE_VAR`] set serves `GET /elements` on that
 //! loopback address, answering with every element that carries an `id`, a `data-hook` or an ARIA role
 //! (explicit, or implied by its tag) — its rect, text, `aria-label` and the ids, hooks and roles of its
-//! ancestors — plus whether the page is ready and focused, and whether every map container holds a
-//! `MapLibre` map that is idle (constructed, loaded and not moving, so nothing queued has yet to reach its
-//! canvas). `cargo xtask gui-pass` resolves a scenario's targets over that list, so its scenarios name
-//! elements instead of window pixels, and waits for idle maps before a step counts as settled.
+//! ancestors, and whether it holds focus — plus whether the page is ready and focused, and whether every
+//! map container holds a `MapLibre` map that is idle (constructed, loaded and not moving, so nothing
+//! queued has yet to reach its canvas). `cargo xtask gui-pass` resolves a scenario's targets over that
+//! list, so its scenarios name elements instead of window pixels, and waits for idle maps before a step
+//! counts as settled. `GET /hit?x=…&y=…` answers what `document.elementFromPoint` finds at that viewport
+//! point, with it and its reported ancestors, so the harness refuses a target that something else
+//! covers — a click there would land on whatever is on top.
 //!
 //! The probe only **observes**. It never dispatches an event, sets a value, scrolls or moves focus:
 //! every input a scenario sends reaches the webview as a real X event, so what a scenario proves is
@@ -46,6 +49,10 @@ fn probe_address(value: Option<String>, debug: bool) -> Option<std::net::SocketA
 enum Route {
     /// `GET /elements`: the snapshot.
     Elements,
+    /// `GET /hit?x=…&y=…`: what is on top at that viewport point.
+    Hit { x: i32, y: i32 },
+    /// `GET /hit` without exactly an integer `x` and `y`.
+    BadHit,
     /// Anything else.
     NotFound,
 }
@@ -56,8 +63,27 @@ fn route(head: &str) -> Route {
     let mut parts = head.lines().next().unwrap_or_default().split_whitespace();
     match (parts.next(), parts.next()) {
         (Some("GET"), Some("/elements")) => Route::Elements,
+        (Some("GET"), Some(target)) if target == "/hit" || target.starts_with("/hit?") => {
+            hit_point(target.trim_start_matches("/hit").trim_start_matches('?'))
+                .map_or(Route::BadHit, |(x, y)| Route::Hit { x, y })
+        }
         _ => Route::NotFound,
     }
+}
+
+/// The integer `x` and `y` of a `/hit` query, and nothing else. Integers only, so the point can be
+/// written into the hit script without quoting.
+#[cfg(any(feature = "desktop", test))]
+fn hit_point(query: &str) -> Option<(i32, i32)> {
+    let (mut x, mut y) = (None, None);
+    for pair in query.split('&') {
+        match pair.split_once('=')? {
+            ("x", value) if x.is_none() => x = Some(value.parse().ok()?),
+            ("y", value) if y.is_none() => y = Some(value.parse().ok()?),
+            _ => return None,
+        }
+    }
+    Some((x?, y?))
 }
 
 /// An HTTP/1.1 response closing the connection after `body`.
@@ -69,10 +95,10 @@ fn response(status: &str, body: &str) -> String {
     )
 }
 
-/// The snapshot script. Zero-sized elements are left out: a `display: none` panel cannot be clicked
-/// and has no region to measure.
+/// What both scripts share: how an element is named and described. Zero-sized elements are left out
+/// of both answers: a `display: none` panel cannot be clicked and has no region to measure.
 #[cfg(feature = "desktop")]
-const SNAPSHOT: &str = r"
+const PRELUDE: &str = r"
 const collapse = (text) => (text || '').replace(/\s+/g, ' ').trim().slice(0, 200);
 const hook = (el) => (el.dataset && el.dataset.hook) || null;
 const role = (el) => {
@@ -96,18 +122,20 @@ const role = (el) => {
         default: return null;
     }
 };
-const elements = [];
 const targets = '[id], [data-hook], [role], button, a[href], input, select, textarea, summary, tr, td, th';
-for (const el of document.querySelectorAll(targets)) {
+const sized = (el) => {
     const rect = el.getBoundingClientRect();
-    if (rect.width === 0 && rect.height === 0) continue;
+    return rect.width !== 0 || rect.height !== 0;
+};
+const describe = (el) => {
+    const rect = el.getBoundingClientRect();
     const within = [];
     for (let up = el.parentElement; up; up = up.parentElement) {
         if (up.id) within.push(up.id);
         if (hook(up)) within.push(hook(up));
         if (role(up)) within.push(role(up));
     }
-    elements.push({
+    return {
         id: el.id || null,
         hook: hook(el),
         role: role(el),
@@ -115,7 +143,18 @@ for (const el of document.querySelectorAll(targets)) {
         label: collapse(el.getAttribute('aria-label') || el.getAttribute('title')),
         rect: [rect.x, rect.y, rect.width, rect.height],
         within,
-    });
+        active: el === document.activeElement,
+    };
+};
+const viewport = [window.innerWidth, window.innerHeight];
+";
+
+/// The snapshot script, after [`PRELUDE`].
+#[cfg(feature = "desktop")]
+const SNAPSHOT: &str = r"
+const elements = [];
+for (const el of document.querySelectorAll(targets)) {
+    if (sized(el)) elements.push(describe(el));
 }
 const active = document.activeElement;
 return {
@@ -124,10 +163,33 @@ return {
     maps_idle: [...document.querySelectorAll('.map-container')]
         .every((el) => el.__geoMap && el.__geoMap.loaded() && !el.__geoMap.isMoving()),
     active: active ? (active.id || hook(active) || role(active) || active.tagName.toLowerCase()) : null,
-    viewport: [window.innerWidth, window.innerHeight],
+    viewport,
     elements,
 };
 ";
+
+/// The hit script for the viewport point `(x, y)`, after [`PRELUDE`]: the element on top there, named
+/// for a failure message, and it and every ancestor the snapshot would report, nearest first. An inert
+/// or `pointer-events: none` element is passed through, as a click would pass through it.
+#[cfg(feature = "desktop")]
+fn hit_script(x: i32, y: i32) -> String {
+    format!(
+        r"{PRELUDE}
+const top = document.elementFromPoint({x}, {y});
+const name = (el) => {{
+    if (el.id) return '#' + el.id;
+    if (hook(el)) return '[data-hook=' + hook(el) + ']';
+    const classes = typeof el.className === 'string' ? el.className.trim().split(/\s+/).filter(Boolean) : [];
+    return [el.tagName.toLowerCase(), ...classes].join('.');
+}};
+const chain = [];
+for (let el = top; el; el = el.parentElement) {{
+    if (el.matches(targets) && sized(el)) chain.push(describe(el));
+}}
+return {{ viewport, top: top ? name(top) : null, chain }};
+"
+    )
+}
 
 /// How long a connection waits for the webview to answer before giving up on it.
 #[cfg(feature = "desktop")]
@@ -137,11 +199,14 @@ const ANSWER_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 #[cfg(feature = "desktop")]
 const MAX_HEAD: usize = 8 * 1024;
 
+/// One request for the app: the script to evaluate, and where its answer goes.
+#[cfg(feature = "desktop")]
+type Request = (String, std::sync::mpsc::Sender<Result<String, String>>);
+
 /// Serves the probe while the app runs, when [`PROBE_VAR`] is set in a debug build. Renders nothing.
 #[cfg(feature = "desktop")]
 #[component]
 pub fn GuiProbe() -> Element {
-    use std::sync::mpsc as reply;
     use tokio::sync::mpsc;
 
     use_hook(|| {
@@ -155,18 +220,18 @@ pub fn GuiProbe() -> Element {
                 return;
             }
         };
-        let (requests, mut incoming) = mpsc::channel::<reply::Sender<Result<String, String>>>(8);
+        let (requests, mut incoming) = mpsc::channel::<Request>(8);
         std::thread::spawn(move || serve(&listener, &requests));
         spawn(async move {
-            while let Some(answer) = incoming.recv().await {
-                let snapshot = snapshot().await;
+            while let Some((script, answer)) = incoming.recv().await {
+                let observed = observe(&script).await;
                 let sent = answer.send(
-                    snapshot
+                    observed
                         .map(|value| value.to_string())
                         .map_err(|error| error.to_string()),
                 );
                 if sent.is_err() {
-                    tracing::warn!("a gui-pass probe snapshot came after its request had timed out");
+                    tracing::warn!("a gui-pass probe answer came after its request had timed out");
                 }
             }
         });
@@ -175,32 +240,30 @@ pub fn GuiProbe() -> Element {
     rsx! {}
 }
 
-/// How many times [`snapshot`] runs the script before giving up on `EvalError::Finished`.
+/// How many times [`observe`] runs a script before giving up on `EvalError::Finished`.
 #[cfg(feature = "desktop")]
-const SNAPSHOT_ATTEMPTS: usize = 3;
+const EVAL_ATTEMPTS: usize = 3;
 
-/// Runs [`SNAPSHOT`] and returns what it saw.
+/// Runs `script` and returns what it saw.
 ///
 /// dioxus-desktop drops an eval's state once the webview reports the script done, so a script that
-/// finishes before `join` first polls it reads as `EvalError::Finished` rather than a value. The script
-/// only reads the DOM, so running it again is safe; anything else is the caller's error.
+/// finishes before `join` first polls it reads as `EvalError::Finished` rather than a value. Both
+/// scripts only read the DOM, so running one again is safe; anything else is the caller's error.
 #[cfg(feature = "desktop")]
-async fn snapshot() -> Result<serde_json::Value, document::EvalError> {
+async fn observe(script: &str) -> Result<serde_json::Value, document::EvalError> {
     let mut attempt = 1;
     loop {
-        match document::eval(SNAPSHOT).join::<serde_json::Value>().await {
-            Err(document::EvalError::Finished) if attempt < SNAPSHOT_ATTEMPTS => attempt += 1,
+        match document::eval(script).join::<serde_json::Value>().await {
+            Err(document::EvalError::Finished) if attempt < EVAL_ATTEMPTS => attempt += 1,
             outcome => return outcome,
         }
     }
 }
 
-/// Answers each connection on `listener` in turn, asking the app for a snapshot through `requests`.
+/// Answers each connection on `listener` in turn, asking the app to run the routed script through
+/// `requests`.
 #[cfg(feature = "desktop")]
-fn serve(
-    listener: &std::net::TcpListener,
-    requests: &tokio::sync::mpsc::Sender<std::sync::mpsc::Sender<Result<String, String>>>,
-) {
+fn serve(listener: &std::net::TcpListener, requests: &tokio::sync::mpsc::Sender<Request>) {
     use std::io::Write as _;
 
     for stream in listener.incoming() {
@@ -211,9 +274,14 @@ fn serve(
                 continue;
             }
         };
-        let answer = match read_head(&mut stream) {
-            Ok(head) if route(&head) == Route::Elements => elements(requests),
-            Ok(_) => response("404 Not Found", "{}"),
+        let answer = match read_head(&mut stream).map(|head| route(&head)) {
+            Ok(Route::Elements) => ask(requests, format!("{PRELUDE}{SNAPSHOT}")),
+            Ok(Route::Hit { x, y }) => ask(requests, hit_script(x, y)),
+            Ok(Route::BadHit) => response(
+                "400 Bad Request",
+                r#"{"error": "/hit takes exactly an integer x and y"}"#,
+            ),
+            Ok(Route::NotFound) => response("404 Not Found", "{}"),
             Err(error) => response("400 Bad Request", &serde_json::json!({ "error": error }).to_string()),
         };
         if let Err(error) = stream.write_all(answer.as_bytes()) {
@@ -222,11 +290,11 @@ fn serve(
     }
 }
 
-/// The snapshot response, or a `503` naming why the app gave none.
+/// The app's answer to `script`, or a `503` naming why it gave none.
 #[cfg(feature = "desktop")]
-fn elements(requests: &tokio::sync::mpsc::Sender<std::sync::mpsc::Sender<Result<String, String>>>) -> String {
+fn ask(requests: &tokio::sync::mpsc::Sender<Request>, script: String) -> String {
     let (answer, answered) = std::sync::mpsc::channel();
-    if requests.blocking_send(answer).is_err() {
+    if requests.blocking_send((script, answer)).is_err() {
         return response("503 Service Unavailable", r#"{"error": "the app has stopped"}"#);
     }
     match answered.recv_timeout(ANSWER_TIMEOUT) {
@@ -301,7 +369,7 @@ mod tests {
     }
 
     #[test]
-    fn only_get_elements_is_served() {
+    fn only_the_probes_get_routes_are_served() {
         assert_eq!(route("GET /elements HTTP/1.1\r\nHost: x\r\n\r\n"), Route::Elements);
         assert_eq!(
             route("POST /elements HTTP/1.1\r\n\r\n"),
@@ -310,6 +378,29 @@ mod tests {
         );
         assert_eq!(route("GET / HTTP/1.1\r\n\r\n"), Route::NotFound);
         assert_eq!(route(""), Route::NotFound);
+    }
+
+    #[test]
+    fn get_hit_carries_the_viewport_point_to_test() {
+        assert_eq!(
+            route("GET /hit?x=120&y=-4 HTTP/1.1\r\n\r\n"),
+            Route::Hit { x: 120, y: -4 },
+            "a point above the viewport still parses; the webview answers it with nothing"
+        );
+        assert_eq!(route("GET /hit?y=7&x=3 HTTP/1.1\r\n\r\n"), Route::Hit { x: 3, y: 7 });
+    }
+
+    #[test]
+    fn a_hit_without_two_integer_coordinates_is_a_bad_request() {
+        for head in [
+            "GET /hit HTTP/1.1\r\n\r\n",
+            "GET /hit?x=1 HTTP/1.1\r\n\r\n",
+            "GET /hit?x=1&y=2.5 HTTP/1.1\r\n\r\n",
+            "GET /hit?x=1&y=alert(1) HTTP/1.1\r\n\r\n",
+            "GET /hit?x=1&y=2&z=3 HTTP/1.1\r\n\r\n",
+        ] {
+            assert_eq!(route(head), Route::BadHit, "{head:?}");
+        }
     }
 
     #[test]

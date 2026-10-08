@@ -34,6 +34,9 @@ pub struct Element {
     /// The ids, hooks and roles (explicit or implied) of its ancestors, nearest first.
     #[serde(default)]
     pub within: Vec<String>,
+    /// Whether it is `document.activeElement` — what a key press reaches.
+    #[serde(default)]
+    pub active: bool,
 }
 
 /// What the probe saw at one moment: whether the page is up and focused, and every hooked element.
@@ -56,19 +59,52 @@ pub struct Snapshot {
 
 impl Snapshot {
     /// Moves every rect from viewport into window pixels for a window `height` pixels tall.
-    ///
-    /// Dioxus attaches a GTK menu bar above the webview on Linux, inside the window's client area, so
-    /// the viewport starts that bar's height below the window's top edge; nothing sits beside it.
     #[must_use]
     pub fn in_window(self, height: u32) -> Self {
-        let shift = f64::from(height) - self.viewport[1];
-        let mut elements = Vec::new();
-        for mut element in self.elements {
-            element.rect[1] += shift;
-            elements.push(element);
-        }
+        let elements = shifted(self.elements, self.viewport, height);
         Self { elements, ..self }
     }
+}
+
+/// What the probe found on top at one viewport point (`GET /hit`).
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct Hit {
+    /// The webview's `[innerWidth, innerHeight]`.
+    pub viewport: [f64; 2],
+    /// The topmost element there, named by `#id`, `[data-hook=…]` or `tag.class…`; `None` off the page.
+    pub top: Option<String>,
+    /// That element and every ancestor the probe would report, nearest first.
+    pub chain: Vec<Element>,
+}
+
+impl Hit {
+    /// Moves the chain's rects into window pixels, as [`Snapshot::in_window`] does.
+    #[must_use]
+    pub fn in_window(self, height: u32) -> Self {
+        let chain = shifted(self.chain, self.viewport, height);
+        Self { chain, ..self }
+    }
+}
+
+/// `elements` with their rects moved from viewport into window pixels for a window `height` pixels tall.
+///
+/// Dioxus attaches a GTK menu bar above the webview on Linux, inside the window's client area, so the
+/// viewport starts that bar's height below the window's top edge; nothing sits beside it.
+fn shifted(elements: Vec<Element>, viewport: [f64; 2], height: u32) -> Vec<Element> {
+    let shift = f64::from(height) - viewport[1];
+    let mut moved = Vec::new();
+    for mut element in elements {
+        element.rect[1] += shift;
+        moved.push(element);
+    }
+    moved
+}
+
+/// The viewport point a window pixel `at` falls on — [`shifted`] undone, for a `GET /hit`.
+#[must_use]
+pub fn in_viewport(at: [i32; 2], viewport: [f64; 2], height: u32) -> [i32; 2] {
+    let shift = pixel(f64::from(height) - viewport[1]);
+    [at[0], at[1] - shift]
 }
 
 /// Which attribute a [`Matcher`] names its element by.
@@ -83,7 +119,9 @@ pub enum By {
 }
 
 /// The element a target names: an `id`, a `hook` or a `role`, narrowed by `text`, `within` and `index`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// An assertion about the element itself (`focus`, `present`, `absent`) names it with this alone.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(try_from = "RawMatcher")]
 pub struct Matcher {
     pub by: By,
     /// A substring of the element's text or `aria-label`.
@@ -131,6 +169,18 @@ pub struct Area {
     pub size: Option<[u32; 2]>,
 }
 
+/// A bare element target's TOML shape, checked into a [`Matcher`].
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawMatcher {
+    id: Option<String>,
+    hook: Option<String>,
+    role: Option<String>,
+    text: Option<String>,
+    within: Option<String>,
+    index: Option<usize>,
+}
+
 /// A point's TOML shape, checked into a [`Point`].
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -156,6 +206,19 @@ struct RawArea {
     index: Option<usize>,
     offset: Option<[i32; 2]>,
     size: Option<[u32; 2]>,
+}
+
+impl TryFrom<RawMatcher> for Matcher {
+    type Error = String;
+
+    fn try_from(raw: RawMatcher) -> Result<Self, String> {
+        Ok(Self {
+            by: by(raw.id, raw.hook, raw.role)?,
+            text: raw.text,
+            within: raw.within,
+            index: raw.index,
+        })
+    }
 }
 
 impl TryFrom<RawPoint> for Point {
@@ -212,23 +275,8 @@ fn by(id: Option<String>, hook: Option<String>, role: Option<String>) -> Result<
 /// Fails, listing what the probe did report, when nothing matches, when several do and no `index`
 /// picks one, or when `index` is past the last match.
 pub fn find<'a>(matcher: &Matcher, elements: &'a [Element]) -> Result<&'a Element, String> {
-    let mut named = Vec::new();
-    for element in elements {
-        let carries = match &matcher.by {
-            By::Id(id) => element.id.as_deref() == Some(id.as_str()),
-            By::Hook(hook) => element.hook.as_deref() == Some(hook.as_str()),
-            By::Role(role) => element.role.as_deref() == Some(role.as_str()),
-        };
-        if carries {
-            named.push(element);
-        }
-    }
-    let mut matches = Vec::new();
-    for element in &named {
-        if narrowed(matcher, element) {
-            matches.push(*element);
-        }
-    }
+    let named = named(matcher, elements);
+    let matches = narrowed_all(matcher, &named);
     match (matches.as_slice(), matcher.index) {
         ([], _) => Err(format!("no element matches {matcher}; {}", listing(&named))),
         ([only], None) => Ok(only),
@@ -247,6 +295,44 @@ pub fn find<'a>(matcher: &Matcher, elements: &'a [Element]) -> Result<&'a Elemen
     }
 }
 
+/// Every element `matcher` names — all that pass its `id`/`hook`/`role`, `text` and `within`, or only
+/// the one its `index` picks — in document order. Empty when none does.
+#[must_use]
+pub fn matching<'a>(matcher: &Matcher, elements: &'a [Element]) -> Vec<&'a Element> {
+    let matches = narrowed_all(matcher, &named(matcher, elements));
+    match matcher.index {
+        Some(index) => matches.get(index).copied().into_iter().collect(),
+        None => matches,
+    }
+}
+
+/// The elements carrying `matcher`'s `id`, `hook` or `role`, before `text` and `within` narrow them.
+fn named<'a>(matcher: &Matcher, elements: &'a [Element]) -> Vec<&'a Element> {
+    let mut named = Vec::new();
+    for element in elements {
+        let carries = match &matcher.by {
+            By::Id(id) => element.id.as_deref() == Some(id.as_str()),
+            By::Hook(hook) => element.hook.as_deref() == Some(hook.as_str()),
+            By::Role(role) => element.role.as_deref() == Some(role.as_str()),
+        };
+        if carries {
+            named.push(element);
+        }
+    }
+    named
+}
+
+/// Those of `named` that pass `matcher`'s `text` and `within`.
+fn narrowed_all<'a>(matcher: &Matcher, named: &[&'a Element]) -> Vec<&'a Element> {
+    let mut matches = Vec::new();
+    for element in named {
+        if narrowed(matcher, element) {
+            matches.push(*element);
+        }
+    }
+    matches
+}
+
 /// Whether `element` passes `matcher`'s `text` and `within`.
 fn narrowed(matcher: &Matcher, element: &Element) -> bool {
     let text = matcher
@@ -261,7 +347,8 @@ fn narrowed(matcher: &Matcher, element: &Element) -> bool {
 }
 
 /// How a failure lists the elements it chose among.
-fn listing(elements: &[&Element]) -> String {
+#[must_use]
+pub fn listing(elements: &[&Element]) -> String {
     if elements.is_empty() {
         return "the probe reported no element with that id, hook or role".to_owned();
     }
@@ -278,12 +365,16 @@ fn listing(elements: &[&Element]) -> String {
     format!("the probe saw: {}", seen.join(", "))
 }
 
-/// The window pixel `point` lands on, for a window of `window` size.
+/// The element `point` names and the window pixel it lands on, for a window of `window` size.
 ///
 /// # Errors
 ///
 /// Fails as [`find`] does, or when the point falls outside its element or the window.
-pub fn resolve_point(point: &Point, elements: &[Element], window: (u32, u32)) -> Result<[i32; 2], String> {
+pub fn resolve_point<'a>(
+    point: &Point,
+    elements: &'a [Element],
+    window: (u32, u32),
+) -> Result<(&'a Element, [i32; 2]), String> {
     let element = find(&point.matcher, elements)?;
     let [x, y, w, h] = element.rect;
     let (px, py) = match point.offset {
@@ -305,7 +396,74 @@ pub fn resolve_point(point: &Point, elements: &[Element], window: (u32, u32)) ->
             point.matcher, window.0, window.1
         ));
     }
-    Ok([px, py])
+    Ok((element, [px, py]))
+}
+
+/// Whether a click at `at` reaches `element`, the one `matcher` named: the probe's `hit` there must be
+/// the element or something inside it.
+///
+/// # Errors
+///
+/// Fails naming the element on top when something else covers the point — an overlay, a panel the
+/// element sits inert behind, or the edge of the container it is scrolled out of.
+pub fn uncovered(matcher: &Matcher, element: &Element, at: [i32; 2], hit: &Hit) -> Result<(), String> {
+    for reached in &hit.chain {
+        if same_node(reached, element) {
+            return Ok(());
+        }
+    }
+    let top = hit.top.as_deref().unwrap_or("nothing");
+    let over = match hit.chain.first() {
+        Some(nearest) => format!("{top}, inside {}", brief(nearest)),
+        None => top.to_owned(),
+    };
+    Err(format!("{matcher} at {at:?} is covered by {over}"))
+}
+
+/// Whether `reached`, from a hit's chain, is the node `element` describes in an earlier snapshot.
+///
+/// Compared by name, ancestry and a rect within [`RECT_DRIFT`], not field for field: the hit is a
+/// second `eval`, and between the two an element's rect can move a pixel or its text tick over (a
+/// counter, a progress label), which would otherwise read as the element covering itself. The rect
+/// still has to agree, or a same-named sibling that slid under the point (the next rail item) would pass
+/// for the target.
+fn same_node(reached: &Element, element: &Element) -> bool {
+    let mut near = true;
+    for (a, b) in reached.rect.iter().zip(element.rect) {
+        near &= (a - b).abs() <= RECT_DRIFT;
+    }
+    near && reached.id == element.id
+        && reached.hook == element.hook
+        && reached.role == element.role
+        && reached.within == element.within
+}
+
+/// How far, in pixels, a rect may drift between a snapshot and a hit and still be the same element.
+const RECT_DRIFT: f64 = 2.0;
+
+/// The characters of an element's text [`brief`] keeps: enough to recognise a dialog or a toast, not
+/// the whole app a container's text runs to.
+const BRIEF_TEXT: usize = 40;
+
+/// How a covered-point failure names the reported element on top: what a target could name it by, and
+/// the start of its text.
+fn brief(element: &Element) -> String {
+    let named = match (&element.id, &element.hook, &element.role) {
+        (Some(id), _, _) => format!("id = {id:?}"),
+        (None, Some(hook), _) => format!("hook = {hook:?}"),
+        (None, None, Some(role)) => format!("role = {role:?}"),
+        (None, None, None) => "an element".to_owned(),
+    };
+    let shown = if element.text.is_empty() {
+        &element.label
+    } else {
+        &element.text
+    };
+    let mut text: String = shown.chars().take(BRIEF_TEXT).collect();
+    if shown.chars().count() > BRIEF_TEXT {
+        text.push('…');
+    }
+    format!("{{{named}}} {text:?}")
 }
 
 /// The `[x, y, w, h]` window rectangle `area` covers, clipped to a window of `window` size.
@@ -361,7 +519,9 @@ fn unsigned(value: i32) -> u32 {
 
 #[cfg(test)]
 mod tests {
-    use super::{Area, By, Element, Matcher, Point, Snapshot, find, resolve_area, resolve_point};
+    use super::{
+        Area, By, Element, Hit, Matcher, Point, Snapshot, find, matching, resolve_area, resolve_point, uncovered,
+    };
 
     const WINDOW: (u32, u32) = (1800, 1200);
 
@@ -374,6 +534,7 @@ mod tests {
             rect,
             within: Vec::new(),
             role: None,
+            active: false,
         }
     }
 
@@ -455,7 +616,10 @@ mod tests {
         let elements = vec![cancel, save];
         let target = point(r#"at = { role = "button", text = "Save" }"#);
         assert_eq!(target.matcher.by, By::Role("button".to_owned()));
-        assert_eq!(resolve_point(&target, &elements, WINDOW), Ok([1755, 151]));
+        assert_eq!(
+            resolve_point(&target, &elements, WINDOW).map(|(_, at)| at),
+            Ok([1755, 151])
+        );
         assert!(target.matcher.to_string().contains("role = \"button\""));
     }
 
@@ -468,7 +632,10 @@ mod tests {
         header.role = Some("button".to_owned());
         let elements = vec![header, dialog];
         let target = point(r#"at = { role = "button", text = "Save", within = "dialog" }"#);
-        assert_eq!(resolve_point(&target, &elements, WINDOW), Ok([1030, 312]));
+        assert_eq!(
+            resolve_point(&target, &elements, WINDOW).map(|(_, at)| at),
+            Ok([1030, 312])
+        );
     }
 
     #[test]
@@ -573,14 +740,20 @@ mod tests {
     #[test]
     fn a_point_without_offset_is_the_elements_rounded_centre() {
         let target = point(r#"at = { hook = "rail-item", text = "People" }"#);
-        assert_eq!(resolve_point(&target, &rail(), WINDOW), Ok([115, 175]));
+        assert_eq!(
+            resolve_point(&target, &rail(), WINDOW).map(|(_, at)| at),
+            Ok([115, 175])
+        );
     }
 
     #[test]
     fn an_offset_counts_from_the_elements_top_left() {
         let elements = vec![element(Some("geography-map"), None, "", [500.0, 200.0, 1250.0, 700.0])];
         let target = point(r#"at = { id = "geography-map", offset = [400, 300] }"#);
-        assert_eq!(resolve_point(&target, &elements, WINDOW), Ok([900, 500]));
+        assert_eq!(
+            resolve_point(&target, &elements, WINDOW).map(|(_, at)| at),
+            Ok([900, 500])
+        );
     }
 
     #[test]
@@ -643,5 +816,170 @@ mod tests {
         };
         let moved = snapshot.in_window(1200);
         assert_eq!(moved.elements[1].rect, [0.0, 190.0, 230.0, 30.0]);
+    }
+
+    #[test]
+    fn a_resolved_point_names_the_element_it_came_from() {
+        let target = point(r#"at = { hook = "rail-item", text = "People" }"#);
+        let elements = rail();
+        let (element, _) = resolve_point(&target, &elements, WINDOW).expect("resolved");
+        assert_eq!(element.text, "People 2");
+    }
+
+    #[test]
+    fn a_bare_matcher_parses_and_rejects_a_point_or_area_key() {
+        #[derive(Debug, serde::Deserialize)]
+        struct Holder {
+            element: Matcher,
+        }
+        let parsed: Holder =
+            toml::from_str(r#"element = { role = "status", text = "Nothing", within = "main", index = 0 }"#)
+                .expect("parses");
+        assert_eq!(parsed.element.by, By::Role("status".to_owned()));
+        assert_eq!(parsed.element.index, Some(0));
+        let error = toml::from_str::<Holder>(r#"element = { id = "a", offset = [1, 1] }"#).expect_err("no offset");
+        assert!(error.to_string().contains("offset"), "{error}");
+        let error = toml::from_str::<Holder>(r#"element = { text = "a" }"#).expect_err("no id, hook or role");
+        assert!(error.to_string().contains("exactly one"), "{error}");
+    }
+
+    #[test]
+    fn matching_lists_every_match_and_honours_an_index() {
+        let rail = rail();
+        assert_eq!(matching(&matcher(By::Hook("rail-item".to_owned())), &rail).len(), 3);
+        let second = Matcher {
+            index: Some(1),
+            ..matcher(By::Hook("rail-item".to_owned()))
+        };
+        let picked = matching(&second, &rail);
+        assert_eq!(picked.len(), 1);
+        assert_eq!(picked[0].text, "People 2");
+        let past = Matcher {
+            index: Some(3),
+            ..matcher(By::Hook("rail-item".to_owned()))
+        };
+        assert_eq!(
+            matching(&past, &rail),
+            Vec::<&Element>::new(),
+            "an index past the last match picks none"
+        );
+    }
+
+    fn hit(top: &str, chain: Vec<Element>) -> Hit {
+        Hit {
+            viewport: [1800.0, 1170.0],
+            top: Some(top.to_owned()),
+            chain,
+        }
+    }
+
+    #[test]
+    fn a_point_on_the_element_or_inside_it_is_uncovered() {
+        let rail = rail();
+        let people = &rail[1];
+        let on_it = hit("[data-hook=rail-item]", vec![people.clone()]);
+        assert_eq!(
+            uncovered(&matcher(By::Hook("rail-item".to_owned())), people, [115, 175], &on_it),
+            Ok(())
+        );
+        let child = hooked("rail-count", "2", [200.0, 160.0, 20.0, 30.0]);
+        let inside = hit("span.count", vec![child, people.clone()]);
+        assert_eq!(
+            uncovered(&matcher(By::Hook("rail-item".to_owned())), people, [115, 175], &inside),
+            Ok(()),
+            "a click on a descendant reaches the element"
+        );
+    }
+
+    #[test]
+    fn an_element_that_moved_or_retexted_between_the_two_probes_is_still_itself() {
+        let rail = rail();
+        let people = &rail[1];
+        let mut later = people.clone();
+        later.rect[1] += 1.0;
+        later.text = "People 3".to_owned();
+        later.active = true;
+        let on_it = hit("[data-hook=rail-item]", vec![later]);
+        assert_eq!(
+            uncovered(&matcher(By::Hook("rail-item".to_owned())), people, [115, 175], &on_it),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn a_same_named_sibling_under_the_point_is_not_the_target() {
+        let rail = rail();
+        let slid = hit("[data-hook=rail-item]", vec![rail[0].clone()]);
+        assert!(
+            uncovered(&matcher(By::Hook("rail-item".to_owned())), &rail[1], [115, 175], &slid).is_err(),
+            "the Dashboard item under People's point is not People"
+        );
+    }
+
+    #[test]
+    fn a_covered_point_is_an_error_naming_what_is_on_top() {
+        let rail = rail();
+        let people = &rail[1];
+        let mut dialog = hooked("dialog", "Discard changes?", [0.0, 0.0, 1800.0, 1200.0]);
+        dialog.role = Some("dialog".to_owned());
+        let covered = hit("div.scrim", vec![dialog]);
+        let target = matcher(By::Hook("rail-item".to_owned()));
+        let error = uncovered(&target, people, [115, 175], &covered).expect_err("covered");
+        assert!(error.contains("{hook = \"rail-item\"}"), "the target is named: {error}");
+        assert!(error.contains("[115, 175]"), "the point is named: {error}");
+        assert!(
+            error.contains("Discard changes?"),
+            "the element on top is named: {error}"
+        );
+        assert!(error.contains("div.scrim"), "the raw element on top is named: {error}");
+        assert!(
+            error.contains("{hook = \"dialog\"}"),
+            "and how a target would name it: {error}"
+        );
+    }
+
+    #[test]
+    fn a_covering_containers_text_is_cut_short() {
+        let rail = rail();
+        let app = hooked("app", &"Vitni ".repeat(50), [0.0, 0.0, 1800.0, 1200.0]);
+        let covered = hit("div.app", vec![app]);
+        let error = uncovered(
+            &matcher(By::Hook("rail-item".to_owned())),
+            &rail[1],
+            [115, 175],
+            &covered,
+        )
+        .expect_err("covered");
+        assert!(error.len() < 200, "{error}");
+        assert!(error.contains('…'), "{error}");
+    }
+
+    #[test]
+    fn a_point_with_nothing_reported_on_top_names_the_raw_element() {
+        let rail = rail();
+        let nothing = Hit {
+            viewport: [1800.0, 1170.0],
+            top: Some("div.backdrop".to_owned()),
+            chain: Vec::new(),
+        };
+        let error = uncovered(
+            &matcher(By::Hook("rail-item".to_owned())),
+            &rail[1],
+            [115, 175],
+            &nothing,
+        )
+        .expect_err("covered");
+        assert!(error.contains("div.backdrop"), "{error}");
+    }
+
+    #[test]
+    fn a_hit_moves_its_chain_below_the_menu_bar_like_a_snapshot() {
+        let moved = hit("x", rail()).in_window(1200);
+        assert_eq!(moved.chain[1].rect, [0.0, 190.0, 230.0, 30.0]);
+    }
+
+    #[test]
+    fn a_window_point_maps_back_into_the_viewport() {
+        assert_eq!(super::in_viewport([115, 190], [1800.0, 1170.0], 1200), [115, 160]);
     }
 }

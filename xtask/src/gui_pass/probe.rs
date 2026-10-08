@@ -1,6 +1,7 @@
 //! The harness side of the GUI's probe: a debug build started with [`PROBE_VAR`] set serves
 //! `GET /elements` on that loopback address (`vitni-ui-dioxus`, `shell/gui_probe.rs`), answering with a
-//! [`Snapshot`] of every element that carries an `id`, a `data-hook` or an ARIA role.
+//! [`Snapshot`] of every element that carries an `id`, a `data-hook` or an ARIA role, and
+//! `GET /hit?x=…&y=…` with the [`Hit`] at one viewport point — what a click there would reach.
 //!
 //! The probe only observes. Every input a scenario sends still reaches the GUI as a real X event from
 //! `xdotool`; nothing here clicks, types, scrolls or focuses through the page.
@@ -11,7 +12,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 
-use super::target::Snapshot;
+use super::target::{Hit, Snapshot};
 
 /// The variable a debug build of the GUI reads the probe's listen address from. A copy of
 /// `vitni-ui-dioxus`'s own, as [`crate::archive_server::REROUTE_VAR`] is of the reroute variable.
@@ -46,6 +47,19 @@ pub fn snapshot(address: &str, height: u32) -> Result<Snapshot> {
     let snapshot: Snapshot =
         serde_json::from_str(&body).with_context(|| format!("parsing the GUI probe's answer from {address}"))?;
     Ok(snapshot.in_window(height))
+}
+
+/// What is on top at the viewport point `at`, its chain moved into the pixels of a window `height` tall.
+///
+/// # Errors
+///
+/// Fails as [`snapshot`] does.
+pub fn hit(address: &str, at: [i32; 2], height: u32) -> Result<Hit> {
+    let [x, y] = at;
+    let body = get(address, &format!("/hit?x={x}&y={y}"))?;
+    let hit: Hit =
+        serde_json::from_str(&body).with_context(|| format!("parsing the GUI probe's hit from {address}"))?;
+    Ok(hit.in_window(height))
 }
 
 /// The body of `GET path` from `address`.
@@ -83,7 +97,7 @@ fn body(response: &str) -> Result<&str> {
 
 #[cfg(test)]
 mod tests {
-    use super::{body, free_address, snapshot};
+    use super::{body, free_address, hit, snapshot};
     use std::io::{Read as _, Write as _};
     use std::net::TcpListener;
 
@@ -125,6 +139,18 @@ mod tests {
         assert_eq!(snapshot.elements[0].rect, [0.0, 190.0, 230.0, 30.0]);
         let request = served.join().expect("served");
         assert!(request.starts_with("GET /elements HTTP/1.1\r\n"), "{request}");
+    }
+
+    #[test]
+    fn a_hit_asks_for_its_viewport_point_and_moves_its_chain_into_window_pixels() {
+        let json = r#"{"viewport": [1800, 1170], "top": "div.scrim", "chain": [{"id": null, "hook": "dialog",
+            "role": "dialog", "text": "Discard?", "label": "", "rect": [600, 400, 500, 200], "within": []}]}"#;
+        let (address, served) = serve_once(ok(json));
+        let hit = hit(&address, [115, -3], 1200).expect("a hit");
+        assert_eq!(hit.top.as_deref(), Some("div.scrim"));
+        assert_eq!(hit.chain[0].rect, [600.0, 430.0, 500.0, 200.0]);
+        let request = served.join().expect("served");
+        assert!(request.starts_with("GET /hit?x=115&y=-3 HTTP/1.1\r\n"), "{request}");
     }
 
     #[test]

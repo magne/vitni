@@ -644,17 +644,6 @@ The `area/docs` label already existed with no `###` home; this is it.
   fixed that one page only — the other ten are a mechanical sweep, and worth doing in one pass so the
   mockups stop advertising something the product does not say. Nothing gates prose against the
   catalogue, which is why all eleven drifted together. — #501
-- **`gui-pass` assertions still measure pixels where the probe could answer directly.** Since #533 the
-  GUI's probe (`crates/vitni-ui-dioxus/src/shell/gui_probe.rs`) reports every element's rect, role and
-  text plus `document.activeElement`, but the assertions are still `differ`/`match`/`painted` over
-  screenshots. Two checks would read the probe instead: a `focus` assertion naming the element that must
-  hold focus (today proved indirectly, by a focus ring's RMSE), and a `present`/`absent` assertion for an
-  element such as a toast (today an RMSE over the area it occupies, with a tolerance tuned per scenario).
-  Both are additive `Assertion` kinds over the snapshot the harness already saves beside each shot.
-  Target resolution has a matching gap: the probe skips only zero-size elements, so an element
-  scrolled out of an overflow container, covered by an overlay, or inert behind a panel still resolves,
-  and the click lands on whatever is drawn there. Reporting whether `document.elementFromPoint` at the
-  resolved point is the element (or inside it) would let the harness refuse a covered target. — #539
 - **`main` is protected without required status checks, and that is a choice.** `ci.yml` filters
   `docs/**`, `*.md` and `LICENSE*` out of its triggers, so a documentation-only pull request starts no
   run at all — a required context would sit unfulfilled forever on exactly the changes this repository
