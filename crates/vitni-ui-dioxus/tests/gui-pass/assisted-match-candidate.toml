@@ -88,6 +88,12 @@ seconds = 3
 label = "let the plugin fetch the record"
 
 [[step]]
+do = "wheel"
+at = { role = "main", offset = [1400, 700] }
+clicks = -10
+label = "scroll past the provenance card to the Confirm stage's buttons"
+
+[[step]]
 do = "click"
 at = { role = "button", text = "Import & next" }
 label = "Confirm: Import & next"
