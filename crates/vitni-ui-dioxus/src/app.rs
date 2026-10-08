@@ -237,6 +237,7 @@ pub fn App() -> Element {
             AppInner { key: "{epoch}" }
         }
         DevStyles {}
+        crate::shell::gui_probe::GuiProbe {}
     }
 }
 

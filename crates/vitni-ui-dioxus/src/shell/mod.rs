@@ -18,6 +18,7 @@ use crate::i18n::Chrome;
 pub mod close_confirm;
 pub mod explorer;
 pub mod focus_trap;
+pub mod gui_probe;
 pub mod help_overlay;
 pub mod keyboard;
 pub mod nav_state;
