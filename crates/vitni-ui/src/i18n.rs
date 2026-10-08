@@ -2082,6 +2082,12 @@ impl Localizer {
         fl!(self.loader, "history-undo-short")
     }
 
+    /// The disclosure text on an import run's History row that shows the changes it folds.
+    #[must_use]
+    pub fn history_run_changes_toggle(&self) -> String {
+        fl!(self.loader, "history-import-run-changes-toggle")
+    }
+
     /// The localized label for a person's evidence level — the personas badge (data-model §7).
     #[must_use]
     pub fn evidence_level_label(&self, level: EvidenceLevel) -> String {

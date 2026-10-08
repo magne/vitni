@@ -199,6 +199,8 @@ history-operator-ai = KI-modell
 history-operator-unknown = ukjent operatør
 history-undo = Angre: { $what }
 history-undo-short = Angre
+# Utvideren på en importkjørings Historikk-rad som viser endringene den samler (ADR 0049 §3).
+history-import-run-changes-toggle = Hva den endret
 
 # Redigeringsetiketter
 field-nickname = Kallenavn

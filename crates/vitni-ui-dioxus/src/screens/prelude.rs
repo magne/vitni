@@ -26,8 +26,8 @@ pub use crate::components::{
     BadgeSpec, Button, ButtonVariant, Card, Chip, ConfidenceBadge, DEFAULT_LABEL_WIDTH, DateFieldBinding,
     DraftPickerView, DraftSelect, DraftText, EmptyState, EvidenceAxisChip, FactRow, HistoryEntry, HistoryTimeline,
     Input, NewRecordCard, NoSourceFlag, PickerCallbacks, PickerConfig, ProvenancePopover, RECORD_LABEL_WIDTH,
-    RadioChoice, RadioGroup, RecordPicker, RestrictionChoice, RestrictionSet, Select, SelectChoice, SidePanel,
-    SourceLink, Switch, TabItem, Table, TextField, TextInput, TextInputKind, date_draft_field, draft_card,
+    RadioChoice, RadioGroup, RecordPicker, RestrictionChoice, RestrictionSet, RunChanges, Select, SelectChoice,
+    SidePanel, SourceLink, Switch, TabItem, Table, TextField, TextInput, TextInputKind, date_draft_field, draft_card,
     draft_picker_field, merged_from_chip, or_dash, picker_options, record_picker,
 };
 pub use crate::master_detail::{DetailContainer, ListChrome, ListPane, SortChrome};

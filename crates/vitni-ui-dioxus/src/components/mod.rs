@@ -41,7 +41,7 @@ pub use evidence::{
 pub use fact_row::{DEFAULT_LABEL_WIDTH, FactRow, RECORD_LABEL_WIDTH, or_dash};
 pub use feedback::{Toast, ToastKind};
 pub use forms::{Checkbox, DateInput, DatePicker, Input, LabeledValue, NumberInput, Select, Textarea};
-pub use history::{HistoryEntry, HistoryTimeline};
+pub use history::{HistoryEntry, HistoryTimeline, RunChanges};
 pub use layout::{Card, EmptyState, Modal, SidePanel};
 pub use media_save_dialog::{MediaSaveDialog, MediaSaveLabels};
 pub use media_viewer::{MediaCropLabels, MediaCropTools, MediaViewer, MediaViewerLabels};

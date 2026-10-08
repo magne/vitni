@@ -45,8 +45,8 @@ date (`file_asserted_at`, ADR 0029 §2).
 - The reason follows the UI language, and rewording it is a catalogue change rather than a migration
   of stored events.
 - The reason is only as available as the run is. A supersession whose provenance names no run cannot be
-  given one. `import_assert_sex` writes no record origin today, so a re-import that supersedes a
-  person's sex reads as a bare software-agent change. That is tracked in `docs/issues.md`.
+  given one. A re-import that supersedes a person's sex (`import_assert_sex`) writes no record origin
+  today, so it reads as a bare software-agent change. That is tracked in `docs/issues.md`.
 - Exporting the event log (a backup, ADR 0041) carries no reason text for these supersessions. A
   reader of the log alone still has the run id and the run's export date.
 

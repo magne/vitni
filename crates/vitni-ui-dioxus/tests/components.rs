@@ -73,21 +73,7 @@ fn gallery() -> Element {
         ProvenancePopover { title: "Why we believe this".to_owned(),
             div { "Baptism register" }
         }
-        HistoryTimeline {
-            entries: vec![HistoryEntry {
-                when: "2026-06-22".to_owned(),
-                what: "Birth asserted".to_owned(),
-                who: "magne".to_owned(),
-                why: Some("Baptism register".to_owned()),
-                assertion_id: "a1".to_owned(),
-                can_undo: true,
-                undo_text: "Undo".to_owned(),
-                undo_label: "Undo: Birth asserted".to_owned(),
-                count: None,
-                evidence: None,
-            }],
-            onundo: move |_| {},
-        }
+        {timeline_specimen()}
         {toast_specimens()}
         Card { title: Some("Facts".to_owned()),
             div { "card body" }
@@ -113,6 +99,28 @@ fn gallery() -> Element {
             footer: rsx! { Button { label: "Delete".to_owned(), variant: ButtonVariant::Danger, onclick: move |_| {} } },
             div { "This removes the tag." }
         }
+    }
+}
+
+/// The audit timeline specimen, factored out of [`gallery`] to keep it under the line cap.
+fn timeline_specimen() -> Element {
+    rsx! {
+            HistoryTimeline {
+                entries: vec![HistoryEntry {
+                    when: "2026-06-22".to_owned(),
+                    what: "Birth asserted".to_owned(),
+                    who: "magne".to_owned(),
+                    why: Some("Baptism register".to_owned()),
+                    assertion_id: "a1".to_owned(),
+                    can_undo: true,
+                    undo_text: "Undo".to_owned(),
+                    undo_label: "Undo: Birth asserted".to_owned(),
+                    count: None,
+                    evidence: None,
+                    changes: None,
+                }],
+                onundo: move |_| {},
+            }
     }
 }
 

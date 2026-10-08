@@ -937,22 +937,7 @@ pub fn history_panel(loc: &Localizer, entries: &[HistoryEntryVm], on_undo: Optio
     if entries.is_empty() {
         return rsx! { EmptyState { symbol: "🕓".to_owned(), message: loc.history_empty() } };
     }
-    let undo_text = loc.history_undo_short();
-    let entries: Vec<HistoryEntry> = entries
-        .iter()
-        .map(|entry| HistoryEntry {
-            when: entry.when.clone(),
-            what: entry.what.clone(),
-            who: entry.who.clone(),
-            why: entry.why.clone(),
-            assertion_id: entry.assertion_id.clone(),
-            can_undo: entry.can_undo,
-            undo_text: undo_text.clone(),
-            undo_label: loc.history_undo_label(&entry.what),
-            count: entry.count.clone(),
-            evidence: entry.evidence.clone(),
-        })
-        .collect();
+    let entries: Vec<HistoryEntry> = entries.iter().map(|entry| history_entry(loc, entry)).collect();
     rsx! {
         HistoryTimeline {
             entries,
@@ -962,5 +947,34 @@ pub fn history_panel(loc: &Localizer, entries: &[HistoryEntryVm], on_undo: Optio
                 }
             },
         }
+    }
+}
+
+/// One History row for the timeline. An import-run row's changes come along behind its disclosure,
+/// without undo of their own: the row's undo retracts the run's newest assertion (#306).
+fn history_entry(loc: &Localizer, entry: &HistoryEntryVm) -> HistoryEntry {
+    let changes = (!entry.children.is_empty()).then(|| RunChanges {
+        label: loc.history_run_changes_toggle(),
+        entries: entry
+            .children
+            .iter()
+            .map(|child| HistoryEntry {
+                can_undo: false,
+                ..history_entry(loc, child)
+            })
+            .collect(),
+    });
+    HistoryEntry {
+        when: entry.when.clone(),
+        what: entry.what.clone(),
+        who: entry.who.clone(),
+        why: entry.why.clone(),
+        assertion_id: entry.assertion_id.clone(),
+        can_undo: entry.can_undo,
+        undo_text: loc.history_undo_short(),
+        undo_label: loc.history_undo_label(&entry.what),
+        count: entry.count.clone(),
+        evidence: entry.evidence.clone(),
+        changes,
     }
 }

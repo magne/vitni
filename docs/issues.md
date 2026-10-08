@@ -410,12 +410,15 @@ in its own area: research notes (*Notes & research notes*). The one gap running 
   interactive picker), and listed it in the Gate-2 exit criteria. `import.html` has no such view: the
   ADR 0029 supersede path is invisible in the mockups, so there is no agreed design for showing a user
   that an import overwrote one of their values. — #534
-- **An import's sex assertion names no run.** `import_assert_sex` (`crates/vitni-app/src/import.rs`)
-  asserts and supersedes `Person.sex` with the plugin host's provenance, which carries no record origin,
-  unlike every field the origin gate writes. So History cannot fold the change into its run's row, and a
-  re-import that supersedes a sex reads as a bare software-agent "Sex asserted" with no derived reason
-  (ADR 0049). *Shape:* give the sex path the record origin the gate's writes carry. *Exit:* a superseding
-  re-import's sex change sits in its run's History row with the reason.
+- **A re-import's sex supersession names no run.** A first import's "Sex asserted" sits in its run's
+  History row, but when a re-import supersedes the sex (`import_assert_sex`,
+  `crates/vitni-app/src/import.rs`, ADR 0029 §1) its `SexAsserted` and `AssertionSuperseded` carry no
+  record origin, unlike every field the origin gate supersedes. So History cannot fold them into the
+  run's row, and they read as a bare software-agent "Sex asserted" with no derived reason (ADR 0049).
+  Seen in `reimport_reconciles_sex_only_when_the_files_export_date_is_at_least_as_recent`
+  (`crates/vitni-plugin-host/tests/gedcom_round_trip.rs`). *Shape:* give the supersede path the record
+  origin the gate's writes carry. *Exit:* that test's superseding re-import shows in its run's row with
+  the reason.
 - **An unreadable file export date is ignored without notice** — ADR 0029 §3 makes an unparseable date
   additive-only, but nothing says it applied, so a re-import of a newer file updates nothing unseen.
   `begin_run` in `crates/vitni-plugin-host/src/staging.rs` drops a date that fails

@@ -200,6 +200,8 @@ history-operator-ai = AI model
 history-operator-unknown = unknown operator
 history-undo = Undo: { $what }
 history-undo-short = Undo
+# The disclosure on an import run's History row that shows the changes it folds (ADR 0049 §3).
+history-import-run-changes-toggle = What it changed
 
 # Edit field labels
 field-nickname = Nickname

@@ -1,0 +1,94 @@
+# ADR 0049 §3: an import run's History row folds the changes it made to the record, and its "What it
+# changed" disclosure shows them under the row. SSR renders the row closed; only the live app shows the
+# disclosure opening on a click, with the changes laid out beneath it.
+#
+# The fixture seeds `rerun.ged` beside the workspace's data without importing it, so the scenario
+# imports it first and then opens the first person it wrote. History is the person's last tab and sits
+# past the strip's right edge at this window size, so the scenario reaches it with End.
+description = "An import run's History row opens to the changes it made (ADR 0049)"
+
+[[step]]
+do = "click"
+at = { role = "listitem", text = "Import" }
+label = "rail: Import"
+
+[[step]]
+do = "click"
+at = { id = "bulk-import-source" }
+label = "source file field"
+
+[[step]]
+do = "text"
+text = "rerun.ged"
+label = "type: rerun.ged"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Import" }
+label = "Import"
+
+[[step]]
+do = "wait"
+seconds = 3
+label = "let the file be read and planned"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Import" }
+label = "Import, at the plan"
+
+[[step]]
+do = "wait"
+seconds = 3
+label = "let the import finish"
+
+[[step]]
+do = "click"
+at = { role = "listitem", text = "People" }
+label = "rail: People"
+
+[[step]]
+do = "click"
+at = { role = "option", text = "Anders Strand" }
+label = "Explorer: Anders Strand"
+
+[[step]]
+do = "click"
+at = { role = "tab", text = "Overview" }
+label = "tab: Overview, to focus the tab strip"
+
+[[step]]
+do = "key"
+chord = "End"
+label = "End: the last tab, History, which the strip has scrolled out of view"
+
+[[step]]
+do = "shot"
+name = "folded"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "What it changed" }
+label = "the run row's disclosure"
+
+[[step]]
+do = "shot"
+name = "open"
+
+[[assert]]
+kind = "absent"
+shot = "folded"
+element = { hook = "run-changes" }
+because = "the run's changes stay folded until the disclosure opens"
+
+[[assert]]
+kind = "present"
+shot = "open"
+element = { hook = "run-changes" }
+because = "the disclosure lays the run's changes out under its row"
+
+[[assert]]
+kind = "differ"
+shots = ["folded", "open"]
+region = { role = "main" }
+because = "the opened changes are drawn, not only mounted"

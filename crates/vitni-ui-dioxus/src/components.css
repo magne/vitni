@@ -624,6 +624,8 @@ table.tbl .no-source, table.tbl .src-link { white-space: nowrap; }
 .tl-who { font-size: var(--fs-xs); color: var(--muted); }
 .tl-why { font-size: var(--fs-sm); color: var(--ink-2); font-style: italic; }
 .tl-evidence { font-size: var(--fs-xs); }
+/* An import run's own changes, shown under its row when its disclosure is open (ADR 0049 §3). */
+.timeline.tl-children { margin-top: var(--sp-3); }
 
 /* ---- Provenance popover ("why we believe this") — anchored to the claim's source-count link ---- */
 .prov-anchor { position: relative; display: inline-block; }
