@@ -360,6 +360,12 @@ fn a_docked_record_splits_the_detail_pane() {
         "a second, docked detail pane renders:\n{html}"
     );
     assert!(html.contains("Ada"), "the docked pane names the docked record:\n{html}");
+    for hook in ["record-pane", "docked-pane"] {
+        assert!(
+            html.contains(&format!(r#"data-hook="{hook}""#)),
+            "gui-pass scopes each pane by data-hook={hook}:\n{html}"
+        );
+    }
     assert!(
         html.contains(r#"aria-label="Undock record""#),
         "the undock control carries the localized label:\n{html}"

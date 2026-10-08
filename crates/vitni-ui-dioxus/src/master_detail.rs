@@ -42,6 +42,7 @@ pub fn MasterDetail(
         div { class: "{root_class}",
             section {
                 class: "{detail_class}",
+                "data-hook": "record-pane",
                 ondragover: move |event| {
                     // `prevent_default` is required or the drop never fires; only while a tab drag
                     // is live, so ordinary content drags are unaffected.
@@ -61,7 +62,7 @@ pub fn MasterDetail(
                 {detail}
             }
             if docked.is_some() {
-                section { class: "detail docked", DockedRecordDetail {} }
+                section { class: "detail docked", "data-hook": "docked-pane", DockedRecordDetail {} }
             }
         }
     }

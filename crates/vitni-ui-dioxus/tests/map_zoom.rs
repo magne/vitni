@@ -58,6 +58,16 @@ fn the_readout_carries_the_class_the_toolbar_sizes_it_by() {
     );
 }
 
+/// `cargo xtask gui-pass` measures the readout as a region by this hook, rather than by window pixels.
+#[test]
+fn the_readout_carries_the_gui_pass_probe_hook() {
+    let html = readout("en", 14.2);
+    assert!(
+        html.contains(r#"data-hook="zoom-readout""#),
+        "the readout is hooked:\n{html}"
+    );
+}
+
 /// `z14.2` alone is not a name — a screen reader needs to be told what the number measures.
 #[test]
 fn the_readout_names_itself_for_assistive_tech() {

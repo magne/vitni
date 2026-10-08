@@ -43,7 +43,7 @@ pub struct Snapshot {
     pub ready: bool,
     /// The document has keyboard focus (`document.hasFocus()`).
     pub focused: bool,
-    /// The `id` or hook of the focused element, if it carries one.
+    /// The focused element's `id`, else its hook, else its role, else its tag name (`body`).
     #[serde(default)]
     pub active: Option<String>,
     /// The webview's `[innerWidth, innerHeight]`.

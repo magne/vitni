@@ -104,6 +104,7 @@ pub fn CommandPalette() -> Element {
     rsx! {
         div {
             class: "overlay",
+            "data-hook": "palette-overlay",
             onclick: move |_| nav.close_overlay(),
             onkeydown: move |event: KeyboardEvent| dismiss_on_escape(&event, || nav.dismiss_topmost()),
             div {

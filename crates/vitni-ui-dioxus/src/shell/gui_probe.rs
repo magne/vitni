@@ -62,6 +62,9 @@ const role = (el) => {
         case 'A': return el.hasAttribute('href') ? 'link' : null;
         case 'SELECT': return 'combobox';
         case 'TEXTAREA': return 'textbox';
+        case 'TR': return 'row';
+        case 'TD': return 'cell';
+        case 'TH': return 'columnheader';
         case 'INPUT': {
             const kind = el.type;
             if (kind === 'checkbox' || kind === 'radio') return kind;
@@ -73,7 +76,7 @@ const role = (el) => {
     }
 };
 const elements = [];
-const targets = '[id], [data-hook], [role], button, a[href], input, select, textarea, summary';
+const targets = '[id], [data-hook], [role], button, a[href], input, select, textarea, summary, tr, td, th';
 for (const el of document.querySelectorAll(targets)) {
     const rect = el.getBoundingClientRect();
     if (rect.width === 0 && rect.height === 0) continue;
@@ -97,7 +100,7 @@ const active = document.activeElement;
 return {
     ready: document.readyState === 'complete' && document.querySelector('.app') !== null,
     focused: document.hasFocus(),
-    active: active ? (active.id || hook(active) || null) : null,
+    active: active ? (active.id || hook(active) || role(active) || active.tagName.toLowerCase()) : null,
     viewport: [window.innerWidth, window.innerHeight],
     elements,
 };
@@ -133,7 +136,7 @@ pub fn GuiProbe() -> Element {
         std::thread::spawn(move || serve(&listener, &requests));
         spawn(async move {
             while let Some(answer) = incoming.recv().await {
-                let snapshot = document::eval(SNAPSHOT).join::<serde_json::Value>().await;
+                let snapshot = snapshot().await;
                 let _ = answer.send(
                     snapshot
                         .map(|value| value.to_string())
@@ -144,6 +147,26 @@ pub fn GuiProbe() -> Element {
         tracing::info!(%address, "the gui-pass probe is listening");
     });
     rsx! {}
+}
+
+/// How many times [`snapshot`] runs the script before giving up on `EvalError::Finished`.
+#[cfg(feature = "desktop")]
+const SNAPSHOT_ATTEMPTS: usize = 3;
+
+/// Runs [`SNAPSHOT`] and returns what it saw.
+///
+/// dioxus-desktop drops an eval's state once the webview reports the script done, so a script that
+/// finishes before `join` first polls it reads as `EvalError::Finished` rather than a value. The script
+/// only reads the DOM, so running it again is safe; anything else is the caller's error.
+#[cfg(feature = "desktop")]
+async fn snapshot() -> Result<serde_json::Value, document::EvalError> {
+    let mut attempt = 1;
+    loop {
+        match document::eval(SNAPSHOT).join::<serde_json::Value>().await {
+            Err(document::EvalError::Finished) if attempt < SNAPSHOT_ATTEMPTS => attempt += 1,
+            outcome => return outcome,
+        }
+    }
 }
 
 /// Answers each connection on `listener` in turn, asking the app for a snapshot through `requests`.
