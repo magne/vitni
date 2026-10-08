@@ -163,7 +163,9 @@ needs no rebuild. Each lists `[[step]]`s (`shot`, `click`, `key`, `text` to type
 `wheel`, `wait` to sleep and let a timed effect fire, `await-exit` to wait for the GUI process to quit)
 and `[[assert]]`s over the shots by name: `differ` for "the UI reacted",
 `match` for "the UI came back to this state", both with an RMSE tolerance and an optional `region` to
-compare one element's area instead of the whole shot; `manifest` checks the running worker's
+compare one element's area instead of the whole shot; `focus`, `present` and `absent` read the probe's
+snapshot at one shot instead of its pixels — the `element` named holds keyboard focus, is on screen, or
+is not; `manifest` checks the running worker's
 `workspace/workspace.toml` on disk for a substring instead, proving a write reached disk rather than only
 an in-memory signal (unavailable under `--real-config`, whose workspace path is the caller's own).
 
@@ -180,13 +182,17 @@ at = { id = "given" }                                             # a form field
 at = { id = "geography-map", offset = [415, 242] }                # a canvas point, from its top-left
 region = { hook = "explorer" }                                    # an element's whole rect
 region = { hook = "record-tabs", offset = [0, 5], size = [1268, 45] }  # a sub-rectangle of one
+element = { role = "status", text = "Saved" }                   # focus/present/absent: no offset
 ```
 
 Exactly one of `id`, `hook`, `role`; `text` is a substring of the element's text or `aria-label`;
 `within` names an ancestor's id, hook or role (`dialog`, `navigation`); `index` (from 0) picks among
 what is left, a last resort. No `offset` clicks the centre. A target that matches nothing, or more than
 one element, is re-probed until the settle cap and then fails naming the target and listing what the
-probe saw. The probe only observes: every input is still a real X event from `xdotool`.
+probe saw. So is a point something else covers — an overlay, a panel the target is inert behind, the
+edge of the container it is scrolled out of: the probe's `document.elementFromPoint` there must be the
+target or inside it, and the failure names the element on top. The probe only observes: every input is
+still a real X event from `xdotool`.
 
 Read the PNGs under `target/gui-pass/shots/<scenario>/`; **each shot has a `NN-<name>.json` beside it**
 — what the probe saw then, in window pixels — so read a rect, role or text from there instead of
@@ -203,6 +209,9 @@ Writing one:
 - **Offsets only where the point is the point**: a canvas (map vertices, crop drags), or a deliberate
   off-centre click (a scrim, whose centre is under the dialog). A point's offset must stay inside its
   element; a region's `offset`/`size` may extend past it.
+- **Ask the probe, not the pixels, when it can answer**: `focus` for where focus went, `present`/`absent`
+  for whether a toast or dialog is up. Keep `differ`/`match` for what only pixels show — a repaint, a
+  layout shift, a canvas.
 - **`match` against the shot taken immediately before the change**, never against the first shot — focus
   rings are real pixels and move as a scenario runs.
 - **`region` when a whole-window compare can't isolate the change** — e.g. a repaint elsewhere in the

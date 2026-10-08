@@ -78,7 +78,7 @@ use crate::util::{copy_dir, run_cargo};
 mod probe;
 mod target;
 
-use target::{Area, Element, Point, Snapshot};
+use target::{Area, Matcher, Point, Snapshot};
 
 /// The `gui-pass` fixture: the assertion scenarios, seeded with one place and two media objects.
 const GUI_PASS: Fixture = Fixture {
@@ -323,6 +323,25 @@ enum Assertion {
     /// Substring matching, not a TOML-path DSL: this has exactly one caller. Unavailable under
     /// `--real-config`, where the workspace path is the caller's own and unsafe to assert over.
     Manifest { contains: String, because: String },
+    /// The one element `element` names must hold keyboard focus (`document.activeElement`) at `shot` —
+    /// read from the probe, not inferred from where a focus ring's pixels moved.
+    Focus {
+        shot: String,
+        element: Matcher,
+        because: String,
+    },
+    /// At least one element `element` names must be on screen (rendered, not zero-sized) at `shot`.
+    Present {
+        shot: String,
+        element: Matcher,
+        because: String,
+    },
+    /// No element `element` names may be on screen at `shot`.
+    Absent {
+        shot: String,
+        element: Matcher,
+        because: String,
+    },
 }
 
 /// How the run is configured.
@@ -1193,11 +1212,11 @@ fn wait_for_window(display: &str) -> Result<String> {
     bail!("gui-pass: no Vitni window appeared on {display} within {WINDOW_TIMEOUT:?}")
 }
 
-/// A shot the script took: its name, and the elements the probe saw when it was grabbed — what an
-/// assertion's [`Area`] resolves against.
+/// A shot the script took: its name, and what the probe saw when it was grabbed — what an assertion's
+/// [`Area`] resolves against and its `focus`/`present`/`absent` checks read.
 struct Taken {
     name: String,
-    elements: Vec<Element>,
+    snapshot: Snapshot,
 }
 
 /// Runs every step, returning the shots in the order they were taken.
@@ -1217,7 +1236,7 @@ fn drive(window: &Window, steps: &[Step], shots: &Path, session: &mut Session, l
                 log.line(&format!("  shot {}", path.display()));
                 taken.push(Taken {
                     name: name.clone(),
-                    elements: snapshot.elements,
+                    snapshot,
                 });
             }
             Step::Click { at, label } => {
@@ -1483,20 +1502,27 @@ impl Window {
         Ok(())
     }
 
-    /// The window pixel `at` names, re-probing until its target resolves or [`SETTLE_CAP`] has passed —
-    /// an element still rendering when the screen went quiet gets that long to appear.
+    /// The window pixel `at` names, re-probing until its target resolves to a point nothing else covers
+    /// or [`SETTLE_CAP`] has passed — an element still rendering when the screen went quiet, or an
+    /// overlay still fading out over it, gets that long to settle.
     fn locate(&self, point: &Point) -> Result<[i32; 2]> {
-        self.resolve(|elements| target::resolve_point(point, elements, self.size))
+        self.resolve(|snapshot| {
+            let (element, at) = target::resolve_point(point, &snapshot.elements, self.size)?;
+            let viewport_at = target::in_viewport(at, snapshot.viewport, self.size.1);
+            let hit = probe::hit(&self.probe, viewport_at, self.size.1).map_err(|error| format!("{error:#}"))?;
+            target::uncovered(&point.matcher, element, at, &hit)?;
+            Ok(at)
+        })
     }
 
     /// Runs `resolve` over fresh snapshots until it succeeds or [`SETTLE_CAP`] has passed, then fails
     /// with its last reason. A probe that fails to answer is retried the same way, since one `eval`
     /// can fail while the app remounts.
-    fn resolve<T>(&self, resolve: impl Fn(&[Element]) -> Result<T, String>) -> Result<T> {
+    fn resolve<T>(&self, resolve: impl Fn(&Snapshot) -> Result<T, String>) -> Result<T> {
         let started = Instant::now();
         loop {
             let outcome = match self.snapshot() {
-                Ok(snapshot) => resolve(&snapshot.elements),
+                Ok(snapshot) => resolve(&snapshot),
                 Err(error) => Err(format!("{error:#}")),
             };
             match outcome {
@@ -1805,7 +1831,48 @@ fn check_one(
             Ok((!text.contains(contains.as_str()))
                 .then(|| format!("{} does not contain {contains:?}: {because}", manifest.display())))
         }
+        Assertion::Focus { shot, element, because } => {
+            let snapshot = &taken_at(taken, shot)?.snapshot;
+            Ok(unfocused(element, snapshot).map(|reason| format!("{shot}: {reason}: {because}")))
+        }
+        Assertion::Present { shot, element, because } => {
+            let elements = &taken_at(taken, shot)?.snapshot.elements;
+            let found = target::matching(element, elements);
+            Ok(found
+                .is_empty()
+                .then(|| format!("{shot}: no element matches {element}: {because}")))
+        }
+        Assertion::Absent { shot, element, because } => {
+            let elements = &taken_at(taken, shot)?.snapshot.elements;
+            let found = target::matching(element, elements);
+            Ok((!found.is_empty()).then(|| {
+                format!(
+                    "{shot}: {element} is still on screen, {}: {because}",
+                    target::listing(&found)
+                )
+            }))
+        }
     }
+}
+
+/// Why the one element `element` names does not hold focus in `snapshot`, or `None` when it does.
+fn unfocused(element: &Matcher, snapshot: &Snapshot) -> Option<String> {
+    match target::find(element, &snapshot.elements) {
+        Ok(found) if found.active => None,
+        Ok(_) => {
+            let holder = snapshot.active.as_deref().unwrap_or("nothing");
+            Some(format!("{element} does not hold focus; {holder:?} does"))
+        }
+        Err(reason) => Some(reason),
+    }
+}
+
+/// The shot named `name`.
+fn taken_at<'a>(taken: &'a [Taken], name: &str) -> Result<&'a Taken> {
+    let Some(shot) = taken.iter().find(|shot| shot.name == name) else {
+        bail!("gui-pass: assertion names a shot the script never took: {name}");
+    };
+    Ok(shot)
 }
 
 /// The window rectangle an assertion's `region` covers, resolved over what the probe saw at the shot
@@ -1814,10 +1881,8 @@ fn measured(region: Option<&Area>, taken: &[Taken], at: &str, window: (u32, u32)
     let Some(area) = region else {
         return Ok(None);
     };
-    let Some(shot) = taken.iter().find(|shot| shot.name == at) else {
-        bail!("gui-pass: assertion names a shot the script never took: {at}");
-    };
-    target::resolve_area(area, &shot.elements, window)
+    let shot = taken_at(taken, at)?;
+    target::resolve_area(area, &shot.snapshot.elements, window)
         .map(Some)
         .map_err(|reason| anyhow::anyhow!("gui-pass: region at shot {at}: {reason}"))
 }
@@ -1874,10 +1939,11 @@ fn shot_path(taken: &[Taken], shots: &Path, name: &str) -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::{
-        Assertion, GUI_PASS, MIN_STANDARD_DEVIATION, SETTLE_QUIET, Script, Step, WINDOW, available_cores, default_jobs,
-        describe_region, differing_pixels, focus_click, keysyms, painted_failed, parse_args, read_region, run_queue,
-        settled, unique_names, until_painted, window_size, worker_config, worker_display,
+        Assertion, GUI_PASS, MIN_STANDARD_DEVIATION, SETTLE_QUIET, Script, Step, Taken, WINDOW, available_cores,
+        check_one, default_jobs, describe_region, differing_pixels, focus_click, keysyms, painted_failed, parse_args,
+        read_region, run_queue, settled, unique_names, until_painted, window_size, worker_config, worker_display,
     };
+    use crate::gui_pass::target::{Element, Snapshot};
     use std::path::{Path, PathBuf};
     use std::time::Duration;
 
@@ -2234,6 +2300,137 @@ mod tests {
         assert_eq!(area.offset, Some([15, 42]));
         assert_eq!(area.size, Some([1250, 700]));
         assert_eq!(*min_deviation, Some(0.02));
+    }
+
+    fn probed(id: &str, role: &str, text: &str, active: bool) -> Element {
+        Element {
+            id: Some(id.to_owned()),
+            hook: None,
+            role: Some(role.to_owned()),
+            text: text.to_owned(),
+            label: String::new(),
+            rect: [10.0, 10.0, 100.0, 24.0],
+            within: Vec::new(),
+            active,
+        }
+    }
+
+    /// One shot named `name` whose probe saw `elements`, with `active` holding focus.
+    fn shot(name: &str, active: &str, elements: Vec<Element>) -> Vec<Taken> {
+        vec![Taken {
+            name: name.to_owned(),
+            snapshot: Snapshot {
+                ready: true,
+                focused: true,
+                maps_idle: true,
+                active: Some(active.to_owned()),
+                viewport: [1800.0, 1170.0],
+                elements,
+            },
+        }]
+    }
+
+    /// The verdict of the one assertion in `toml` over `taken`.
+    fn verdict(toml: &str, taken: &[Taken]) -> Option<String> {
+        let parsed = asserts(&format!("description = \"a scenario\"\n[[assert]]\n{toml}"));
+        let [assertion] = parsed.as_slice() else {
+            panic!("one assertion, got {}", parsed.len());
+        };
+        check_one(assertion, taken, Path::new("shots"), None, WINDOW).expect("the assertion runs")
+    }
+
+    fn panel() -> Vec<Element> {
+        vec![
+            probed("panel-close", "button", "Cancel", false),
+            probed("reason", "textbox", "", true),
+        ]
+    }
+
+    #[test]
+    fn a_focus_assert_holds_when_the_named_element_has_focus() {
+        let taken = shot("cycled", "reason", panel());
+        let held = verdict(
+            r#"kind = "focus"
+            shot = "cycled"
+            element = { id = "reason" }
+            because = "Tab cycles within the panel""#,
+            &taken,
+        );
+        assert_eq!(held, None);
+    }
+
+    #[test]
+    fn a_focus_assert_fails_naming_what_holds_focus_instead() {
+        let taken = shot("cycled", "reason", panel());
+        let failure = verdict(
+            r#"kind = "focus"
+            shot = "cycled"
+            element = { id = "panel-close" }
+            because = "Tab cycles within the panel""#,
+            &taken,
+        )
+        .expect("the close button does not hold focus");
+        assert!(failure.contains("{id = \"panel-close\"}"), "{failure}");
+        assert!(failure.contains("\"reason\""), "what holds focus is named: {failure}");
+        assert!(failure.contains("Tab cycles within the panel"), "{failure}");
+    }
+
+    #[test]
+    fn a_focus_assert_on_a_missing_element_fails_rather_than_passing() {
+        let taken = shot("cycled", "reason", panel());
+        let failure = verdict(
+            r#"kind = "focus"
+            shot = "cycled"
+            element = { id = "nowhere" }
+            because = "b""#,
+            &taken,
+        )
+        .expect("no such element");
+        assert!(failure.contains("no element matches"), "{failure}");
+    }
+
+    #[test]
+    fn present_and_absent_read_the_shots_elements() {
+        let toast = probed("toast", "status", "Nothing to undo", false);
+        let raised = shot("toast", "body", vec![toast]);
+        let gone = shot("gone", "body", Vec::new());
+        let present = r#"kind = "present"
+            shot = "toast"
+            element = { role = "status", text = "Nothing to undo" }
+            because = "the toast is raised""#;
+        let absent = r#"kind = "absent"
+            shot = "gone"
+            element = { role = "status", text = "Nothing to undo" }
+            because = "the toast dismissed itself""#;
+        assert_eq!(verdict(present, &raised), None);
+        assert_eq!(verdict(absent, &gone), None);
+        let missing = verdict(&present.replace("\"toast\"\n", "\"gone\"\n"), &gone).expect("no toast");
+        assert!(
+            missing.contains("no element matches") && missing.contains("the toast is raised"),
+            "{missing}"
+        );
+        let lingering = verdict(&absent.replace("\"gone\"\n", "\"toast\"\n"), &raised).expect("still up");
+        assert!(
+            lingering.contains("Nothing to undo"),
+            "what is still there is listed: {lingering}"
+        );
+        assert!(lingering.contains("the toast dismissed itself"), "{lingering}");
+    }
+
+    #[test]
+    fn an_element_assert_naming_an_untaken_shot_is_an_error() {
+        let parsed = asserts(
+            r#"
+            description = "a scenario"
+            [[assert]]
+            kind = "present"
+            shot = "never"
+            element = { id = "toast" }
+            because = "b"
+            "#,
+        );
+        let error = check_one(&parsed[0], &[], Path::new("shots"), None, WINDOW).expect_err("no such shot");
+        assert!(format!("{error:#}").contains("never"), "{error:#}");
     }
 
     #[test]
