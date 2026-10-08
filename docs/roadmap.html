@@ -640,6 +640,8 @@ the same cycle as its spike, so the working code informs the decision.</p>
       <td>Phase 14 (0.10)</td><td>ADR 0010, 0038, 0039</td></tr>
     <tr><td><b><a href="adr/0048-match-pairs-projection.md">ADR 0048</a></b> &mdash; accepted</td><td>A derived <code>match_pairs</code> projection holds every possible pair&rsquo;s band and score, refreshed from the records committed to since and every record whose profile reads one; decisions apply on read, and only listed pairs are assessed</td>
       <td>Phase 14 (0.10)</td><td>ADR 0038, 0039, 0047</td></tr>
+    <tr><td><b><a href="adr/0049-import-supersede-reason-is-derived.md">ADR 0049</a></b> &mdash; accepted</td><td>An import&rsquo;s supersession stores no rationale; History derives its reason, localized, from the run&rsquo;s export date, and a run&rsquo;s History row expands to the changes it made</td>
+      <td>0.9</td><td>ADR 0003, 0029, 0037</td></tr>
     <tr><td><b>ADR 0031</b></td><td>Place model for real-world administrative geography: reopen the <code>Multi*</code> geometry variant, add a civil/ecclesiastical/judicial <code>relation</code> to <code>PlaceRef</code>, and carry positional accuracy separately from <code>Confidence</code></td>
       <td>Phase 9 residual closure</td><td>ADR 0024, 0026, 0027</td></tr>
     <tr><td><b>ADR 0016</b></td><td>Server backend + web frontend + server-connected workspaces (transport, auth)</td>

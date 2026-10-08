@@ -1,7 +1,7 @@
 use super::{
     AttachedRefVm, CitationDetail, DEFAULT_TAG_COLOR, DEFAULT_TAG_PRIORITY, DashboardStats, DashboardVm, DataQualityVm,
     MediaRefVm, PersonDetail, PersonDraft, ProvenanceDraft, RecordDraft, TagDetail, TagDraft, TimelineKind,
-    citation_row, citation_tabs, evidence_axes, person_row, person_tabs,
+    citation_row, citation_tabs, collapse_history, evidence_axes, person_row, person_tabs,
 };
 use crate::i18n::Localizer;
 use crate::presentation::ConfidenceLevel;
@@ -57,6 +57,7 @@ fn run_ref(records: Option<u32>) -> RunRef {
         plugin: "gedcom-import".to_owned(),
         records,
         resume: None,
+        file_asserted_at: None,
     }
 }
 
@@ -449,7 +450,7 @@ fn data_quality_reports_zero_counts_with_no_findings() {
 
 #[test]
 fn history_folds_a_records_import_run_into_one_undoable_row() {
-    use super::{collapse_history, first_undoable};
+    use super::first_undoable;
     let loc = Localizer::for_test("en");
     // Newest-first order: "newest" is the more recent imported assertion, "older" the one behind it.
     let entries = vec![
@@ -1701,4 +1702,47 @@ fn a_history_entry_shows_the_assessment_behind_an_identity_decision() {
 
     entry.detail = None;
     assert_eq!(super::HistoryEntryVm::from_entry(&entry, &loc).evidence, None);
+}
+
+/// A run that read a file exported on 2100-01-01, superseding `human_id`'s value: the supersession
+/// and its replacement, newest first, folded into the person's History.
+fn superseding_run(file_asserted_at: Option<&str>) -> Vec<ChangeLogEntry> {
+    let run = RunRef {
+        file_asserted_at: file_asserted_at.map(ToOwned::to_owned),
+        ..run_ref(Some(3))
+    };
+    let mut replacement = imported("I0001", "r", true);
+    replacement.event_type = "SexAsserted".to_owned();
+    replacement.run = Some(run.clone());
+    let mut superseded = imported("I0001", "s", false);
+    superseded.event_type = "AssertionSuperseded".to_owned();
+    superseded.run = Some(run);
+    vec![replacement, superseded]
+}
+
+#[test]
+fn an_import_runs_supersession_says_the_file_was_exported_after_the_value_it_replaced() {
+    let loc = Localizer::for_test("en");
+    let rows = collapse_history(&superseding_run(Some("2100-01-01T00:00:00Z")), &loc);
+
+    assert_eq!(rows.len(), 1, "the run folds both entries: {rows:#?}");
+    let [replacement, superseded] = rows[0].children.as_slice() else {
+        panic!("two children: {:#?}", rows[0].children);
+    };
+    assert_eq!(superseded.what, "Assertion superseded");
+    assert_eq!(
+        superseded.why.as_deref(),
+        Some(
+            "The value it replaced was recorded before tree.ged was exported (2100-01-01 00:00), so the file's value replaced it."
+        )
+    );
+    assert_eq!(replacement.why, None, "the reason sits on the supersession, once");
+}
+
+#[test]
+fn a_run_with_no_export_date_gives_its_supersession_no_reason() {
+    let loc = Localizer::for_test("en");
+    let rows = collapse_history(&superseding_run(None), &loc);
+
+    assert_eq!(rows[0].children[1].why, None);
 }

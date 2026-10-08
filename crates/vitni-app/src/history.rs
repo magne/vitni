@@ -104,6 +104,9 @@ pub struct RunRef {
     pub records: Option<u32>,
     /// How to resume the run, when it is a bulk import that was abandoned (ADR 0040 §5).
     pub resume: Option<RunResume>,
+    /// The export date the run's file declared (RFC 3339), which is what let it supersede a value
+    /// recorded no later (ADR 0029 §1); `None` when the file carried none it could read.
+    pub file_asserted_at: Option<String>,
 }
 
 /// One entry in an aggregate's change log: a single event rendered for an audit timeline.
@@ -1053,6 +1056,7 @@ fn entry(event: &StoredEvent, header: &EnvelopeHeader, human_id: Option<String>,
             plugin: String::new(),
             records: None,
             resume: None,
+            file_asserted_at: None,
         }),
     }
 }
@@ -1101,6 +1105,7 @@ async fn label_runs(store: &Store, mut entries: Vec<ChangeLogEntry>) -> Result<V
         view.plugin().clone_into(&mut run.plugin);
         run.records = view.counts().records;
         run.resume = resumable.get(&run.id).cloned();
+        run.file_asserted_at = view.file_asserted_at().map(rfc3339);
     }
     Ok(entries)
 }
@@ -1452,7 +1457,12 @@ fn is_undoable(event_type: &str) -> bool {
 
 /// Reads the timestamp string from the parsed context (already RFC 3339).
 fn format_timestamp(context: &EventContext) -> String {
-    serde_json::to_value(context.occurred_at)
+    rfc3339(context.occurred_at)
+}
+
+/// A timestamp in its RFC 3339 wire form.
+fn rfc3339(at: Timestamp) -> String {
+    serde_json::to_value(at)
         .ok()
         .and_then(|v| v.as_str().map(ToOwned::to_owned))
         .unwrap_or_default()
@@ -1721,6 +1731,7 @@ mod tests {
             plugin: "gedcom-import".to_owned(),
             records: Some(7),
             resume: None,
+            file_asserted_at: None,
         }
     }
 

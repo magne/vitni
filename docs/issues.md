@@ -410,6 +410,12 @@ in its own area: research notes (*Notes & research notes*). The one gap running 
   interactive picker), and listed it in the Gate-2 exit criteria. `import.html` has no such view: the
   ADR 0029 supersede path is invisible in the mockups, so there is no agreed design for showing a user
   that an import overwrote one of their values. — #534
+- **An import's sex assertion names no run.** `import_assert_sex` (`crates/vitni-app/src/import.rs`)
+  asserts and supersedes `Person.sex` with the plugin host's provenance, which carries no record origin,
+  unlike every field the origin gate writes. So History cannot fold the change into its run's row, and a
+  re-import that supersedes a sex reads as a bare software-agent "Sex asserted" with no derived reason
+  (ADR 0049). *Shape:* give the sex path the record origin the gate's writes carry. *Exit:* a superseding
+  re-import's sex change sits in its run's History row with the reason.
 - **An unreadable file export date is ignored without notice** — ADR 0029 §3 makes an unparseable date
   additive-only, but nothing says it applied, so a re-import of a newer file updates nothing unseen.
   `begin_run` in `crates/vitni-plugin-host/src/staging.rs` drops a date that fails

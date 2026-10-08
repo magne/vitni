@@ -1848,6 +1848,18 @@ impl Localizer {
         fl!(self.loader, "history-import-run-changes", count = i64::from(count))
     }
 
+    /// Why an import run superseded a value: its file, exported at `date` (already formatted), was no
+    /// older than the value it replaced (ADR 0029 §1, ADR 0049).
+    #[must_use]
+    pub fn import_superseded_why(&self, source: &str, date: &str) -> String {
+        fl!(
+            self.loader,
+            "history-import-superseded-why",
+            source = source,
+            date = date
+        )
+    }
+
     /// The localized verb phrase for an event type — one per variant across the 12 aggregates.
     ///
     /// An unrecognized type falls back to a generic "recorded a change"; the `change_summary_covers_*`

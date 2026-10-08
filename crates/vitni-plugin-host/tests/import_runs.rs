@@ -572,6 +572,31 @@ async fn a_changed_date_supersedes_the_imported_one_only_when_the_file_is_newer(
         .filter(|(kind, event_type, _)| kind == "event" && event_type == "AssertionSuperseded")
         .count();
     assert_eq!(superseded, 1, "the imported date was superseded, not overwritten");
+
+    // The birth's History says why (ADR 0049): its newest row is the newer run, folding the
+    // supersession, and the run carries the export date that let it supersede.
+    let events = workspace.store().list_events().await.expect("events");
+    let birth = events
+        .iter()
+        .find(|event| event.event_type() == Some(&vitni_core::enums::EventType::Birth))
+        .and_then(|event| event.human_id())
+        .expect("the birth has an id")
+        .to_string();
+    let rows = vitni_app::group_runs(&vitni_app::change_log_for_event(&workspace, &birth).await.expect("log"));
+    let Some(vitni_app::ActivityDetail::ImportRun { run, children, .. }) = &rows[0].detail else {
+        panic!("the newest History row is the newer run: {:#?}", rows[0]);
+    };
+    assert!(
+        children.iter().any(|child| child.event_type == "AssertionSuperseded"),
+        "the run row folds the supersession: {children:#?}"
+    );
+    assert!(
+        run.file_asserted_at
+            .as_deref()
+            .is_some_and(|at| at.starts_with("2100-01-01")),
+        "the run row carries the file's export date: {:?}",
+        run.file_asserted_at
+    );
 }
 
 /// Cancels a bulk import at the commit's first progress report past its start.

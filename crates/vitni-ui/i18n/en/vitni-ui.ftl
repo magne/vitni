@@ -188,6 +188,9 @@ history-import-run-done = finished
 history-import-run-running = running
 history-import-run-resume = Resume
 history-import-run-resume-aria = Resume the import from { $source }
+# Why an import superseded a value (ADR 0049): the run's file declared an export date no earlier than
+# when the value it replaced was recorded (ADR 0029 §1). Shown on the supersession inside a run row.
+history-import-superseded-why = The value it replaced was recorded before { $source } was exported ({ $date }), so the file's value replaced it.
 
 # Change-log operator line
 history-operator-human = { $name } · { $confidence }
