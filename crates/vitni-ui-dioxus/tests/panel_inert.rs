@@ -261,3 +261,21 @@ fn a_shell_with_no_panel_open_is_fully_interactive() {
         "no region is inert while no panel is open:\n{html}"
     );
 }
+
+/// `cargo xtask gui-pass` scopes its targets by these hooks (its probe reports every `data-hook`): an
+/// Explorer row, a record tab and a header action are named within them rather than by window pixels.
+#[test]
+fn the_shell_carries_the_gui_pass_probe_hooks() {
+    let shell = render(shell_without_panel);
+    for hook in ["explorer", "record-tabs"] {
+        assert!(
+            shell.contains(&format!(r#"data-hook="{hook}""#)),
+            "the shell carries data-hook={hook}:\n{shell}"
+        );
+    }
+    let pane = render_twice(pane_with_panel_closed);
+    assert!(
+        pane.contains(r#"data-hook="detail-head""#),
+        "the record header carries data-hook=detail-head:\n{pane}"
+    );
+}

@@ -1,6 +1,6 @@
 //! The harness side of the GUI's probe: a debug build started with [`PROBE_VAR`] set serves
 //! `GET /elements` on that loopback address (`vitni-ui-dioxus`, `shell/gui_probe.rs`), answering with a
-//! [`Snapshot`] of every element that carries an `id` or a `data-hook`.
+//! [`Snapshot`] of every element that carries an `id`, a `data-hook` or an ARIA role.
 //!
 //! The probe only observes. Every input a scenario sends still reaches the GUI as a real X event from
 //! `xdotool`; nothing here clicks, types, scrolls or focuses through the page.
@@ -75,7 +75,7 @@ fn body(response: &str) -> Result<&str> {
     };
     let status = head.lines().next().unwrap_or_default();
     if status.split_whitespace().nth(1) != Some("200") {
-        bail!("the GUI probe answered {status:?}");
+        bail!("the GUI probe answered {status:?}: {body}");
     }
     Ok(body)
 }
@@ -127,8 +127,10 @@ mod tests {
 
     #[test]
     fn a_status_other_than_200_is_an_error_quoting_it() {
-        let error = body("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n").expect_err("404");
-        assert!(format!("{error:#}").contains("404 Not Found"), "{error:#}");
+        let error = body("HTTP/1.1 503 Service Unavailable\r\n\r\n{\"error\": \"timed out\"}").expect_err("503");
+        let error = format!("{error:#}");
+        assert!(error.contains("503 Service Unavailable"), "{error}");
+        assert!(error.contains("timed out"), "the probe's own reason is quoted: {error}");
     }
 
     #[test]

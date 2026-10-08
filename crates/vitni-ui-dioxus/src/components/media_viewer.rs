@@ -424,7 +424,7 @@ fn crop_overlay(tools: Option<&MediaCropTools>, state: CropGrips) -> Element {
             onpointerup: move |_| drag.set(None),
         }
         if let Some(rect) = region() {
-            div { class: "crop-rect", style: rect_css(&rect),
+            div { class: "crop-rect", "data-hook": "crop-rect", style: rect_css(&rect),
                 {crop_handle(CropCorner::NorthWest, &labels, state)}
                 {crop_handle(CropCorner::NorthEast, &labels, state)}
                 {crop_handle(CropCorner::SouthWest, &labels, state)}
@@ -491,9 +491,10 @@ pub fn MediaViewer(
                     onclick: move |_| onclose.call(()),
                 }
             }
-            div { class: "mv-canvas",
+            div { class: "mv-canvas", "data-hook": "media-canvas",
                 div {
                     class: zoom().frame_class(),
+                    "data-hook": "media-frame",
                     // The crop overlay's coordinate space, observed rather than measured: the frame's
                     // box changes when the image lays out and again on every zoom step, and a
                     // `ResizeObserver` reports each change as it happens. `get_client_rect()` could

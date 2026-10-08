@@ -1,7 +1,7 @@
 //! The `gui-pass` probe: a debug build started with [`PROBE_VAR`] set serves `GET /elements` on that
-//! loopback address, answering with every element that carries an `id` or a `data-hook` — its rect,
-//! text, `aria-label` and the ids and hooks of its ancestors — plus whether the page is ready and
-//! focused. `cargo xtask gui-pass` resolves a scenario's targets over that list, so its scenarios name
+//! loopback address, answering with every element that carries an `id`, a `data-hook` or an ARIA role
+//! (explicit, or implied by its tag) — its rect, text, `aria-label` and the ids, hooks and roles of its
+//! ancestors — plus whether the page is ready and focused. `cargo xtask gui-pass` resolves a scenario's targets over that list, so its scenarios name
 //! elements instead of window pixels.
 //!
 //! The probe only **observes**. It never dispatches an event, sets a value, scrolls or moves focus:
@@ -53,18 +53,40 @@ fn response(status: &str, body: &str) -> String {
 #[cfg(feature = "desktop")]
 const SNAPSHOT: &str = r"
 const collapse = (text) => (text || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+const hook = (el) => (el.dataset && el.dataset.hook) || null;
+const role = (el) => {
+    const explicit = el.getAttribute('role');
+    if (explicit) return explicit;
+    switch (el.tagName) {
+        case 'BUTTON': case 'SUMMARY': return 'button';
+        case 'A': return el.hasAttribute('href') ? 'link' : null;
+        case 'SELECT': return 'combobox';
+        case 'TEXTAREA': return 'textbox';
+        case 'INPUT': {
+            const kind = el.type;
+            if (kind === 'checkbox' || kind === 'radio') return kind;
+            if (kind === 'range') return 'slider';
+            if (kind === 'button' || kind === 'submit' || kind === 'reset') return 'button';
+            return kind === 'hidden' ? null : 'textbox';
+        }
+        default: return null;
+    }
+};
 const elements = [];
-for (const el of document.querySelectorAll('[id], [data-hook]')) {
+const targets = '[id], [data-hook], [role], button, a[href], input, select, textarea, summary';
+for (const el of document.querySelectorAll(targets)) {
     const rect = el.getBoundingClientRect();
     if (rect.width === 0 && rect.height === 0) continue;
     const within = [];
     for (let up = el.parentElement; up; up = up.parentElement) {
         if (up.id) within.push(up.id);
-        if (up.dataset && up.dataset.hook) within.push(up.dataset.hook);
+        if (hook(up)) within.push(hook(up));
+        if (up.getAttribute('role')) within.push(up.getAttribute('role'));
     }
     elements.push({
         id: el.id || null,
-        hook: (el.dataset && el.dataset.hook) || null,
+        hook: hook(el),
+        role: role(el),
         text: collapse(el.innerText),
         label: collapse(el.getAttribute('aria-label') || el.getAttribute('title')),
         rect: [rect.x, rect.y, rect.width, rect.height],
@@ -75,7 +97,7 @@ const active = document.activeElement;
 return {
     ready: document.readyState === 'complete' && document.querySelector('.app') !== null,
     focused: document.hasFocus(),
-    active: active ? (active.id || (active.dataset && active.dataset.hook) || null) : null,
+    active: active ? (active.id || hook(active) || null) : null,
     viewport: [window.innerWidth, window.innerHeight],
     elements,
 };

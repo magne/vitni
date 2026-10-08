@@ -37,6 +37,7 @@ pub fn RecordTabstrip() -> Element {
     rsx! {
         div {
             class: "tabstrip",
+            "data-hook": "record-tabs",
             role: "tablist",
             aria_label: "{chrome.0.aria_open_records()}",
             inert: behind_panel,

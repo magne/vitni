@@ -3,10 +3,11 @@
 //!
 //! A scenario never spells a window pixel. A step's `at`/`from` is a [`Point`] — an element and, for a
 //! canvas, an offset into it — and an assertion's `region` is an [`Area`]. Both name the element by its
-//! DOM `id` or its `data-hook` attribute, optionally narrowed by visible `text`, an enclosing `within`
-//! element, and an `index` among what is left (see [`Matcher`]). The GUI's probe (see
-//! [`super::probe`]) reports every element carrying either attribute, and resolution is this module's
-//! pure functions over that list, so a layout change moves the coordinates without touching a scenario.
+//! DOM `id`, its `data-hook` attribute or its ARIA `role` (a button by its visible text, as a user
+//! finds it), optionally narrowed by `text`, an enclosing `within` element, and an `index` among what
+//! is left (see [`Matcher`]). The GUI's probe (see [`super::probe`]) reports every such element, and
+//! resolution is this module's pure functions over that list, so a layout change moves the coordinates
+//! without touching a scenario.
 
 use std::fmt;
 
@@ -19,6 +20,9 @@ pub struct Element {
     pub id: Option<String>,
     /// The element's `data-hook` attribute, if it has one.
     pub hook: Option<String>,
+    /// Its ARIA role: the `role` attribute, else the one its tag implies (`button`, `link`, `textbox`…).
+    #[serde(default)]
+    pub role: Option<String>,
     /// Its rendered text, whitespace collapsed and truncated by the probe.
     #[serde(default)]
     pub text: String,
@@ -27,7 +31,7 @@ pub struct Element {
     pub label: String,
     /// `[x, y, width, height]`.
     pub rect: [f64; 4],
-    /// The ids and hooks of its ancestors, nearest first.
+    /// The ids, hooks and `role` attributes of its ancestors, nearest first.
     #[serde(default)]
     pub within: Vec<String>,
 }
@@ -71,15 +75,17 @@ pub enum By {
     Id(String),
     /// A `data-hook` attribute value.
     Hook(String),
+    /// An ARIA role, explicit or implied by the tag.
+    Role(String),
 }
 
-/// The element a target names: an `id` or a `hook`, narrowed by `text`, `within` and `index`.
+/// The element a target names: an `id`, a `hook` or a `role`, narrowed by `text`, `within` and `index`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Matcher {
     pub by: By,
     /// A substring of the element's text or `aria-label`.
     pub text: Option<String>,
-    /// An `id` or hook one of the element's ancestors carries.
+    /// An `id`, hook or `role` attribute one of the element's ancestors carries.
     pub within: Option<String>,
     /// Which match to take, from 0 in document order, when more than one is left.
     pub index: Option<usize>,
@@ -90,6 +96,7 @@ impl fmt::Display for Matcher {
         match &self.by {
             By::Id(id) => write!(f, "{{id = {id:?}")?,
             By::Hook(hook) => write!(f, "{{hook = {hook:?}")?,
+            By::Role(role) => write!(f, "{{role = {role:?}")?,
         }
         if let Some(text) = &self.text {
             write!(f, ", text = {text:?}")?;
@@ -127,6 +134,7 @@ pub struct Area {
 struct RawPoint {
     id: Option<String>,
     hook: Option<String>,
+    role: Option<String>,
     text: Option<String>,
     within: Option<String>,
     index: Option<usize>,
@@ -139,6 +147,7 @@ struct RawPoint {
 struct RawArea {
     id: Option<String>,
     hook: Option<String>,
+    role: Option<String>,
     text: Option<String>,
     within: Option<String>,
     index: Option<usize>,
@@ -150,7 +159,7 @@ impl TryFrom<RawPoint> for Point {
     type Error = String;
 
     fn try_from(raw: RawPoint) -> Result<Self, String> {
-        let by = by(raw.id, raw.hook)?;
+        let by = by(raw.id, raw.hook, raw.role)?;
         let matcher = Matcher {
             by,
             text: raw.text,
@@ -168,7 +177,7 @@ impl TryFrom<RawArea> for Area {
     type Error = String;
 
     fn try_from(raw: RawArea) -> Result<Self, String> {
-        let by = by(raw.id, raw.hook)?;
+        let by = by(raw.id, raw.hook, raw.role)?;
         let matcher = Matcher {
             by,
             text: raw.text,
@@ -183,13 +192,13 @@ impl TryFrom<RawArea> for Area {
     }
 }
 
-/// Exactly one of `id` and `hook`.
-fn by(id: Option<String>, hook: Option<String>) -> Result<By, String> {
-    match (id, hook) {
-        (Some(id), None) => Ok(By::Id(id)),
-        (None, Some(hook)) => Ok(By::Hook(hook)),
-        (Some(_), Some(_)) => Err("a target names its element by `id` or by `hook`, not both".to_owned()),
-        (None, None) => Err("a target needs an `id` or a `hook`".to_owned()),
+/// Exactly one of `id`, `hook` and `role`.
+fn by(id: Option<String>, hook: Option<String>, role: Option<String>) -> Result<By, String> {
+    match (id, hook, role) {
+        (Some(id), None, None) => Ok(By::Id(id)),
+        (None, Some(hook), None) => Ok(By::Hook(hook)),
+        (None, None, Some(role)) => Ok(By::Role(role)),
+        _ => Err("a target names its element by exactly one of `id`, `hook` and `role`".to_owned()),
     }
 }
 
@@ -205,6 +214,7 @@ pub fn find<'a>(matcher: &Matcher, elements: &'a [Element]) -> Result<&'a Elemen
         let carries = match &matcher.by {
             By::Id(id) => element.id.as_deref() == Some(id.as_str()),
             By::Hook(hook) => element.hook.as_deref() == Some(hook.as_str()),
+            By::Role(role) => element.role.as_deref() == Some(role.as_str()),
         };
         if carries {
             named.push(element);
@@ -250,7 +260,7 @@ fn narrowed(matcher: &Matcher, element: &Element) -> bool {
 /// How a failure lists the elements it chose among.
 fn listing(elements: &[&Element]) -> String {
     if elements.is_empty() {
-        return "the probe reported no element with that id or hook".to_owned();
+        return "the probe reported no element with that id, hook or role".to_owned();
     }
     let mut seen = Vec::new();
     for element in elements {
@@ -360,6 +370,7 @@ mod tests {
             label: String::new(),
             rect,
             within: Vec::new(),
+            role: None,
         }
     }
 
@@ -426,9 +437,35 @@ mod tests {
     }
 
     #[test]
-    fn a_point_names_exactly_one_of_id_and_hook() {
-        assert!(parse_error(r#"at = { id = "a", hook = "b" }"#).contains("not both"));
-        assert!(parse_error(r#"at = { text = "Save" }"#).contains("needs an `id` or a `hook`"));
+    fn a_point_names_exactly_one_of_id_hook_and_role() {
+        assert!(parse_error(r#"at = { id = "a", hook = "b" }"#).contains("exactly one"));
+        assert!(parse_error(r#"at = { hook = "a", role = "button" }"#).contains("exactly one"));
+        assert!(parse_error(r#"at = { text = "Save" }"#).contains("exactly one"));
+    }
+
+    #[test]
+    fn a_role_finds_an_element_by_its_aria_role_and_text() {
+        let mut save = element(None, None, "Save", [1729.0, 139.0, 51.0, 24.0]);
+        save.role = Some("button".to_owned());
+        let mut cancel = element(None, None, "Cancel", [1657.0, 139.0, 60.0, 24.0]);
+        cancel.role = Some("button".to_owned());
+        let elements = vec![cancel, save];
+        let target = point(r#"at = { role = "button", text = "Save" }"#);
+        assert_eq!(target.matcher.by, By::Role("button".to_owned()));
+        assert_eq!(resolve_point(&target, &elements, WINDOW), Ok([1755, 151]));
+        assert!(target.matcher.to_string().contains("role = \"button\""));
+    }
+
+    #[test]
+    fn within_also_names_an_ancestors_role() {
+        let mut dialog = element(None, None, "Save", [1000.0, 300.0, 60.0, 24.0]);
+        dialog.role = Some("button".to_owned());
+        dialog.within = vec!["dialog".to_owned()];
+        let mut header = element(None, None, "Save", [1729.0, 139.0, 51.0, 24.0]);
+        header.role = Some("button".to_owned());
+        let elements = vec![header, dialog];
+        let target = point(r#"at = { role = "button", text = "Save", within = "dialog" }"#);
+        assert_eq!(resolve_point(&target, &elements, WINDOW), Ok([1030, 312]));
     }
 
     #[test]

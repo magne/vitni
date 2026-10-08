@@ -578,7 +578,7 @@ pub fn record_enum_select<T: PartialEq>(
 /// Save); pass an empty `rsx! {}` for a form that still carries its actions below the fields.
 pub fn create_record_header(title: &str, draft_badge: &str, actions: Element) -> Element {
     rsx! {
-        div { class: "detail-head",
+        div { class: "detail-head", "data-hook": "detail-head",
             div { class: "detail-id",
                 h1 { class: "detail-title", "{title}" }
                 div { class: "wrap", style: "margin-top:8px",

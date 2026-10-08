@@ -395,3 +395,16 @@ fn save_dialog_renders_fields_and_live_path_preview() {
     );
     assert!(html.contains("Add to library"), "save action: {html}");
 }
+
+/// `cargo xtask gui-pass` names the viewer's canvas, image frame and crop rectangle by these hooks
+/// (its probe reports every `data-hook`), so a crop drag is an offset into the frame, not a pixel.
+#[test]
+fn the_viewer_carries_the_gui_pass_probe_hooks() {
+    let html = render(viewer_view);
+    for hook in ["media-canvas", "media-frame", "crop-rect"] {
+        assert!(
+            html.contains(&format!(r#"data-hook="{hook}""#)),
+            "the viewer carries data-hook={hook}: {html}"
+        );
+    }
+}
