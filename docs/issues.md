@@ -670,6 +670,10 @@ The `area/docs` label already existed with no `###` home; this is it.
   hold focus (today proved indirectly, by a focus ring's RMSE), and a `present`/`absent` assertion for an
   element such as a toast (today an RMSE over the area it occupies, with a tolerance tuned per scenario).
   Both are additive `Assertion` kinds over the snapshot the harness already saves beside each shot.
+  Target resolution has a matching gap: the probe skips only zero-size elements, so an element
+  scrolled out of an overflow container, covered by an overlay, or inert behind a panel still resolves,
+  and the click lands on whatever is drawn there. Reporting whether `document.elementFromPoint` at the
+  resolved point is the element (or inside it) would let the harness refuse a covered target. — #539
 - **`main` is protected without required status checks, and that is a choice.** `ci.yml` filters
   `docs/**`, `*.md` and `LICENSE*` out of its triggers, so a documentation-only pull request starts no
   run at all — a required context would sit unfulfilled forever on exactly the changes this repository
