@@ -1,11 +1,11 @@
 # Issue tracking on GitHub
 
-- **Status:** **Applied 2026-07-27; updated 2026-10-04**: the unfiled `0.9` and `0.10` bullets filed
-  (2026-10-01: `0.9.1 — Fixture provenance` landed; 2026-09-30: that milestone; 2026-09-27: the `0.10` milestone and two area labels). 42 labels and the
+- **Status:** **Applied 2026-07-27; updated 2026-10-08**: a second `0.9` and `0.10` grooming pass
+  (2026-10-04: the unfiled `0.9` and `0.10` bullets filed; 2026-10-01: `0.9.1 — Fixture provenance` landed; 2026-09-30: that milestone; 2026-09-27: the `0.10` milestone and two area labels). 42 labels and the
   issue-template forms exist, alongside `.github/labels.toml` and `cargo xtask issue-sync`. `0.8 — UI
   parity` and `0.9.1 — Fixture provenance` shipped; the three remaining gates are `0.9`, `0.10` and
   `1.0`.
-- **Date:** 2026-07-27 (updated 2026-10-04)
+- **Date:** 2026-07-27 (updated 2026-10-08)
 - **Audience:** anyone filing, triaging, or closing an issue
 - **Companion:** [`issues.md`](issues.md) is the backlog this describes; [`roadmap.md`](roadmap.md)
   owns phase detail.
@@ -193,7 +193,7 @@ arithmetic.
 The remaining pre-1.0 gates, itemized from `issues.md` as they stand. Each is small enough to groom,
 which is the point of filing only what is being worked on.
 
-### `0.9 — UI stabilization` (6 open)
+### `0.9 — UI stabilization` (8 open)
 
 Ordered by severity, not area. **This milestone is deliberately open-ended, and the 2026-08-12
 walkthrough is the proof.** Every issue in the previous round closed, leaving the milestone empty — and
@@ -214,6 +214,12 @@ flakes that make every scenario's first assertion unreliable.
 | [The mockup sheet is only partly the superset it is documented to be](https://github.com/magne/vitni/issues/502) | 24 app rules have no mockup counterpart and nothing gates the sheet as a whole; needs a decided rule first |
 | [Fast typing can lose characters in record text fields](https://github.com/magne/vitni/issues/382) | Typed text silently differs from what was entered; unconfirmed outside Xvfb |
 | [`gui-pass` occasionally grabs a blank first shot](https://github.com/magne/vitni/issues/503) | The harness that tests this milestone's class of defect is flaky at its first assertion |
+| [`gui-pass` steps address elements by window pixels, not by id](https://github.com/magne/vitni/issues/533) | Every layout change this milestone makes breaks unrelated scenarios until their pixels are re-read |
+| [No merge/conflict mockup for reconciled fields](https://github.com/magne/vitni/issues/534) | No agreed design shows a user that an import overwrote one of their values; needs a design first |
+
+**Added 2026-10-08.** #533 and #534 come from the second grooming pass. #533 is tooling, here on the
+vehicle rule like #322: the walkthroughs that refill this milestone move the layout, and each move
+re-calibrates scenarios that test something else.
 
 The 2026-08-12 round, closed except #424:
 
@@ -255,7 +261,7 @@ a hit-test bug (#285), the map needs a repaint rather than a resize (#252), and 
 ever blanked the canvas. The code changes themselves are in the PRs and the commit log, which is where
 §6 says they belong.
 
-### `0.10 — Record matching` (12 open)
+### `0.10 — Record matching` (6 open)
 
 Ordered by dependency, not severity. Backup goes first, so every later event change passes its
 fixture guard. Then come the origins, and the xref-collision bug with them, because its fix *is* the
@@ -308,6 +314,23 @@ the ADR 0044 replace commit a workspace with records missing.
 | [Gramps `<header created>` is never threaded to `begin-run`](https://github.com/magne/vitni/issues/497) | bulk | A Gramps re-import gets no timestamp gating |
 | [Source merge/sync reconciliation prerequisite](https://github.com/magne/vitni/issues/498) | bulk | A re-import cannot reconcile a source's bibliographic fields |
 | [Place merge/sync reconciliation prerequisite](https://github.com/magne/vitni/issues/499) | bulk | A re-import cannot reconcile a place's fields |
+
+All 16 are closed.
+
+**Residuals (filed 2026-10-08).** The second pass. #528 and #529 are ADR 0029 reconciliation again: a
+re-import that silently updates nothing, and a boundary no test pins. #537 is #499's follow-up — round-trip
+gaps carry no milestone (§3), but this one decides whether a Gramps re-import can reconcile a place's code.
+#535 is a regression of #486's fix, and #536 is #490's window on every projection. #525 makes the
+`matches-*` scenarios unreliable, and may be pairs lost from the projection.
+
+| Item | Area | Why it gates |
+| --- | --- | --- |
+| [An unreadable event stops the workspace opening](https://github.com/magne/vitni/issues/535) | cross-aggregate | One bad payload locks the user out, with no export or restore and an error naming no event |
+| [A projection is written after the event commit](https://github.com/magne/vitni/issues/536) | cross-aggregate | A kill between the two leaves records stale until `vitni rebuild` |
+| [The Matches table sometimes lacks the fixture's media pair in `gui-pass`](https://github.com/magne/vitni/issues/525) | matching | Either the projection can lose pairs for good, or the matching scenarios are flaky |
+| [An unreadable file export date is ignored without notice](https://github.com/magne/vitni/issues/528) | bulk | A re-import of a newer file updates nothing, unseen |
+| [No test covers an export date equal to the live value's time](https://github.com/magne/vitni/issues/529) | bulk | Flipping the "at least as recent" boundary stays green |
+| [Gramps `<placeobj><code>` is not read](https://github.com/magne/vitni/issues/537) | round-trip | A Gramps re-import cannot reconcile a place's code |
 
 ### Not in any milestone
 

@@ -153,7 +153,7 @@ long-standing "DNA match views in the UI" item is closed.
   window and closes it with a write journal that the next open replays (`record_origins_pending`,
   `vitni-db/src/{sqlite,postgres}.rs`); a projection cannot reuse it as is, because its replay applies
   the events onto the stored view and would apply them twice. *Exit:* a test that kills a commit
-  between its events and its projection write finds the projection whole on the next open.
+  between its events and its projection write finds the projection whole on the next open. — #536
 - **An unreadable event stops the workspace opening** — since #486 a replay fails on an event it
   cannot read or upcast, and `open` replays in three places: the rebuild of a view table predating the
   `human_id` column, the `record_origins` backfill, and the catch-up of journalled writes
@@ -162,7 +162,7 @@ long-standing "DNA match views in the UI" item is closed.
   again. The error does not say which event: a corrupted person payload reads ``rebuilding projection
   person_view: person_view: missing field `assertion_id` ``. *Exit:* the error names the event (aggregate
   type, id, sequence), and a workspace with an unreadable event can still be opened to export or
-  restore a backup.
+  restore a backup. — #535
 
 ## Frontend & interaction
 
@@ -395,7 +395,7 @@ in its own area: research notes (*Notes & research notes*). The one gap running 
   in `docs/mockups/import.html` showing a reconciled field's audit trail (who/when/why, not an
   interactive picker), and listed it in the Gate-2 exit criteria. `import.html` has no such view: the
   ADR 0029 supersede path is invisible in the mockups, so there is no agreed design for showing a user
-  that an import overwrote one of their values.
+  that an import overwrote one of their values. — #534
 - **An unreadable file export date is ignored without notice** — ADR 0029 §3 makes an unparseable date
   additive-only, but nothing says it applied, so a re-import of a newer file updates nothing unseen.
   `begin_run` in `crates/vitni-plugin-host/src/staging.rs` drops a date that fails
@@ -489,7 +489,7 @@ does.
 - **Gramps `<placeobj><code>` is not read** — `vitni-gramps-xml` does not parse a place's code, so it
   never reaches the single-valued `SetCode` the origin gate would reconcile on re-import. GEDCOM has no
   equivalent. A place's dated names and enclosures need nothing more: neither format dates them, and
-  the gate's list-valued rules already add a new one and keep a retracted one out.
+  the gate's list-valued rules already add a new one and keep a retracted one out. — #537
 
 ### Plugin-UI vocabulary
 
@@ -648,6 +648,22 @@ The `area/docs` label already existed with no `###` home; this is it.
   both passed on an immediate re-run of the scenario alone, so the window was not yet focusable when the
   harness aimed at it. All three are the same missing capability: the harness waits a fixed time instead
   of waiting for the thing it is about to assert on — a paint, or a window that will take input. — #503
+- **`gui-pass` steps address elements by window pixels, so every layout change recalibrates the
+  scenarios.** `click`, `drag` and `wheel` take `at`/`from`, and assertions take `region`, all window
+  pixels read off a shot (`xtask/src/gui_pass.rs`, `Step` and `Assertion`); the 56 scenarios under
+  `crates/vitni-ui-dioxus/tests/gui-pass/` and `tests/screenshots/readme.toml` hold about 556 of them.
+  Moving the rail or a toolbar breaks scenarios that test something else, and the fix is re-reading
+  pixels by column scan. *Shape:* a step names a target — a DOM `id`, or a test-hook attribute where no
+  id exists, with an optional text match or index for list rows and an optional offset — and the
+  harness resolves it to the element's window rect at run time. Candidate mechanism: an env-gated probe
+  in `vitni-ui-dioxus` that, only when `gui-pass` launches the GUI, reports element rects through
+  `document::eval` to a file the harness reads after each settle. Alternatives to rule out first: AT-SPI
+  (needs an accessibility bus on the Xvfb display, and exposes accessible names, not ids) and WebDriver
+  (wry does not enable WebKit's automation mode). Canvas points stay coordinates, relative to the canvas
+  element's rect. The same probe can tell the harness an element is present, which is the wait #503 is
+  missing. *Exit:* `at`, `from` and `region` accept a target; an unresolved target fails naming the
+  target and the scenario; every non-canvas coordinate in the scenarios is converted; CLAUDE.md
+  *Testing the GUI* and `docs/development.md` describe targets first. — #533
 - **`main` is protected without required status checks, and that is a choice.** `ci.yml` filters
   `docs/**`, `*.md` and `LICENSE*` out of its triggers, so a documentation-only pull request starts no
   run at all — a required context would sit unfulfilled forever on exactly the changes this repository
