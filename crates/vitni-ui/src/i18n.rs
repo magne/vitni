@@ -1848,7 +1848,7 @@ impl Localizer {
         fl!(self.loader, "history-import-run-changes", count = i64::from(count))
     }
 
-    /// Why an import run superseded a value: its file, exported at `date` (already formatted), was no
+    /// Why an import run superseded a value: its file, exported on `date` (already formatted), was no
     /// older than the value it replaced (ADR 0029 §1, ADR 0049).
     #[must_use]
     pub fn import_superseded_why(&self, source: &str, date: &str) -> String {

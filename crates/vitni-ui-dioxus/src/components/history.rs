@@ -51,14 +51,17 @@ pub fn HistoryTimeline(
 ) -> Element {
     rsx! {
         div { class: "timeline",
-            for entry in entries {
-                HistoryItem { key: "{entry.assertion_id}", entry, onundo }
+            for (index, entry) in entries.into_iter().enumerate() {
+                HistoryItem { key: "{index}-{entry.assertion_id}", entry, onundo }
             }
         }
     }
 }
 
 /// One timeline row; an import-run row also owns whether its changes are shown.
+///
+/// Keyed by position as well as assertion: a supersession and its replacement are one command, so
+/// they share an `assertion_id`, and keyed siblings must be unique.
 #[component]
 fn HistoryItem(entry: HistoryEntry, onundo: EventHandler<String>) -> Element {
     let mut open = use_signal(|| false);
@@ -105,8 +108,8 @@ fn HistoryItem(entry: HistoryEntry, onundo: EventHandler<String>) -> Element {
             }
             if let Some(changes) = entry.changes.as_ref().filter(|_| open()) {
                 div { class: "timeline tl-children", "data-hook": "run-changes",
-                    for change in changes.entries.iter().cloned() {
-                        HistoryItem { key: "{change.assertion_id}", entry: change, onundo }
+                    for (index, change) in changes.entries.iter().cloned().enumerate() {
+                        HistoryItem { key: "{index}-{change.assertion_id}", entry: change, onundo }
                     }
                 }
             }

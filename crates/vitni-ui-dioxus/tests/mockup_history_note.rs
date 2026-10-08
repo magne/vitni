@@ -22,12 +22,14 @@ fn mockups_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../docs/mockups")
 }
 
-/// The text of the first `.section-note` inside the page's History pane, tags stripped and
-/// whitespace collapsed; `None` when the page has no History pane.
+/// The text of the first `.section-note` inside the page's History pane (up to the next pane), tags
+/// stripped and whitespace collapsed; `None` when the page has no History pane or the pane no note.
 fn history_note(html: &str) -> Option<String> {
-    let pane = html.find("data-pane=\"history\"")?;
+    let pane = html.find("data-pane=\"history\"")? + "data-pane=\"history\"".len();
     let rest = &html[pane..];
-    let open = rest.find("class=\"section-note\">")? + "class=\"section-note\">".len();
+    let rest = &rest[..rest.find("data-pane=").unwrap_or(rest.len())];
+    let note = rest.find("class=\"section-note")?;
+    let open = note + rest[note..].find('>')? + 1;
     let close = rest[open..].find("</div>")?;
     let mut text = String::new();
     let mut in_tag = false;

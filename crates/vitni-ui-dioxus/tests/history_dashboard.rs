@@ -89,7 +89,7 @@ fn run_with_changes() -> Element {
                     label: "What it changed".to_owned(),
                     entries: vec![
                         child("Sex asserted", None),
-                        child("Assertion superseded", Some("The value it replaced was recorded before tree.ged was exported.")),
+                        child("Assertion superseded", Some("The value it replaced was recorded at or before the export of tree.ged (2026-06-21), so the file's value replaced it.")),
                     ],
                 }),
             }],

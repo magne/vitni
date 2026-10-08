@@ -67,7 +67,9 @@ fn superseded_why(entry: &ChangeLogEntry, loc: &Localizer) -> Option<String> {
     }
     let run = entry.run.as_ref()?;
     let exported = run.file_asserted_at.as_deref()?;
-    Some(loc.import_superseded_why(&run.source_label, &friendly_timestamp(exported)))
+    // A file's export date often carries no time of day, so the time the timestamp holds is not shown.
+    let day = exported.get(..10).unwrap_or(exported);
+    Some(loc.import_superseded_why(&run.source_label, day))
 }
 
 /// The muted text beside a run row: *interrupted* for a run that can be resumed, else the records it

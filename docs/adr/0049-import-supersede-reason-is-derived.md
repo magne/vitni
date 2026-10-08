@@ -32,7 +32,8 @@ date (`file_asserted_at`, ADR 0029 §2).
 
 2. **History derives the reason when it renders.** `RunRef` carries the run's `file_asserted_at`. The
    History tab gives an `AssertionSuperseded` entry that belongs to a run with a known export date a
-   localized reason: the value it replaced was recorded before the file was exported, so the file's
+   localized reason: the value it replaced was recorded at or before the file's export date (shown as a
+   day, since a file's date often has no time), so the file's
    value replaced it. A run whose file had no readable export date cannot supersede (ADR 0029 §3), and
    its entries get no reason.
 

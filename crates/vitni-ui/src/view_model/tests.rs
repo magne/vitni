@@ -1721,9 +1721,9 @@ fn superseding_run(file_asserted_at: Option<&str>) -> Vec<ChangeLogEntry> {
 }
 
 #[test]
-fn an_import_runs_supersession_says_the_file_was_exported_after_the_value_it_replaced() {
+fn an_import_runs_supersession_says_the_value_it_replaced_was_no_newer_than_the_file() {
     let loc = Localizer::for_test("en");
-    let rows = collapse_history(&superseding_run(Some("2100-01-01T00:00:00Z")), &loc);
+    let rows = collapse_history(&superseding_run(Some("2100-01-01T18:30:00Z")), &loc);
 
     assert_eq!(rows.len(), 1, "the run folds both entries: {rows:#?}");
     let [replacement, superseded] = rows[0].children.as_slice() else {
@@ -1733,7 +1733,7 @@ fn an_import_runs_supersession_says_the_file_was_exported_after_the_value_it_rep
     assert_eq!(
         superseded.why.as_deref(),
         Some(
-            "The value it replaced was recorded before tree.ged was exported (2100-01-01 00:00), so the file's value replaced it."
+            "The value it replaced was recorded at or before the export of tree.ged (2100-01-01), so the file's value replaced it."
         )
     );
     assert_eq!(replacement.why, None, "the reason sits on the supersession, once");

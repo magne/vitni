@@ -189,7 +189,7 @@ history-import-run-resume = Fortsett
 history-import-run-resume-aria = Fortsett importen fra { $source }
 # Hvorfor en import erstattet en verdi (ADR 0049): kjøringens fil oppga en eksportdato som ikke var
 # tidligere enn da verdien den erstattet ble registrert (ADR 0029 §1). Vises på erstatningen i en kjøringsrad.
-history-import-superseded-why = Verdien den erstattet ble registrert før { $source } ble eksportert ({ $date }), så filens verdi erstattet den.
+history-import-superseded-why = Verdien den erstattet ble registrert senest da { $source } ble eksportert ({ $date }), så filens verdi erstattet den.
 
 # Endringslogg-operatørlinje
 history-operator-human = { $name } · { $confidence }
