@@ -330,13 +330,15 @@ enum Assertion {
         element: Matcher,
         because: String,
     },
-    /// At least one element `element` names must be on screen (rendered, not zero-sized) at `shot`.
+    /// At least one element `element` names must be rendered at `shot`: in the DOM with a non-zero size.
+    /// The probe does not see `visibility`, opacity or scroll clipping, so this proves a mounted element,
+    /// not a visible one.
     Present {
         shot: String,
         element: Matcher,
         because: String,
     },
-    /// No element `element` names may be on screen at `shot`.
+    /// No element `element` names may be rendered at `shot` (see [`Self::Present`]).
     Absent {
         shot: String,
         element: Matcher,
@@ -1805,9 +1807,7 @@ fn check_one(
             region,
             min_deviation,
         } => {
-            let Some(path) = shot_path(taken, shots, shot) else {
-                bail!("gui-pass: assertion names a shot the script never took: {shot}");
-            };
+            let path = shot_path(taken, shots, shot)?;
             let region = measured(region.as_ref(), taken, shot, window)?;
             let deviation = standard_deviation(&path, region)?;
             let threshold = min_deviation.unwrap_or(MIN_STANDARD_DEVIATION);
@@ -1847,7 +1847,7 @@ fn check_one(
             let found = target::matching(element, elements);
             Ok((!found.is_empty()).then(|| {
                 format!(
-                    "{shot}: {element} is still on screen, {}: {because}",
+                    "{shot}: {element} is still rendered, {}: {because}",
                     target::listing(&found)
                 )
             }))
@@ -1869,10 +1869,15 @@ fn unfocused(element: &Matcher, snapshot: &Snapshot) -> Option<String> {
 
 /// The shot named `name`.
 fn taken_at<'a>(taken: &'a [Taken], name: &str) -> Result<&'a Taken> {
-    let Some(shot) = taken.iter().find(|shot| shot.name == name) else {
+    Ok(&taken[shot_index(taken, name)?])
+}
+
+/// Where in `taken` the shot named `name` is.
+fn shot_index(taken: &[Taken], name: &str) -> Result<usize> {
+    let Some(index) = taken.iter().position(|shot| shot.name == name) else {
         bail!("gui-pass: assertion names a shot the script never took: {name}");
     };
-    Ok(shot)
+    Ok(index)
 }
 
 /// The window rectangle an assertion's `region` covers, resolved over what the probe saw at the shot
@@ -1895,9 +1900,8 @@ fn compare(
     region: Option<[u32; 4]>,
 ) -> Result<(PathBuf, PathBuf, f64)> {
     let [left, right] = named;
-    let (Some(left), Some(right)) = (shot_path(taken, shots, left), shot_path(taken, shots, right)) else {
-        bail!("gui-pass: assertion names a shot the script never took: {left} / {right}");
-    };
+    let left = shot_path(taken, shots, left)?;
+    let right = shot_path(taken, shots, right)?;
     let difference = difference(&left, &right, region)?;
     Ok((left, right, difference))
 }
@@ -1931,9 +1935,8 @@ fn shot_file(shots: &Path, index: usize, name: &str) -> PathBuf {
 }
 
 /// The written path of the shot named `name`.
-fn shot_path(taken: &[Taken], shots: &Path, name: &str) -> Option<PathBuf> {
-    let index = taken.iter().position(|shot| shot.name == name)?;
-    Some(shot_file(shots, index + 1, name))
+fn shot_path(taken: &[Taken], shots: &Path, name: &str) -> Result<PathBuf> {
+    Ok(shot_file(shots, shot_index(taken, name)? + 1, name))
 }
 
 #[cfg(test)]

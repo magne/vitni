@@ -164,8 +164,8 @@ needs no rebuild. Each lists `[[step]]`s (`shot`, `click`, `key`, `text` to type
 and `[[assert]]`s over the shots by name: `differ` for "the UI reacted",
 `match` for "the UI came back to this state", both with an RMSE tolerance and an optional `region` to
 compare one element's area instead of the whole shot; `focus`, `present` and `absent` read the probe's
-snapshot at one shot instead of its pixels — the `element` named holds keyboard focus, is on screen, or
-is not; `manifest` checks the running worker's
+snapshot at one shot instead of its pixels — the `element` named holds keyboard focus, is rendered (mounted, non-zero size — not
+opacity or scroll clipping), or is not; `manifest` checks the running worker's
 `workspace/workspace.toml` on disk for a substring instead, proving a write reached disk rather than only
 an in-memory signal (unavailable under `--real-config`, whose workspace path is the caller's own).
 

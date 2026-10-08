@@ -407,8 +407,10 @@ pub fn resolve_point<'a>(
 /// Fails naming the element on top when something else covers the point — an overlay, a panel the
 /// element sits inert behind, or the edge of the container it is scrolled out of.
 pub fn uncovered(matcher: &Matcher, element: &Element, at: [i32; 2], hit: &Hit) -> Result<(), String> {
-    if hit.chain.iter().any(|reached| reached == element) {
-        return Ok(());
+    for reached in &hit.chain {
+        if same_node(reached, element) {
+            return Ok(());
+        }
     }
     let top = hit.top.as_deref().unwrap_or("nothing");
     let over = match hit.chain.first() {
@@ -417,6 +419,27 @@ pub fn uncovered(matcher: &Matcher, element: &Element, at: [i32; 2], hit: &Hit) 
     };
     Err(format!("{matcher} at {at:?} is covered by {over}"))
 }
+
+/// Whether `reached`, from a hit's chain, is the node `element` describes in an earlier snapshot.
+///
+/// Compared by name, ancestry and a rect within [`RECT_DRIFT`], not field for field: the hit is a
+/// second `eval`, and between the two an element's rect can move a pixel or its text tick over (a
+/// counter, a progress label), which would otherwise read as the element covering itself. The rect
+/// still has to agree, or a same-named sibling that slid under the point (the next rail item) would pass
+/// for the target.
+fn same_node(reached: &Element, element: &Element) -> bool {
+    let mut near = true;
+    for (a, b) in reached.rect.iter().zip(element.rect) {
+        near &= (a - b).abs() <= RECT_DRIFT;
+    }
+    near && reached.id == element.id
+        && reached.hook == element.hook
+        && reached.role == element.role
+        && reached.within == element.within
+}
+
+/// How far, in pixels, a rect may drift between a snapshot and a hit and still be the same element.
+const RECT_DRIFT: f64 = 2.0;
 
 /// The characters of an element's text [`brief`] keeps: enough to recognise a dialog or a toast, not
 /// the whole app a container's text runs to.
@@ -865,6 +888,31 @@ mod tests {
             uncovered(&matcher(By::Hook("rail-item".to_owned())), people, [115, 175], &inside),
             Ok(()),
             "a click on a descendant reaches the element"
+        );
+    }
+
+    #[test]
+    fn an_element_that_moved_or_retexted_between_the_two_probes_is_still_itself() {
+        let rail = rail();
+        let people = &rail[1];
+        let mut later = people.clone();
+        later.rect[1] += 1.0;
+        later.text = "People 3".to_owned();
+        later.active = true;
+        let on_it = hit("[data-hook=rail-item]", vec![later]);
+        assert_eq!(
+            uncovered(&matcher(By::Hook("rail-item".to_owned())), people, [115, 175], &on_it),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn a_same_named_sibling_under_the_point_is_not_the_target() {
+        let rail = rail();
+        let slid = hit("[data-hook=rail-item]", vec![rail[0].clone()]);
+        assert!(
+            uncovered(&matcher(By::Hook("rail-item".to_owned())), &rail[1], [115, 175], &slid).is_err(),
+            "the Dashboard item under People's point is not People"
         );
     }
 
