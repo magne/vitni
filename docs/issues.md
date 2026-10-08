@@ -296,7 +296,7 @@ Residuals from the shortcuts work (ADR 0030); see
   body`), and closing it with a scrim click strands focus the same way, so the scenario clicks the top
   bar after each close. It went unnoticed because the scenario's
   old pixel click on the scrim passed whether or not the palette had reopened; the scrim is now a
-  target, which fails when the palette is absent.
+  target, which fails when the palette is absent. — #541
 
 ### Pedigree & charts
 
