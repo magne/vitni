@@ -644,25 +644,6 @@ The `area/docs` label already existed with no `###` home; this is it.
   fixed that one page only — the other ten are a mechanical sweep, and worth doing in one pass so the
   mockups stop advertising something the product does not say. Nothing gates prose against the
   catalogue, which is why all eleven drifted together. — #501
-- **`gui-pass` occasionally grabs a blank first shot.** Once in roughly a dozen runs the first `shot` of
-  a scenario comes back uniform (`… is blank (standard deviation 0) — the webview painted nothing`) and
-  the run aborts, passing on a re-run with nothing changed. The startup handshake in
-  `xtask/src/gui_pass.rs` waits for the window to map and then settles once; a paint the harness can
-  actually observe (a shot that must not be blank, retried) would make it deterministic instead of
-  making the first assertion of every scenario flaky. A second flake class was observed on 2026-08-04:
-  `map-polygon` failed its "a second vertex must draw the ring's first segment" `differ` at RMSE 0.0000
-  during a full-suite run and passed on an immediate re-run of the same scenario — a draw that had not
-  reached the canvas within the 4 s settle. A third class was observed on 2026-08-20, twice in the same
-  full-suite run: `note-row-opens-record` aborted on `xdotool windowfocus <id> failed with exit status:
-  1`, and `overlay-dismiss` failed its first `differ` at RMSE 0.0000 because `⌘K` opened no palette —
-  both passed on an immediate re-run of the scenario alone, so the window was not yet focusable when the
-  harness aimed at it. All three are the same missing capability: the harness waits a fixed time instead
-  of waiting for the thing it is about to assert on — a paint, or a window that will take input. Since
-  #533 the harness waits for the GUI's probe to report the page ready before its focus click, and fails
-  unless the document then has keyboard focus, so the third class now either cannot happen or fails
-  naming the cause; a target that is not yet rendered is re-probed until it appears. The blank first
-  shot and the undrawn canvas remain: the probe reports elements, not paints — a map-idle flag
-  (`map.loaded() && !map.isMoving()`) beside the snapshot is the candidate for the second. — #503
 - **`gui-pass` assertions still measure pixels where the probe could answer directly.** Since #533 the
   GUI's probe (`crates/vitni-ui-dioxus/src/shell/gui_probe.rs`) reports every element's rect, role and
   text plus `document.activeElement`, but the assertions are still `differ`/`match`/`painted` over

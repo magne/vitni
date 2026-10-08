@@ -209,9 +209,11 @@ Writing one:
   window (the tabstrip on every Save) would otherwise mask or fake a `differ`/`match` result. A pair's
   region resolves at its first shot, so both shots are cropped to the same pixels.
 - **Steps settle on a quiet screen, not a fixed sleep.** Each input step waits until the window stops
-  changing for 600 ms (4 s at most), so steps are fast and a timed effect no longer expires between two
-  steps by accident. Most often that is a notice (the *Saved* toast lives 6 s, `NOTICE_TTL`). If a
-  `match` spans a Save, add a `wait` that outlasts the notice before the first shot.
+  changing for 600 ms and the probe reports every map idle (4 s at most), so steps are fast and a timed
+  effect no longer expires between two steps by accident. Most often that is a notice (the *Saved* toast
+  lives 6 s, `NOTICE_TTL`). If a `match` spans a Save, add a `wait` that outlasts the notice before the
+  first shot. A `shot` that grabs a flat colour is re-grabbed until it is painted, failing only at that
+  same 4 s cap.
 - **`text` types letters, digits, space and `-.,:/` only**, 40 ms apart in one `xdotool key` call
   (`xdotool type` drops characters on Xvfb). Keep per-character `key` steps where the point is a
   re-render *between* keystrokes (`restriction-edit`, `untag-reason` guard the reason field against being
