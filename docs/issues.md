@@ -91,8 +91,12 @@ none needs an event rewrite — and the first three are gated by an unwritten **
 
 ### Tags
 
-No open items. The area keeps its heading so `area/records/tags` stays a live label and the issues
-already filed against it keep resolving their [`#tags`](#tags) anchor.
+- **The Tag History tab says any entry can be undone.** A tag has no retraction, so its History tab
+  renders no undo control (`on_undo: None` in `crates/vitni-ui-dioxus/src/screens/tag.rs`), yet
+  `shared_tab` gives it the shared `history-note`, which ends "Any entry can be undone." `tag.html`
+  words its note honestly ("Tag history is display-only"), so `tests/mockup_history_note.rs` exempts it
+  by name. *Shape:* a Tag-specific History note key, the exemption dropped. *Exit:* the Tag History tab
+  and `tag.html` say the same thing.
 
 ### Media
 
@@ -635,15 +639,6 @@ The `area/docs` label already existed with no `###` home; this is it.
   not a diff someone reads once. One method trap for whoever writes that gate: comparing selector *text*
   produces false positives — six `.rail .nav-item*` rules read as missing until you notice the mockup
   groups each with `.subnav .nav-item`, so it has to compare selector atoms, not selector lists. — #502
-- **Ten mockups quote a History note no shipped string says.** `source.html`, `event.html`,
-  `citation.html`, `place.html`, `repository.html`, `person.html`, `dna-test.html`, `family.html`,
-  `dna-match.html` and `note.html` all carry "This audit trail comes for free from the event-sourced
-  core — no competitor offers it built-in" in their History tab's `.section-note`, while the shipped
-  `history-note` (`vitni-ui/i18n/en/vitni-ui.ftl:70`) says "an audit trail that comes free from the
-  event-sourced core" and makes no competitor claim. Found while auditing `media.html` for #309, which
-  fixed that one page only — the other ten are a mechanical sweep, and worth doing in one pass so the
-  mockups stop advertising something the product does not say. Nothing gates prose against the
-  catalogue, which is why all eleven drifted together. — #501
 - **`main` is protected without required status checks, and that is a choice.** `ci.yml` filters
   `docs/**`, `*.md` and `LICENSE*` out of its triggers, so a documentation-only pull request starts no
   run at all — a required context would sit unfulfilled forever on exactly the changes this repository
