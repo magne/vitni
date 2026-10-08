@@ -18,8 +18,9 @@ use super::target::Snapshot;
 pub const PROBE_VAR: &str = "VITNI_GUI_PROBE";
 
 /// How long one request may take, connecting and reading together. A snapshot is one `eval` in the
-/// webview; seconds means the GUI is wedged, not slow.
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
+/// webview; seconds means the GUI is wedged, not slow. Longer than the probe's own 5 s answer timeout,
+/// so its `503` naming why it gave up arrives before this side stops reading.
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(8);
 
 /// A loopback address no listener holds right now, for one worker's GUI to bind.
 ///

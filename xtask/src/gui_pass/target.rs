@@ -31,7 +31,7 @@ pub struct Element {
     pub label: String,
     /// `[x, y, width, height]`.
     pub rect: [f64; 4],
-    /// The ids, hooks and `role` attributes of its ancestors, nearest first.
+    /// The ids, hooks and roles (explicit or implied) of its ancestors, nearest first.
     #[serde(default)]
     pub within: Vec<String>,
 }
@@ -85,7 +85,7 @@ pub struct Matcher {
     pub by: By,
     /// A substring of the element's text or `aria-label`.
     pub text: Option<String>,
-    /// An `id`, hook or `role` attribute one of the element's ancestors carries.
+    /// An `id`, hook or role (explicit or implied) one of the element's ancestors carries.
     pub within: Option<String>,
     /// Which match to take, from 0 in document order, when more than one is left.
     pub index: Option<usize>,

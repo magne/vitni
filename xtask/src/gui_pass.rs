@@ -1471,8 +1471,12 @@ impl Window {
         xdotool(&self.display, &["mousemove", &x.to_string(), &y.to_string()])?;
         xdotool(&self.display, &["click", "1"])?;
         self.settle()?;
-        if !self.snapshot()?.focused {
-            bail!("gui-pass: the document has no keyboard focus after the focus click");
+        let started = Instant::now();
+        while !self.snapshot()?.focused {
+            if started.elapsed() >= SETTLE_CAP {
+                bail!("gui-pass: the document has no keyboard focus {SETTLE_CAP:?} after the focus click");
+            }
+            sleep(SETTLE_POLL);
         }
         Ok(())
     }
@@ -1484,11 +1488,16 @@ impl Window {
     }
 
     /// Runs `resolve` over fresh snapshots until it succeeds or [`SETTLE_CAP`] has passed, then fails
-    /// with its last reason.
+    /// with its last reason. A probe that fails to answer is retried the same way, since one `eval`
+    /// can fail while the app remounts.
     fn resolve<T>(&self, resolve: impl Fn(&[Element]) -> Result<T, String>) -> Result<T> {
         let started = Instant::now();
         loop {
-            match resolve(&self.snapshot()?.elements) {
+            let outcome = match self.snapshot() {
+                Ok(snapshot) => resolve(&snapshot.elements),
+                Err(error) => Err(format!("{error:#}")),
+            };
+            match outcome {
                 Ok(resolved) => return Ok(resolved),
                 Err(reason) if started.elapsed() >= SETTLE_CAP => bail!("gui-pass: {reason}"),
                 Err(_) => sleep(SETTLE_POLL),

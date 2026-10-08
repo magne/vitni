@@ -1702,8 +1702,8 @@ impl Chrome {
         fl!(self.loader, "merge-compare")
     }
 
-    /// The accessible name of a duplicates-table row's Compare button, naming its pair (`Compare John
-    /// Smith with John Smyth`) — every row's visible label is the same.
+    /// The accessible name of a duplicates-table row's Compare button, naming its pair by the rows'
+    /// labels (`Compare I0001 with I0002`) — every row's visible label is the same.
     #[must_use]
     pub fn merge_compare_pair(&self, a: &str, b: &str) -> String {
         fl!(self.loader, "merge-compare-pair", a = a, b = b)

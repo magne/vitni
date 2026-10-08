@@ -170,7 +170,8 @@ an in-memory signal (unavailable under `--real-config`, whose workspace path is 
 **Steps and regions name elements, never window pixels.** A debug GUI started by the harness serves a
 read-only **probe** (`crates/vitni-ui-dioxus/src/shell/gui_probe.rs`, `VITNI_GUI_PROBE`) that reports
 every element with an `id`, a `data-hook` or an ARIA role — rect, text, `aria-label`, ancestors — and
-the harness resolves each target over it after the step before settles. A target is a TOML inline table:
+the harness resolves each target over it just before the step that uses it, once the previous step has
+settled. A target is a TOML inline table:
 
 ```toml
 at = { role = "button", text = "Save", within = "detail-head" }   # a button by its visible text
@@ -197,10 +198,11 @@ Writing one:
 - **Prefer what a user sees: `role` + `text`**, then an existing `id`. Add a `data-hook` only for a
   container or a non-semantic element (the Explorer list, a canvas wrapper), and assert it in an SSR
   test so a refactor that drops it fails fast. If two buttons read the same, give them an accessible
-  name that tells them apart (the Matches table's `Compare John Smith with John Smyth`) before reaching
+  name that tells them apart (the Matches table's `Compare I0001 with I0002`) before reaching
   for `index`. Targets match English text; the fixture pins `VITNI_LANGUAGE=en`.
 - **Offsets only where the point is the point**: a canvas (map vertices, crop drags), or a deliberate
-  off-centre click (a scrim, whose centre is under the dialog). An offset must stay inside its element.
+  off-centre click (a scrim, whose centre is under the dialog). A point's offset must stay inside its
+  element; a region's `offset`/`size` may extend past it.
 - **`match` against the shot taken immediately before the change**, never against the first shot — focus
   rings are real pixels and move as a scenario runs.
 - **`region` when a whole-window compare can't isolate the change** — e.g. a repaint elsewhere in the

@@ -17,12 +17,29 @@ use dioxus::prelude::*;
 /// The variable naming the loopback `host:port` the probe listens on.
 pub const PROBE_VAR: &str = "VITNI_GUI_PROBE";
 
-/// The probe's listen address from `value` of [`PROBE_VAR`]: honoured only in a `debug` build.
-fn probe_address(value: Option<String>, debug: bool) -> Option<String> {
-    value.filter(|address| debug && !address.trim().is_empty())
+/// The probe's listen address from `value` of [`PROBE_VAR`]: honoured only in a `debug` build, and only
+/// for a loopback `ip:port`, since the snapshot carries every record name on screen.
+#[cfg(any(feature = "desktop", test))]
+fn probe_address(value: Option<String>, debug: bool) -> Option<std::net::SocketAddr> {
+    if !debug {
+        return None;
+    }
+    let value = value?;
+    let Ok(address) = value.trim().parse::<std::net::SocketAddr>() else {
+        if !value.trim().is_empty() {
+            tracing::error!(%value, "the gui-pass probe address is not ip:port; the probe is off");
+        }
+        return None;
+    };
+    if !address.ip().is_loopback() {
+        tracing::error!(%address, "the gui-pass probe listens on loopback only; the probe is off");
+        return None;
+    }
+    Some(address)
 }
 
 /// What a request head asks the probe for.
+#[cfg(any(feature = "desktop", test))]
 #[derive(Debug, PartialEq, Eq)]
 enum Route {
     /// `GET /elements`: the snapshot.
@@ -32,6 +49,7 @@ enum Route {
 }
 
 /// Routes an HTTP request by its first line.
+#[cfg(any(feature = "desktop", test))]
 fn route(head: &str) -> Route {
     let mut parts = head.lines().next().unwrap_or_default().split_whitespace();
     match (parts.next(), parts.next()) {
@@ -41,6 +59,7 @@ fn route(head: &str) -> Route {
 }
 
 /// An HTTP/1.1 response closing the connection after `body`.
+#[cfg(any(feature = "desktop", test))]
 fn response(status: &str, body: &str) -> String {
     format!(
         "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
@@ -84,7 +103,7 @@ for (const el of document.querySelectorAll(targets)) {
     for (let up = el.parentElement; up; up = up.parentElement) {
         if (up.id) within.push(up.id);
         if (hook(up)) within.push(hook(up));
-        if (up.getAttribute('role')) within.push(up.getAttribute('role'));
+        if (role(up)) within.push(role(up));
     }
     elements.push({
         id: el.id || null,
@@ -125,7 +144,7 @@ pub fn GuiProbe() -> Element {
         let Some(address) = probe_address(std::env::var(PROBE_VAR).ok(), cfg!(debug_assertions)) else {
             return;
         };
-        let listener = match std::net::TcpListener::bind(&address) {
+        let listener = match std::net::TcpListener::bind(address) {
             Ok(listener) => listener,
             Err(error) => {
                 tracing::error!(%address, %error, "the gui-pass probe could not listen");
@@ -137,11 +156,14 @@ pub fn GuiProbe() -> Element {
         spawn(async move {
             while let Some(answer) = incoming.recv().await {
                 let snapshot = snapshot().await;
-                let _ = answer.send(
+                let sent = answer.send(
                     snapshot
                         .map(|value| value.to_string())
                         .map_err(|error| error.to_string()),
                 );
+                if sent.is_err() {
+                    tracing::warn!("a gui-pass probe snapshot came after its request had timed out");
+                }
             }
         });
         tracing::info!(%address, "the gui-pass probe is listening");
@@ -250,7 +272,10 @@ mod tests {
     #[test]
     fn only_a_debug_build_honours_the_probe_address() {
         let address = Some("127.0.0.1:4100".to_owned());
-        assert_eq!(probe_address(address.clone(), true).as_deref(), Some("127.0.0.1:4100"));
+        assert_eq!(
+            probe_address(address.clone(), true).map(|address| address.to_string()),
+            Some("127.0.0.1:4100".to_owned())
+        );
         assert_eq!(probe_address(address, false), None, "a release build never listens");
         assert_eq!(
             probe_address(Some("  ".to_owned()), true),
@@ -258,6 +283,17 @@ mod tests {
             "a blank value is unset"
         );
         assert_eq!(probe_address(None, true), None);
+    }
+
+    #[test]
+    fn the_probe_listens_on_loopback_only() {
+        assert_eq!(
+            probe_address(Some("0.0.0.0:4100".to_owned()), true),
+            None,
+            "every interface would expose the screen's records"
+        );
+        assert_eq!(probe_address(Some("localhost".to_owned()), true), None, "not ip:port");
+        assert!(probe_address(Some("[::1]:4100".to_owned()), true).is_some());
     }
 
     #[test]
