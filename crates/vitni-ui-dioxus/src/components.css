@@ -639,6 +639,9 @@ table.tbl .no-source, table.tbl .src-link { white-space: nowrap; }
 /* In a help specimen the popover is illustrative, not anchored: render it in normal flow inside
    the specimen card rather than absolutely-positioned (which would escape to the page bottom). */
 .specimen .prov { position: static; margin-top: 0; box-shadow: none; max-width: none; }
+/* An in-flow provenance card (the assisted import's "What will be recorded"): the popover's look,
+   laid out where it is written rather than anchored to a trigger. */
+.prov.prov-inline { position: static; margin-top: var(--sp-4); min-width: 0; max-width: none; }
 
 /* ---- Side panel (slide-in editor) ---- */
 /* `position: absolute`, escaping into the nearest positioned ancestor — `.detail` for a record's own
