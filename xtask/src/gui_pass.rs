@@ -66,6 +66,11 @@ use vitni_core::media_path::{MEDIA_DIR, workspace_media_path};
 
 use crate::util::{copy_dir, run_cargo};
 
+mod probe;
+mod target;
+
+use target::{Area, Element, Point, Snapshot};
+
 /// The `gui-pass` fixture: the assertion scenarios, seeded with one place and two media objects.
 const GUI_PASS: Fixture = Fixture {
     name: "gui-pass",
@@ -246,20 +251,16 @@ enum Step {
     /// Grab the window into `NN-<name>.png`, and make it referenceable by `name` in an assertion.
     Shot { name: String },
     /// Move the pointer to `at` and click button 1.
-    Click { at: [i32; 2], label: String },
+    Click { at: At, label: String },
     /// Send a chord in `xdotool key` syntax (`ctrl+k`, `Escape`, `question`).
     Key { chord: String, label: String },
     /// Type `text` into whatever has keyboard focus: one step and one settle for a whole word, not a
     /// `key` step (and a settle) per character. Letters, digits, space and `-.,:/` only — see [`keysyms`].
     Text { text: String, label: String },
     /// Press at `from`, move by `by`, release — a canvas drag (map pan).
-    Drag {
-        from: [i32; 2],
-        by: [i32; 2],
-        label: String,
-    },
+    Drag { from: At, by: [i32; 2], label: String },
     /// Scroll the wheel at a point: `clicks` notches up (button 4) or down (button 5) when negative.
-    Wheel { at: [i32; 2], clicks: i32, label: String },
+    Wheel { at: At, clicks: i32, label: String },
     /// Wait for the GUI process to exit (e.g. after a quit chord), failing if it is still up after
     /// [`AWAIT_EXIT_TIMEOUT`]. Proves a quit actually happened, rather than assuming a chord worked.
     AwaitExit { label: String },
@@ -270,6 +271,22 @@ enum Step {
     /// Sleep for `seconds`, then let the webview settle — proving a timed effect (e.g. a toast's
     /// auto-dismiss) in the real webview rather than assuming it fires.
     Wait { seconds: u64, label: String },
+}
+
+/// Where a step acts: a [`Point`] target, or (until every scenario is converted) raw window pixels.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum At {
+    Pixels([i32; 2]),
+    Target(Point),
+}
+
+/// What an assertion measures: an [`Area`] target, or (until every scenario is converted) raw pixels.
+#[derive(Debug, PartialEq, Deserialize)]
+#[serde(untagged)]
+enum Region {
+    Pixels([u32; 4]),
+    Target(Area),
 }
 
 /// One check over the shots the script took.
@@ -285,7 +302,7 @@ enum Assertion {
         tolerance: Option<f64>,
         /// `[x, y, w, h]` window pixels to compare instead of the whole shot. Absent compares the
         /// whole window, today's behaviour.
-        region: Option<[u32; 4]>,
+        region: Option<Region>,
     },
     /// The two shots must show the same screen — the UI returned there (e.g. an overlay dismissed).
     Match {
@@ -293,7 +310,7 @@ enum Assertion {
         because: String,
         tolerance: Option<f64>,
         /// See [`Self::Differ`]'s `region`.
-        region: Option<[u32; 4]>,
+        region: Option<Region>,
     },
     /// One shot must not be a flat colour over `region` — the whole-shot [`assert_painted`] every
     /// grab already runs cannot see a blank *area*, because the rail, toolbar and tabstrip around it
@@ -303,7 +320,7 @@ enum Assertion {
         because: String,
         /// See [`Self::Differ`]'s `region`; absent measures the whole window, which only the chrome
         /// around a blank area would then answer for.
-        region: Option<[u32; 4]>,
+        region: Option<Region>,
         /// The standard deviation the region must exceed; defaults to [`MIN_STANDARD_DEVIATION`].
         min_deviation: Option<f64>,
     },
@@ -356,6 +373,8 @@ struct Session {
     xvfb: Child,
     gui: Option<Child>,
     keep: bool,
+    /// The loopback address the GUI's probe listens on (see [`probe`]).
+    probe: String,
 }
 
 impl Drop for Session {
@@ -495,9 +514,9 @@ fn run_one(options: &Options, fixture: &Fixture, worker: &Worker, path: &Path, l
         display,
         &["windowsize", &window, &size.0.to_string(), &size.1.to_string()],
     )?;
-    focus(display, &window, size)?;
-    let window = Window::connect(display, window)?;
-    window.settle()?;
+    let window = Window::connect(display, window, session.probe.clone(), size)?;
+    window.wait_ready()?;
+    window.focus()?;
 
     let taken = drive(&window, &script.steps, shots, &mut session, log)?;
     if options.keep {
@@ -509,7 +528,7 @@ fn run_one(options: &Options, fixture: &Fixture, worker: &Worker, path: &Path, l
     // `--real-config` points the isolated fixture's workspace path at the caller's own workspace,
     // which a `manifest` assertion must not read — see `Assertion::Manifest`.
     let workspace = (!options.real_config).then_some(worker.workspace.as_path());
-    check(&script.asserts, &taken, shots, workspace)
+    check(&script.asserts, &taken, shots, workspace, size)
 }
 
 /// Prints a finished scenario's buffered log and its verdict together, so parallel scenarios never
@@ -1105,6 +1124,7 @@ fn start_session(options: &Options, fixture: &Fixture, worker: &Worker, shots: &
         xvfb,
         gui: None,
         keep: false,
+        probe: probe::free_address()?,
     };
     wait_for_xvfb(&worker.display, &mut session.xvfb)?;
 
@@ -1123,6 +1143,7 @@ fn start_session(options: &Options, fixture: &Fixture, worker: &Worker, shots: &
         .env_remove("WAYLAND_DISPLAY")
         .env_remove("XDG_SESSION_TYPE")
         .env("RUST_LOG", "info")
+        .env(probe::PROBE_VAR, &session.probe)
         .envs(fixture.env.iter().copied())
         .stdout(Stdio::from(log))
         .stderr(Stdio::from(errors));
@@ -1178,22 +1199,15 @@ fn wait_for_window(display: &str) -> Result<String> {
     bail!("gui-pass: no Vitni window appeared on {display} within {WINDOW_TIMEOUT:?}")
 }
 
-/// Gives the window keyboard focus.
-///
-/// Both halves are needed. There is no window manager on the display, so X input focus starts at
-/// `PointerRoot` and `windowfocus` is what points it at the window; but the webview only starts
-/// delivering key events to its document after the page has been clicked, so a chord sent before any
-/// click is silently dropped. [`focus_click`] is empty top-bar space at `size`, chosen so the click
-/// activates nothing.
-fn focus(display: &str, window: &str, size: (u32, u32)) -> Result<()> {
-    xdotool(display, &["windowfocus", window])?;
-    let (x, y) = focus_click(size);
-    xdotool(display, &["mousemove", &x.to_string(), &y.to_string()])?;
-    xdotool(display, &["click", "1"])
+/// A shot the script took: its name, and the elements the probe saw when it was grabbed — what an
+/// assertion's [`Area`] resolves against.
+struct Taken {
+    name: String,
+    elements: Vec<Element>,
 }
 
-/// Runs every step, returning the shot names in the order they were taken.
-fn drive(window: &Window, steps: &[Step], shots: &Path, session: &mut Session, log: &mut Log) -> Result<Vec<String>> {
+/// Runs every step, returning the shots in the order they were taken.
+fn drive(window: &Window, steps: &[Step], shots: &Path, session: &mut Session, log: &mut Log) -> Result<Vec<Taken>> {
     let display = window.display.as_str();
     let mut taken = Vec::new();
     for step in steps {
@@ -1202,12 +1216,18 @@ fn drive(window: &Window, steps: &[Step], shots: &Path, session: &mut Session, l
                 let path = shot_file(shots, taken.len() + 1, name);
                 grab(display, &window.id, &path)?;
                 assert_painted(&path)?;
+                let snapshot = window.snapshot()?;
+                save_snapshot(&snapshot, &path.with_extension("json"))?;
                 log.line(&format!("  shot {}", path.display()));
-                taken.push(name.clone());
+                taken.push(Taken {
+                    name: name.clone(),
+                    elements: snapshot.elements,
+                });
             }
             Step::Click { at, label } => {
                 log.line(&format!("  {label}"));
-                xdotool(display, &["mousemove", &at[0].to_string(), &at[1].to_string()])?;
+                let [x, y] = window.locate(at).with_context(|| format!("step {label:?}"))?;
+                xdotool(display, &["mousemove", &x.to_string(), &y.to_string()])?;
                 xdotool(display, &["click", "1"])?;
                 window.settle()?;
             }
@@ -1223,12 +1243,14 @@ fn drive(window: &Window, steps: &[Step], shots: &Path, session: &mut Session, l
             }
             Step::Drag { from, by, label } => {
                 log.line(&format!("  {label}"));
-                drag(display, *from, *by)?;
+                let from = window.locate(from).with_context(|| format!("step {label:?}"))?;
+                drag(display, from, *by)?;
                 window.settle()?;
             }
             Step::Wheel { at, clicks, label } => {
                 log.line(&format!("  {label}"));
-                wheel(display, *at, *clicks)?;
+                let at = window.locate(at).with_context(|| format!("step {label:?}"))?;
+                wheel(display, at, *clicks)?;
                 window.settle()?;
             }
             Step::AwaitExit { label } => {
@@ -1248,6 +1270,13 @@ fn drive(window: &Window, steps: &[Step], shots: &Path, session: &mut Session, l
         }
     }
     Ok(taken)
+}
+
+/// Writes what the probe saw at a shot beside it, so a scenario author reads an element's rect and
+/// hooks from the file instead of measuring the PNG.
+fn save_snapshot(snapshot: &Snapshot, path: &Path) -> Result<()> {
+    let text = serde_json::to_string_pretty(snapshot).context("writing the probe snapshot")?;
+    fs::write(path, text).with_context(|| format!("writing {}", path.display()))
 }
 
 /// Waits for the GUI child to exit, failing if it is still up after [`AWAIT_EXIT_TIMEOUT`].
@@ -1390,10 +1419,14 @@ struct Window {
     id: String,
     xid: u32,
     connection: x11rb::rust_connection::RustConnection,
+    /// The loopback address of the GUI's probe.
+    probe: String,
+    /// The size the window was given, which targets resolve within.
+    size: (u32, u32),
 }
 
 impl Window {
-    fn connect(display: &str, id: String) -> Result<Self> {
+    fn connect(display: &str, id: String, probe: String, size: (u32, u32)) -> Result<Self> {
         let xid = id.parse().with_context(|| format!("parsing the window id {id:?}"))?;
         let (connection, _) = x11rb::connect(Some(display)).with_context(|| format!("connecting to {display}"))?;
         Ok(Self {
@@ -1401,7 +1434,75 @@ impl Window {
             id,
             xid,
             connection,
+            probe,
+            size,
         })
+    }
+
+    /// What the probe sees now, in window pixels.
+    fn snapshot(&self) -> Result<Snapshot> {
+        probe::snapshot(&self.probe, self.size.1)
+    }
+
+    /// Waits until the probe answers and reports the page ready — the app has rendered — so the first
+    /// input never reaches a webview still loading. Fails after [`WINDOW_TIMEOUT`].
+    fn wait_ready(&self) -> Result<()> {
+        let started = Instant::now();
+        loop {
+            let outcome = self.snapshot();
+            if outcome.as_ref().is_ok_and(|snapshot| snapshot.ready) {
+                return Ok(());
+            }
+            if started.elapsed() >= WINDOW_TIMEOUT {
+                return match outcome {
+                    Ok(_) => bail!("gui-pass: the page did not become ready within {WINDOW_TIMEOUT:?}"),
+                    Err(error) => Err(error.context(format!("gui-pass: no probe answer within {WINDOW_TIMEOUT:?}"))),
+                };
+            }
+            sleep(SETTLE_POLL);
+        }
+    }
+
+    /// Gives the window keyboard focus, and proves the document has it.
+    ///
+    /// Both halves of the focus are needed. There is no window manager on the display, so X input focus
+    /// starts at `PointerRoot` and `windowfocus` is what points it at the window; but the webview only
+    /// starts delivering key events to its document after the page has been clicked, so a chord sent
+    /// before any click is silently dropped. [`focus_click`] is empty top-bar space at the window's
+    /// size, chosen so the click activates nothing. The probe's `focused` then proves it took, rather
+    /// than the first chord being lost.
+    fn focus(&self) -> Result<()> {
+        xdotool(&self.display, &["windowfocus", &self.id])?;
+        let (x, y) = focus_click(self.size);
+        xdotool(&self.display, &["mousemove", &x.to_string(), &y.to_string()])?;
+        xdotool(&self.display, &["click", "1"])?;
+        self.settle()?;
+        if !self.snapshot()?.focused {
+            bail!("gui-pass: the document has no keyboard focus after the focus click");
+        }
+        Ok(())
+    }
+
+    /// The window pixel `at` names, re-probing until its target resolves or [`SETTLE_CAP`] has passed —
+    /// an element still rendering when the screen went quiet gets that long to appear.
+    fn locate(&self, at: &At) -> Result<[i32; 2]> {
+        match at {
+            At::Pixels(pixels) => Ok(*pixels),
+            At::Target(point) => self.resolve(|elements| target::resolve_point(point, elements, self.size)),
+        }
+    }
+
+    /// Runs `resolve` over fresh snapshots until it succeeds or [`SETTLE_CAP`] has passed, then fails
+    /// with its last reason.
+    fn resolve<T>(&self, resolve: impl Fn(&[Element]) -> Result<T, String>) -> Result<T> {
+        let started = Instant::now();
+        loop {
+            match resolve(&self.snapshot()?.elements) {
+                Ok(resolved) => return Ok(resolved),
+                Err(reason) if started.elapsed() >= SETTLE_CAP => bail!("gui-pass: {reason}"),
+                Err(_) => sleep(SETTLE_POLL),
+            }
+        }
     }
 
     /// Waits until the window has stopped changing for [`SETTLE_QUIET`], or [`SETTLE_CAP`] has passed.
@@ -1599,10 +1700,16 @@ fn parse_metric(text: &str, path: &Path) -> Result<f64> {
 
 /// Checks every assertion, reporting all failures rather than the first. `workspace` is the fixture
 /// workspace directory, `None` under `--real-config` (see [`Assertion::Manifest`]).
-fn check(asserts: &[Assertion], taken: &[String], shots: &Path, workspace: Option<&Path>) -> Result<()> {
+fn check(
+    asserts: &[Assertion],
+    taken: &[Taken],
+    shots: &Path,
+    workspace: Option<&Path>,
+    window: (u32, u32),
+) -> Result<()> {
     let mut failures = Vec::new();
     for assertion in asserts {
-        if let Some(failure) = check_one(assertion, taken, shots, workspace)? {
+        if let Some(failure) = check_one(assertion, taken, shots, workspace, window)? {
             failures.push(failure);
         }
     }
@@ -1615,9 +1722,10 @@ fn check(asserts: &[Assertion], taken: &[String], shots: &Path, workspace: Optio
 /// One assertion's verdict: `None` when it held, else the message describing how it did not.
 fn check_one(
     assertion: &Assertion,
-    taken: &[String],
+    taken: &[Taken],
     shots: &Path,
     workspace: Option<&Path>,
+    window: (u32, u32),
 ) -> Result<Option<String>> {
     match assertion {
         Assertion::Differ {
@@ -1626,9 +1734,10 @@ fn check_one(
             tolerance,
             region,
         } => {
-            let (left, right, difference) = compare(named, taken, shots, *region)?;
+            let region = measured(region.as_ref(), taken, &named[0], window)?;
+            let (left, right, difference) = compare(named, taken, shots, region)?;
             let tolerance = tolerance.unwrap_or(SAME_SCREEN_RMSE);
-            Ok((difference <= tolerance).then(|| pair_failure(&left, &right, difference, *region, because)))
+            Ok((difference <= tolerance).then(|| pair_failure(&left, &right, difference, region, because)))
         }
         Assertion::Match {
             shots: named,
@@ -1636,9 +1745,10 @@ fn check_one(
             tolerance,
             region,
         } => {
-            let (left, right, difference) = compare(named, taken, shots, *region)?;
+            let region = measured(region.as_ref(), taken, &named[0], window)?;
+            let (left, right, difference) = compare(named, taken, shots, region)?;
             let tolerance = tolerance.unwrap_or(SAME_SCREEN_RMSE);
-            Ok((difference > tolerance).then(|| pair_failure(&left, &right, difference, *region, because)))
+            Ok((difference > tolerance).then(|| pair_failure(&left, &right, difference, region, because)))
         }
         Assertion::Painted {
             shot,
@@ -1649,13 +1759,14 @@ fn check_one(
             let Some(path) = shot_path(taken, shots, shot) else {
                 bail!("gui-pass: assertion names a shot the script never took: {shot}");
             };
-            let deviation = standard_deviation(&path, *region)?;
+            let region = measured(region.as_ref(), taken, shot, window)?;
+            let deviation = standard_deviation(&path, region)?;
             let threshold = min_deviation.unwrap_or(MIN_STANDARD_DEVIATION);
             Ok(painted_failed(deviation, threshold).then(|| {
                 format!(
                     "{} {} is flat (standard deviation {deviation:.4} <= {threshold}): {because}",
                     name_of(&path),
-                    describe_region(*region),
+                    describe_region(region),
                 )
             }))
         }
@@ -1674,10 +1785,28 @@ fn check_one(
     }
 }
 
+/// The window rectangle an assertion's `region` covers, resolved over what the probe saw at the shot
+/// named `at` — the first of a pair, so both shots are cropped to the same pixels.
+fn measured(region: Option<&Region>, taken: &[Taken], at: &str, window: (u32, u32)) -> Result<Option<[u32; 4]>> {
+    let Some(region) = region else {
+        return Ok(None);
+    };
+    let area = match region {
+        Region::Pixels(pixels) => return Ok(Some(*pixels)),
+        Region::Target(area) => area,
+    };
+    let Some(shot) = taken.iter().find(|shot| shot.name == at) else {
+        bail!("gui-pass: assertion names a shot the script never took: {at}");
+    };
+    target::resolve_area(area, &shot.elements, window)
+        .map(Some)
+        .map_err(|reason| anyhow::anyhow!("gui-pass: region at shot {at}: {reason}"))
+}
+
 /// Resolves an assertion's two shot names to paths and measures their difference.
 fn compare(
     named: &[String; 2],
-    taken: &[String],
+    taken: &[Taken],
     shots: &Path,
     region: Option<[u32; 4]>,
 ) -> Result<(PathBuf, PathBuf, f64)> {
@@ -1718,17 +1847,17 @@ fn shot_file(shots: &Path, index: usize, name: &str) -> PathBuf {
 }
 
 /// The written path of the shot named `name`.
-fn shot_path(taken: &[String], shots: &Path, name: &str) -> Option<PathBuf> {
-    let index = taken.iter().position(|shot| shot == name)?;
+fn shot_path(taken: &[Taken], shots: &Path, name: &str) -> Option<PathBuf> {
+    let index = taken.iter().position(|shot| shot.name == name)?;
     Some(shot_file(shots, index + 1, name))
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        Assertion, MIN_STANDARD_DEVIATION, Script, Step, WINDOW, available_cores, default_jobs, describe_region,
-        differing_pixels, focus_click, keysyms, painted_failed, parse_args, read_region, run_queue, unique_names,
-        window_size, worker_config, worker_display,
+        Assertion, MIN_STANDARD_DEVIATION, Region, Script, Step, WINDOW, available_cores, default_jobs,
+        describe_region, differing_pixels, focus_click, keysyms, painted_failed, parse_args, read_region, run_queue,
+        unique_names, window_size, worker_config, worker_display,
     };
     use std::path::{Path, PathBuf};
 
@@ -2033,7 +2162,7 @@ mod tests {
         else {
             panic!("one painted assertion, got {} others", parsed.len());
         };
-        assert_eq!(*region, Some([740, 140, 1050, 760]));
+        assert_eq!(*region, Some(Region::Pixels([740, 140, 1050, 760])));
         assert_eq!(*min_deviation, Some(0.02));
     }
 
