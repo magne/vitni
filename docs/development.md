@@ -171,15 +171,19 @@ region = { hook = "record-tabs", offset = [0, 5], size = [1268, 45] }
 ```
 
 The harness resolves each target at run time from the GUI's **probe**: a debug build started with
-`VITNI_GUI_PROBE=127.0.0.1:<port>` serves `GET /elements` (`crates/vitni-ui-dioxus/src/shell/gui_probe.rs`)
-with every element carrying an `id`, a `data-hook` or a role — explicit, or implied by its tag — its
-rect, text, `aria-label` and the ids, hooks and roles above it, plus whether the page is ready and
-focused. Resolution is pure Rust over that list (`xtask/src/gui_pass/target.rs`), so a target that
-matches nothing, or several elements, fails naming the target and listing what the probe saw, after
-re-probing until the settle cap in case the element was still rendering. The harness also waits for
-the page to report ready before its focus click, and checks the document took focus. The probe only
-observes — it never clicks, types, scrolls or focuses — so every input still reaches the webview as a
-real X event. A release build ignores the variable and never listens.
+`VITNI_GUI_PROBE=127.0.0.1:<port>` serves `GET /elements`
+(`crates/vitni-ui-dioxus/src/shell/gui_probe.rs`) with every element carrying an `id`, a `data-hook` or
+a role — explicit, or implied by its tag — its rect, text, `aria-label` and the ids, hooks and roles
+above it, plus whether the page is ready and focused and whether every map container holds an idle
+MapLibre map (constructed, `loaded()`, not moving). Resolution is pure Rust over that list
+(`xtask/src/gui_pass/target.rs`), so a target that matches nothing, or several elements, fails naming
+the target and listing what the probe saw, after re-probing until the settle cap in case the element was
+still rendering. The harness also waits for the page to report ready before its focus click, and checks
+the document took focus. A step settles once the window has stopped changing *and* every map is idle, so
+a vertex the map worker is still parsing is drawn before the next shot; a shot that grabs a flat colour
+is re-grabbed until the webview has painted, rather than failing the scenario on its first grab. The
+probe only observes — it never clicks, types, scrolls or focuses — so every input still reaches the
+webview as a real X event. A release build ignores the variable and never listens.
 
 Two other ways to find elements were ruled out: AT-SPI needs an accessibility bus on the Xvfb display
 and exposes accessible names rather than ids, and WebDriver needs WebKit's automation mode, which wry

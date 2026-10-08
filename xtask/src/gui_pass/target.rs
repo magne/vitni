@@ -43,6 +43,9 @@ pub struct Snapshot {
     pub ready: bool,
     /// The document has keyboard focus (`document.hasFocus()`).
     pub focused: bool,
+    /// Every map container on the page holds a `MapLibre` map that has loaded its style and sources and
+    /// is not moving — nothing queued that has yet to reach its canvas. True when no map is on screen.
+    pub maps_idle: bool,
     /// The focused element's `id`, else its hook, else its role, else its tag name (`body`).
     #[serde(default)]
     pub active: Option<String>,
@@ -633,6 +636,7 @@ mod tests {
         let snapshot = Snapshot {
             ready: true,
             focused: true,
+            maps_idle: true,
             active: None,
             viewport: [1800.0, 1170.0],
             elements: rail(),

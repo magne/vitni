@@ -306,7 +306,7 @@ enum Assertion {
         /// See [`Self::Differ`]'s `region`.
         region: Option<Area>,
     },
-    /// One shot must not be a flat colour over `region` — the whole-shot [`assert_painted`] every
+    /// One shot must not be a flat colour over `region` — the whole-shot [`until_painted`] every
     /// grab already runs cannot see a blank *area*, because the rail, toolbar and tabstrip around it
     /// keep the window's own deviation high. Scope it to the map canvas and a blanked canvas fails.
     Painted {
@@ -1208,8 +1208,10 @@ fn drive(window: &Window, steps: &[Step], shots: &Path, session: &mut Session, l
         match step {
             Step::Shot { name } => {
                 let path = shot_file(shots, taken.len() + 1, name);
-                grab(display, &window.id, &path)?;
-                assert_painted(&path)?;
+                until_painted(&path.display().to_string(), SETTLE_CAP, SETTLE_POLL, || {
+                    grab(display, &window.id, &path)?;
+                    standard_deviation(&path, None)
+                })?;
                 let snapshot = window.snapshot()?;
                 save_snapshot(&snapshot, &path.with_extension("json"))?;
                 log.line(&format!("  shot {}", path.display()));
@@ -1511,8 +1513,10 @@ impl Window {
     /// well under a second; the ceiling keeps the old bound for a screen that never goes quiet (a
     /// spinner, or a map whose tiles keep landing). A frame counts as unchanged when it differs from the
     /// one that started the quiet period by at most [`SETTLE_NOISE_PIXELS`] — a text caret blinks on a
-    /// ~600 ms cycle, which would otherwise hold every step with a focused input at the cap. A window
-    /// that has gone (the step quit the app) has nothing left to settle.
+    /// ~600 ms cycle, which would otherwise hold every step with a focused input at the cap. A quiet
+    /// screen still waits for its maps to go idle (see [`settled`]): pixels alone cannot tell a finished
+    /// draw from one `MapLibre` has not reached yet. A window that has gone (the step quit the app) has
+    /// nothing left to settle.
     fn settle(&self) -> Result<()> {
         let started = Instant::now();
         sleep(SETTLE_POLL);
@@ -1528,11 +1532,17 @@ impl Window {
             if differing_pixels(&reference, &frame) > SETTLE_NOISE_PIXELS {
                 reference = frame;
                 quiet_since = Instant::now();
-            } else if quiet_since.elapsed() >= SETTLE_QUIET {
+            } else if settled(quiet_since.elapsed(), || self.maps_idle()) {
                 return Ok(());
             }
         }
         Ok(())
+    }
+
+    /// Whether the probe reports every map idle. A probe that does not answer counts as not idle, so the
+    /// settle runs on to its cap rather than ending on a canvas it could not ask about.
+    fn maps_idle(&self) -> bool {
+        self.snapshot().is_ok_and(|snapshot| snapshot.maps_idle)
     }
 
     /// The window's current pixels, as the server's `ZPixmap` bytes, or `None` once the window is gone.
@@ -1568,6 +1578,14 @@ impl Window {
             Err(error) => Err(error).context("reading the window's pixels"),
         }
     }
+}
+
+/// Whether a window quiet for `quiet_for` has settled: quiet for [`SETTLE_QUIET`], and no map has work
+/// queued that has yet to reach its canvas — a vertex `setData` the worker is still parsing leaves the
+/// screen unchanged for as long as it takes. `maps_idle` asks the probe, so it runs only once the
+/// screen has been quiet long enough to matter.
+fn settled(quiet_for: Duration, maps_idle: impl FnOnce() -> bool) -> bool {
+    quiet_for >= SETTLE_QUIET && maps_idle()
 }
 
 /// Whether a request failed because its window no longer exists — the app quit between two grabs.
@@ -1625,17 +1643,22 @@ fn grab(display: &str, window: &str, path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Fails if a screenshot is a flat colour — an unpainted webview, which is otherwise easy to mistake
-/// for a passing run.
-fn assert_painted(path: &Path) -> Result<()> {
-    let deviation = standard_deviation(path, None)?;
-    if painted_failed(deviation, MIN_STANDARD_DEVIATION) {
-        bail!(
-            "{} is blank (standard deviation {deviation}) — the webview painted nothing",
-            path.display()
-        );
+/// Grabs a shot with `grab` (returning its standard deviation) until it is not a flat colour, failing
+/// once `cap` has passed. A blank grab is an unpainted webview, which is otherwise easy to mistake for a
+/// passing run — but the webview can also simply not have painted yet, so the shot is taken again
+/// rather than failing the scenario on its first grab. A grab that errors is not retried.
+fn until_painted(shot: &str, cap: Duration, poll: Duration, mut grab: impl FnMut() -> Result<f64>) -> Result<()> {
+    let started = Instant::now();
+    loop {
+        let deviation = grab()?;
+        if !painted_failed(deviation, MIN_STANDARD_DEVIATION) {
+            return Ok(());
+        }
+        if started.elapsed() >= cap {
+            bail!("{shot} is blank (standard deviation {deviation}) — the webview painted nothing in {cap:?}");
+        }
+        sleep(poll);
     }
-    Ok(())
 }
 
 /// Whether a measured deviation counts as blank. Inclusive at the threshold, so a perfectly uniform
@@ -1851,11 +1874,12 @@ fn shot_path(taken: &[Taken], shots: &Path, name: &str) -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::{
-        Assertion, GUI_PASS, MIN_STANDARD_DEVIATION, Script, Step, WINDOW, available_cores, default_jobs,
+        Assertion, GUI_PASS, MIN_STANDARD_DEVIATION, SETTLE_QUIET, Script, Step, WINDOW, available_cores, default_jobs,
         describe_region, differing_pixels, focus_click, keysyms, painted_failed, parse_args, read_region, run_queue,
-        unique_names, window_size, worker_config, worker_display,
+        settled, unique_names, until_painted, window_size, worker_config, worker_display,
     };
     use std::path::{Path, PathBuf};
+    use std::time::Duration;
 
     fn asserts(toml: &str) -> Vec<Assertion> {
         let script: Script = toml::from_str(toml).expect("the scenario parses");
@@ -2217,7 +2241,7 @@ mod tests {
         assert!(painted_failed(0.0, MIN_STANDARD_DEVIATION), "a uniform fill is blank");
         assert!(
             painted_failed(MIN_STANDARD_DEVIATION, MIN_STANDARD_DEVIATION),
-            "the threshold itself is blank — the bound is inclusive, as assert_painted's is"
+            "the threshold itself is blank — the bound is inclusive, as until_painted's is"
         );
     }
 
@@ -2227,6 +2251,62 @@ mod tests {
         assert!(
             !painted_failed(0.03, 0.02),
             "a caller-raised threshold still passes on a region above it"
+        );
+    }
+
+    #[test]
+    fn a_shot_is_regrabbed_until_it_is_painted() {
+        let mut readings = vec![0.0, 0.0, 0.2].into_iter();
+        let mut grabs = 0;
+        until_painted("01-start.png", Duration::from_secs(1), Duration::ZERO, || {
+            grabs += 1;
+            Ok(readings.next().unwrap_or(0.0))
+        })
+        .expect("the third grab is painted");
+        assert_eq!(grabs, 3, "grabbing stops at the first painted shot");
+    }
+
+    #[test]
+    fn a_shot_still_blank_at_the_cap_fails_naming_it() {
+        let error = until_painted(
+            "01-start.png",
+            Duration::from_millis(20),
+            Duration::from_millis(5),
+            || Ok(0.0),
+        )
+        .expect_err("never painted");
+        let error = format!("{error:#}");
+        assert!(
+            error.contains("01-start.png is blank (standard deviation 0)"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn a_failed_grab_is_not_retried() {
+        let mut grabs = 0;
+        let error = until_painted("01-start.png", Duration::from_secs(1), Duration::ZERO, || {
+            grabs += 1;
+            anyhow::bail!("import failed")
+        })
+        .expect_err("the grab failed");
+        assert_eq!(grabs, 1);
+        assert!(format!("{error:#}").contains("import failed"));
+    }
+
+    #[test]
+    fn a_quiet_screen_has_settled_only_once_its_maps_are_idle() {
+        assert!(settled(SETTLE_QUIET, || true));
+        assert!(!settled(SETTLE_QUIET, || false), "a map still drawing has not settled");
+        let asked = std::cell::Cell::new(false);
+        let early = settled(SETTLE_QUIET.saturating_sub(Duration::from_millis(1)), || {
+            asked.set(true);
+            true
+        });
+        assert!(!early, "quiet for less than the period has not settled");
+        assert!(
+            !asked.get(),
+            "the probe is not asked before the screen has been quiet long enough"
         );
     }
 
