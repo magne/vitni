@@ -616,29 +616,6 @@ already filed against it keep resolving their [`#backup--restore`](#backup--rest
 
 The `area/docs` label already existed with no `###` home; this is it.
 
-- **The mockup sheet is only partly the superset it is documented to be.** [`CLAUDE.md`](../CLAUDE.md)
-  states that `docs/mockups/assets/components.css` is the superset — "the app sheet must not introduce a
-  rule the mockups lack" — and nothing checks the sheet as a whole, so it does not hold.
-  `cargo xtask css-check` polices hex colour literals only; `tests/hover_affordance.rs` and (since #310)
-  `tests/record_row_css.rs` do compare both sheets rule-for-rule, but each over a *named list* — the
-  ghost-row rules and the record-row rules — so everything outside those two lists is ungated. Measured
-  by stripping comments from both sheets, descending into their `@media` blocks and comparing rules by
-  selector: **24 app rules have no mockup counterpart**, spanning 31 distinct selectors. Whole components
-  are absent — `.switch` (+ `[aria-checked="true"]`), `.menu-anchor`/`.menu-scrim`/`.new-record-menu`
-  (the mockup sheet names `.menu-scrim` only in a comment), `.help-browser`,
-  `.prov-anchor`/`.prov-backdrop`, `.media-save-preview` and `.crop-capture` (what is left of the
-  media set after #309 mirrored the other six and put them under `tests/record_row_css.rs`) —
-  alongside single rules a static page had no need for (`.shell > .topbar|.tabstrip|.workarea|.statusbar`'s
-  grid rows, `.detail-slot`, `.detail-id`, `.card.blocked` + `> h3`, `.conf.conf-unset`,
-  `.list-toolbar .sort`, `.doc p .help-link` + `:hover`, `.specimen .prov`) and the app's `text-box-trim`
-  half-leading rule, whose whole 17-selector list is missing. A second class the same comparison surfaces
-  but does not count: **19 of the 343 selectors present in both sheets carry different declarations**,
-  the sharpest being `.prov` — an anchored popover in the app, an in-flow card in the mockup, so the two
-  sheets disagree about what the component *is*. Some of the 19 are legitimate (a static page's `.shell`
-  is not the app's grid), which is why closing this needs a decided rule and a gate over the whole sheet,
-  not a diff someone reads once. One method trap for whoever writes that gate: comparing selector *text*
-  produces false positives — six `.rail .nav-item*` rules read as missing until you notice the mockup
-  groups each with `.subnav .nav-item`, so it has to compare selector atoms, not selector lists. — #502
 - **`main` is protected without required status checks, and that is a choice.** `ci.yml` filters
   `docs/**`, `*.md` and `LICENSE*` out of its triggers, so a documentation-only pull request starts no
   run at all — a required context would sit unfulfilled forever on exactly the changes this repository

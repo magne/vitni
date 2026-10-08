@@ -38,7 +38,7 @@
             <div><b>gedcom-import</b></div>
             <div class="muted" style="font-size:var(--fs-sm)">Import GEDCOM 5.5.1 / 7.0 · <span class="mono">v0.3.0</span></div>
           </td>
-          <td><span class="resn" data-kind="privacy" role="switch" tabindex="0" aria-checked="true">On</span></td>
+          <td><button class="switch" type="button" role="switch" aria-checked="true">On</button></td>
           <td class="wrap">
             <span class="ev info">log</span><span class="ev info">query</span><span class="ev evidence">commands</span><span class="ev source" title="Scoped WASI preopen of the workspace media/ directory — not an interface capability">files (media/)</span>
           </td>
@@ -50,7 +50,7 @@
             <div><b>gedcom-export</b></div>
             <div class="muted" style="font-size:var(--fs-sm)">Export GEDCOM 7.0 · <span class="mono">v0.3.0</span></div>
           </td>
-          <td><span class="resn" data-kind="privacy" role="switch" tabindex="0" aria-checked="true">On</span></td>
+          <td><button class="switch" type="button" role="switch" aria-checked="true">On</button></td>
           <td class="wrap">
             <span class="ev info">log</span><span class="ev info">query</span><span class="ev source" title="Scoped WASI preopen of the workspace media/ directory — not an interface capability">files (media/)</span>
           </td>
@@ -62,7 +62,7 @@
             <div><b>gramps-import</b></div>
             <div class="muted" style="font-size:var(--fs-sm)">Import Gramps XML (v6) · <span class="mono">v0.2.1</span></div>
           </td>
-          <td><span class="resn" data-kind="privacy" role="switch" tabindex="0" aria-checked="true">On</span></td>
+          <td><button class="switch" type="button" role="switch" aria-checked="true">On</button></td>
           <td class="wrap">
             <span class="ev info">log</span><span class="ev info">query</span><span class="ev evidence">commands</span><span class="ev source" title="Scoped WASI preopen of the workspace media/ directory — not an interface capability">files (media/)</span>
           </td>
@@ -74,7 +74,7 @@
             <div><b>gramps-export</b></div>
             <div class="muted" style="font-size:var(--fs-sm)">Export Gramps XML (v6) · <span class="mono">v0.2.1</span></div>
           </td>
-          <td><span class="resn" data-kind="privacy" role="switch" tabindex="0" aria-checked="true">On</span></td>
+          <td><button class="switch" type="button" role="switch" aria-checked="true">On</button></td>
           <td class="wrap">
             <span class="ev info">log</span><span class="ev info">query</span><span class="ev source" title="Scoped WASI preopen of the workspace media/ directory — not an interface capability">files (media/)</span>
           </td>
@@ -86,7 +86,7 @@
             <div><b>ui-panel</b></div>
             <div class="muted" style="font-size:var(--fs-sm)">Custom side-panel widgets · <span class="mono">v0.1.0</span></div>
           </td>
-          <td><span class="resn" data-kind="privacy" role="switch" tabindex="0" aria-checked="false">Off</span></td>
+          <td><button class="switch" type="button" role="switch" aria-checked="false">Off</button></td>
           <td class="wrap">
             <span class="ev info">log</span><span class="ev info">query</span>
             <span class="chip" title="declared but not granted"><span class="dot" style="background:var(--warn)"></span>net (denied)</span>
@@ -112,9 +112,9 @@
         </div>
       </div>
       <div class="stack" style="margin-top:8px">
-        <div class="fact-row"><span class="resn" data-kind="privacy" role="switch" tabindex="0" aria-checked="true">log</span><span class="grow muted">Emit diagnostic log lines to the host. No data access.</span></div>
-        <div class="fact-row"><span class="resn" data-kind="privacy" role="switch" tabindex="0" aria-checked="true">query</span><span class="grow muted">Read projections (people, sources…) — read-only.</span></div>
-        <div class="fact-row"><span class="resn" data-kind="privacy" role="switch" tabindex="0" aria-checked="true">commands</span><span class="grow muted">Submit commands that append events to the log.</span></div>
+        <div class="fact-row"><button class="switch" type="button" role="switch" aria-checked="true">log</button><span class="grow muted">Emit diagnostic log lines to the host. No data access.</span></div>
+        <div class="fact-row"><button class="switch" type="button" role="switch" aria-checked="true">query</button><span class="grow muted">Read projections (people, sources…) — read-only.</span></div>
+        <div class="fact-row"><button class="switch" type="button" role="switch" aria-checked="true">commands</button><span class="grow muted">Submit commands that append events to the log.</span></div>
       </div>
     </div>
 
@@ -130,9 +130,9 @@
         </div>
       </div>
       <div class="stack" style="margin-top:8px">
-        <div class="fact-row"><span class="resn" data-kind="privacy" role="switch" tabindex="0" aria-checked="false">log</span><span class="grow muted">Emit diagnostic log lines to the host. No data access.</span></div>
-        <div class="fact-row"><span class="resn" data-kind="privacy" role="switch" tabindex="0" aria-checked="false">query</span><span class="grow muted">Read projections (people, sources…) — read-only.</span></div>
-        <div class="fact-row"><span class="resn" data-kind="privacy" role="switch" tabindex="0" aria-checked="false">net</span><span class="grow muted">Outbound network — denied unless you approve it.</span></div>
+        <div class="fact-row"><button class="switch" type="button" role="switch" aria-checked="false">log</button><span class="grow muted">Emit diagnostic log lines to the host. No data access.</span></div>
+        <div class="fact-row"><button class="switch" type="button" role="switch" aria-checked="false">query</button><span class="grow muted">Read projections (people, sources…) — read-only.</span></div>
+        <div class="fact-row"><button class="switch" type="button" role="switch" aria-checked="false">net</button><span class="grow muted">Outbound network — denied unless you approve it.</span></div>
       </div>
     </div>
 

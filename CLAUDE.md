@@ -300,7 +300,8 @@ Clippy still runs `--all-targets`, so the bench code stays linted. Run benches d
 - **Every UI change updates `docs/mockups/` in the same change.** The mockups are the design source
   of truth and must describe *shipped* behaviour, never follow-up work — so a shipped change that the
   mockups still contradict is an incomplete change. `docs/mockups/assets/components.css` is the
-  superset: the app sheet must not introduce a rule the mockups lack.
+  superset: the app sheet must not introduce a rule the mockups lack, and a shared rule carries the same
+  declarations (`tests/mockup_superset.rs` checks the whole sheet).
 - **Presentation vs data localization are distinct.** ADR 0003 is the *UI chrome*. The *data*
   language metadata (`LanguageTag`, `RichText.language`, `PlaceName`,
   `PersonName.transliterations`, data-model §14) describes what language a *record* is in. They
