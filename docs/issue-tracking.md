@@ -216,6 +216,7 @@ flakes that make every scenario's first assertion unreliable.
 | [`gui-pass` occasionally grabs a blank first shot](https://github.com/magne/vitni/issues/503) | The harness that tests this milestone's class of defect is flaky at its first assertion |
 | [`gui-pass` steps address elements by window pixels, not by id](https://github.com/magne/vitni/issues/533) | Every layout change this milestone makes breaks unrelated scenarios until their pixels are re-read |
 | [No merge/conflict mockup for reconciled fields](https://github.com/magne/vitni/issues/534) | No agreed design shows a user that an import overwrote one of their values; needs a design first |
+| [History does not show the value an entry recorded or replaced](https://github.com/magne/vitni/issues/545) | Seventeen mockup History items name a value the app never shows; split from #534 |
 
 **Added 2026-10-08.** #533 and #534 come from the second grooming pass. #533 is tooling, here on the
 vehicle rule like #322: the walkthroughs that refill this milestone move the layout, and each move

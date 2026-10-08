@@ -1,0 +1,67 @@
+# The assisted import's Confirm stage shows what will be recorded — the source, citation, event and
+# the surety select — in a provenance card beside the record's fields. The card is laid out in flow
+# (`.prov.prov-inline`): drawn as the anchored `.prov` popover it was positioned against the stage's
+# far corner and fell below the window, so the surety it asks for could not be seen or set.
+#
+# The click proves the select is on screen and nothing covers it: the harness fails a click whose
+# point lies outside the window or under another element.
+description = "The assisted Confirm stage's provenance card is on screen, with its surety select reachable"
+
+[[step]]
+do = "click"
+at = { role = "listitem", text = "Import" }
+label = "rail: Import"
+
+[[step]]
+do = "click"
+at = { role = "radio", text = "Assisted online import" }
+label = "mode: Assisted online import"
+
+[[step]]
+do = "click"
+at = { id = "import-url" }
+label = "field: Record or search URL"
+
+[[step]]
+do = "wait"
+seconds = 1
+label = "let the assisted wizard finish painting"
+
+[[step]]
+do = "shot"
+name = "source"
+
+[[step]]
+do = "text"
+text = "https://www.digitalarkivet.no/census/person/pf01099901000101"
+label = "type: the census person's URL"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Fetch" }
+label = "Fetch"
+
+[[step]]
+do = "wait"
+seconds = 3
+label = "let the plugin fetch the record"
+
+[[step]]
+do = "click"
+at = { id = "import-confidence" }
+label = "Confirm: the provenance card's surety select"
+
+[[step]]
+do = "key"
+chord = "Escape"
+label = "close the select's list"
+
+[[step]]
+do = "shot"
+name = "confirm"
+
+[[assert]]
+kind = "focus"
+shot = "confirm"
+element = { id = "import-confidence" }
+because = "the surety select took the click, so the provenance card is laid out on screen"

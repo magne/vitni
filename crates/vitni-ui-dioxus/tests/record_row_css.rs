@@ -1,13 +1,7 @@
 //! CSS gate for #310: the rules a record row depends on must be scoped to the *control*, not to a
-//! `div.field` wrapper the one-line `.fact-row` shape no longer has — and the mockup sheet must carry
-//! every one of them, because `docs/mockups/` is the design source of truth and its
-//! `assets/components.css` is the superset of the app sheet (`CLAUDE.md`).
-//!
-//! Two failures this catches. A rule re-scoped in `src/components.css` but not mirrored into the
-//! mockup sheet leaves the mockups drawing a row the app styles differently (the state the sheets were
-//! in before this change: the mockup sheet had no `.field-with-revert` rules at all, so `tag.html`'s
-//! edit specimen inlined the revert positioning by hand). A rule that drifts back under `.field`
-//! silently unstyles every record row in the app, which no SSR markup assertion can see.
+//! `div.field` wrapper the one-line `.fact-row` shape no longer has. A rule that drifts back under
+//! `.field` silently unstyles every record row in the app, which no SSR markup assertion can see.
+//! That the mockup sheet carries the same rules is `tests/mockup_superset.rs`'s job.
 #![expect(
     clippy::expect_used,
     reason = "fixtures are the repo's own CSS on disk; a missing rule is a real test failure"
@@ -49,34 +43,6 @@ const ROW_SELECTORS: [&str; 22] = [
 /// The read-value rule covers both placements: the stacked `.field > .val` a settings form draws and
 /// the one-line `span.field.val` a record row draws (`record-editing.html:49`).
 const READ_VALUE_SELECTORS: [&str; 2] = [".field .val", ".field.val"];
-
-/// The Media record screen's own rules, held to the same superset gate (#309). They were declared
-/// deliberately app-only, which `cargo xtask css-check` cannot catch — it only scans for hex colour
-/// literals — so `media.html` drew a preview and a viewer dialog the app sheet styled and the mockup
-/// sheet did not. Only `.crop-capture` and `.media-save-preview` stay app-only, and the amended comment
-/// above them in `src/components.css` says why.
-const MEDIA_SELECTORS: [&str; 20] = [
-    ".crop-rect .crop-handle",
-    ".crop-rect .crop-handle.nw",
-    ".crop-rect .crop-handle.ne",
-    ".crop-rect .crop-handle.sw",
-    ".crop-rect .crop-handle.se",
-    ".modal-wide",
-    ".modal-wide .mv-canvas",
-    ".mv-frame",
-    ".mv-frame.zoom-fit",
-    ".mv-frame > .media-full",
-    ".mv-frame.zoom-fit > .media-full",
-    ".mv-frame.zoom-100 > .media-full",
-    ".mv-frame.zoom-150 > .media-full",
-    ".mv-frame.zoom-200 > .media-full",
-    ".media-card",
-    ".media-open",
-    ".media-thumb",
-    ".media-full",
-    ".media-caption",
-    ".media-preview",
-];
 
 /// The read value and every control that replaces it must be pinned to one height. Measured in the
 /// real webview (`tests/gui-pass/tag-record-rows.toml`): unpinned they came out 37px and 38px, which is
@@ -129,24 +95,16 @@ fn sheets() -> (String, String) {
     (app, mockup)
 }
 
+/// The mockup sheet is held to every one of these by `tests/mockup_superset.rs`; this keeps the lists
+/// live, so a rule renamed in the app sheet fails here instead of leaving the gates below checking a
+/// selector nothing declares.
 #[test]
-fn every_record_row_rule_is_in_both_sheets_with_the_same_declarations() {
-    let (app, mockup) = sheets();
-    for selector in ROW_SELECTORS
-        .into_iter()
-        .chain(READ_VALUE_SELECTORS)
-        .chain(MEDIA_SELECTORS)
-    {
-        let in_app = rule_declarations(&app, selector);
-        let in_mockup = rule_declarations(&mockup, selector);
-        assert!(in_app.is_some(), "src/components.css declares no rule for `{selector}`");
+fn every_record_row_rule_is_in_the_app_sheet() {
+    let (app, _) = sheets();
+    for selector in ROW_SELECTORS.into_iter().chain(READ_VALUE_SELECTORS) {
         assert!(
-            in_mockup.is_some(),
-            "docs/mockups/assets/components.css lacks `{selector}` — the mockup sheet is the superset"
-        );
-        assert_eq!(
-            in_app, in_mockup,
-            "`{selector}` differs between the app sheet and the mockup superset"
+            rule_declarations(&app, selector).is_some(),
+            "src/components.css declares no rule for `{selector}`"
         );
     }
 }

@@ -83,8 +83,8 @@
     <div class="stack">
       <div class="fact-row">
         <span class="field-label" style="width:96px;margin:0">Switch</span>
-        <span class="resn" data-kind="privacy" role="switch" tabindex="0" aria-checked="true">On</span>
-        <span class="resn" data-kind="privacy" role="switch" tabindex="0" aria-checked="false">Off</span>
+        <button class="switch" type="button" role="switch" aria-checked="true">On</button>
+        <button class="switch" type="button" role="switch" aria-checked="false">Off</button>
         <span class="muted" style="font-size:var(--fs-sm)"><span class="mono">role="switch"</span> + <span class="mono">aria-checked</span> — e.g. plugin enable. Space/Enter toggles (wired in <span class="mono">shell.js</span>).</span>
       </div>
       <div class="fact-row">
@@ -290,7 +290,7 @@
       <span class="mono">&lt;button aria-haspopup="dialog" aria-expanded&gt;</span> that opens the adjacent
       <span class="mono">.prov</span> popover, moves focus into it, and closes on Escape or the Close button
       with focus returned to the trigger.</p>
-    <div style="position:relative;display:inline-block">
+    <div class="prov-anchor">
       <button id="prov-demo-trigger" class="src-link" type="button" aria-haspopup="dialog" aria-expanded="false"
         style="background:none;border:0;font:inherit;padding:0">❝ 2 sources</button>
       <div id="prov-demo-popover" class="prov" role="dialog" aria-label="Why we believe: Birth 12 Apr 1850"

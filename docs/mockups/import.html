@@ -367,6 +367,64 @@
       </div>
     </div>
 
+    <!-- ===================== AFTER A RE-IMPORT — WHAT IT CHANGED, AND WHY (ADR 0029, ADR 0049) =====================
+         Not a stage of the wizard: the record's own History tab after a re-import has replaced one of its
+         values. There is no conflict picker — the replacement is an ordinary supersession. -->
+    <div class="card">
+      <h3>After a re-import · what it changed, and why</h3>
+      <div class="section-note">A re-import replaces a single value — a date, a title, a place's coordinates —
+        only when the file says it was exported no earlier than when the value it replaces was recorded,
+        whoever recorded it (ADR 0029 §1). An older file, or one with no export date the importer can read,
+        leaves the value as it is. Nothing asks: the replacement is an ordinary <b>supersession</b>, kept in
+        the record's <b>History</b> like any correction and undone the same way. The run's row opens with
+        <b>What it changed</b> to the changes it made to this record, and the supersession says why, worded
+        from the run's file and export date in the UI's language (ADR 0049). A re-import that replaces a
+        person's sex does not yet name its run, so that one change shows as a plain software-agent entry.</div>
+      <div class="specimen">
+        <div class="label">History of E0003 · Birth of Anders Strand, after <span class="mono">tree.ged</span> was imported again</div>
+        <div class="timeline">
+          <div class="tl-item">
+            <div class="tl-when">2026-06-22 09:10</div>
+            <div class="tl-what">Imported from tree.ged<span class="muted tl-count">2 changes</span></div>
+            <div class="tl-who">gedcom-import (software agent)</div>
+            <div class="row-actions" style="margin-top:4px">
+              <button class="btn sm ghost" type="button" aria-expanded="true">▾ What it changed</button>
+              <button class="btn sm ghost" type="button" aria-label="Undo: Imported from tree.ged">↩ Undo</button>
+            </div>
+            <div class="timeline tl-children">
+              <div class="tl-item">
+                <div class="tl-when">2026-06-22 09:10</div>
+                <div class="tl-what">Date asserted</div>
+                <div class="tl-who">gedcom-import (software agent)</div>
+              </div>
+              <div class="tl-item">
+                <div class="tl-when">2026-06-22 09:10</div>
+                <div class="tl-what">Assertion superseded</div>
+                <div class="tl-who">gedcom-import (software agent)</div>
+                <div class="tl-why">The value it replaced was recorded at or before the export of tree.ged (2026-06-21), so the file's value replaced it.</div>
+              </div>
+            </div>
+          </div>
+          <div class="tl-item">
+            <div class="tl-when">2026-06-15 14:02</div>
+            <div class="tl-what">Date asserted</div>
+            <div class="tl-who">magne · Normal</div>
+            <div class="tl-why">Parish register reads 6 April</div>
+            <div class="row-actions" style="margin-top:4px"><button class="btn sm ghost" type="button" aria-label="Undo: Date asserted">↩ Undo</button></div>
+          </div>
+          <div class="tl-item">
+            <div class="tl-when">2026-06-10 11:02</div>
+            <div class="tl-what">Imported from tree.ged<span class="muted tl-count">3 changes</span></div>
+            <div class="tl-who">gedcom-import (software agent)</div>
+            <div class="row-actions" style="margin-top:4px">
+              <button class="btn sm ghost" type="button" aria-expanded="false">▸ What it changed</button>
+              <button class="btn sm ghost" type="button" aria-label="Undo: Imported from tree.ged">↩ Undo</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- ===================== BULK STAGE 4b — FAILED ===================== -->
     <div class="card">
       <h3>Stage 4 · Failed <span class="muted faint" style="font-weight:400;text-transform:none;letter-spacing:0">— specimen</span></h3>
@@ -627,7 +685,7 @@
           </div>
 
           <!-- Provenance preview card -->
-          <div class="prov" style="max-width:none;margin-top:var(--sp-4)">
+          <div class="prov prov-inline">
             <h4>What will be recorded</h4>
             <div class="prov-claim" style="border-top:0;padding-top:0">
               <span class="muted" style="width:96px">Operator</span>

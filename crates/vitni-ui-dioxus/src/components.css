@@ -323,12 +323,6 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
   border-radius: var(--r-md); padding: var(--sp-1) var(--sp-2);
   color: var(--ink); font-size: var(--fs-sm); outline: none;
 }
-.list-toolbar .sort {
-  flex: 0 1 auto; min-width: 0;
-  background: var(--panel-2); border: 1px solid var(--line);
-  border-radius: var(--r-md); padding: var(--sp-1) var(--sp-2);
-  color: var(--ink); font-size: var(--fs-sm);
-}
 .list-rows { overflow: auto; flex: 1; }
 .row {
   display: flex; align-items: center; gap: var(--sp-3);
@@ -630,6 +624,8 @@ table.tbl .no-source, table.tbl .src-link { white-space: nowrap; }
 .tl-who { font-size: var(--fs-xs); color: var(--muted); }
 .tl-why { font-size: var(--fs-sm); color: var(--ink-2); font-style: italic; }
 .tl-evidence { font-size: var(--fs-xs); }
+/* An import run's own changes, shown under its row when its disclosure is open (ADR 0049 §3). */
+.timeline.tl-children { margin-top: var(--sp-3); }
 
 /* ---- Provenance popover ("why we believe this") — anchored to the claim's source-count link ---- */
 .prov-anchor { position: relative; display: inline-block; }
@@ -645,6 +641,9 @@ table.tbl .no-source, table.tbl .src-link { white-space: nowrap; }
 /* In a help specimen the popover is illustrative, not anchored: render it in normal flow inside
    the specimen card rather than absolutely-positioned (which would escape to the page bottom). */
 .specimen .prov { position: static; margin-top: 0; box-shadow: none; max-width: none; }
+/* An in-flow provenance card (the assisted import's "What will be recorded"): the popover's look,
+   laid out where it is written rather than anchored to a trigger. */
+.prov.prov-inline { position: static; margin-top: var(--sp-4); min-width: 0; max-width: none; }
 
 /* ---- Side panel (slide-in editor) ---- */
 /* `position: absolute`, escaping into the nearest positioned ancestor — `.detail` for a record's own
@@ -1163,8 +1162,7 @@ select.in.modified { border-color: var(--accent); }
 }
 
 /* ---- Media image frames + crop overlay (media.html; ADR 0017 §GUI) ----
-   Shared with docs/mockups/assets/components.css; the app-only helpers below (.media-*, .crop-capture)
-   render the real <img> and pointer-capture the crop drag. Geometry is percent-based (zoom-invariant). */
+   The helpers below (.media-*, .crop-capture) render the real <img> and pointer-capture the crop drag. Geometry is percent-based (zoom-invariant). */
 .img-frame {
   position: relative; overflow: hidden;
   border: 1px solid var(--line); border-radius: var(--r-md); background: var(--panel-2);
@@ -1243,11 +1241,7 @@ select.in.modified { border-color: var(--accent); }
    pads itself 72px, so a modal sized against the whole viewport still overflows the window bottom. */
 .modal-wide .mv-canvas { height: 62vh; max-height: none; }
 
-/* Real image rendering, mirrored into the mockup sheet (#309): `media.html` draws the preview frame
-   and the viewer dialog, so the superset must style them (`tests/record_row_css.rs`). Only two rules
-   stay app-only, because the mockups have nothing they could apply to: `.crop-capture` is the crop
-   drag-capture layer, invisible by construction, and `.media-save-preview` belongs to the media save
-   dialog, which no mockup draws. */
+/* Real image rendering (#309): `media.html` draws the preview frame and the viewer dialog. */
 .media-card { padding: var(--sp-2); }
 .media-open { display: block; width: 100%; padding: 0; border: 0; background: none; cursor: pointer; }
 .media-thumb { display: block; width: 100%; height: 100%; object-fit: cover; }

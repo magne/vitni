@@ -151,33 +151,35 @@
           </div>
 
           <!-- Provenance popover specimen, shown inline for the mockup -->
-          <div class="muted" style="font-size:var(--fs-xs);margin-top:8px">Popover specimen — opens anchored to a value's ❝ source-link, not an inline section:</div>
-          <div class="prov" style="margin-top:4px">
-            <h4>Why we believe: Birth 12 Apr 1850</h4>
-            <div class="prov-claim">
-              <span class="conf" data-level="high"><span class="dot"></span></span>
-              <div>
-                <div>1850 U.S. Federal Census, New York — age 0</div>
-                <div class="wrap" style="margin-top:4px"><span class="ev source">derivative</span><span class="ev info">primary</span><span class="ev evidence">indirect</span></div>
-                <div class="tl-who">asserted by magne · 22 Jun 2026</div>
+          <div class="specimen" style="margin-top:8px">
+            <div class="label">Popover specimen — opens anchored to a value's ❝ source-link, not an inline section</div>
+            <div class="prov">
+              <h4>Why we believe: Birth 12 Apr 1850</h4>
+              <div class="prov-claim">
+                <span class="conf" data-level="high"><span class="dot"></span></span>
+                <div>
+                  <div>1850 U.S. Federal Census, New York — age 0</div>
+                  <div class="wrap" style="margin-top:4px"><span class="ev source">derivative</span><span class="ev info">primary</span><span class="ev evidence">indirect</span></div>
+                  <div class="tl-who">asserted by magne · 22 Jun 2026</div>
+                </div>
               </div>
-            </div>
-            <div class="prov-claim">
-              <span class="conf" data-level="very-high"><span class="dot"></span></span>
-              <div>
-                <div>Baptism register, Trinity Church — 14 Apr 1850</div>
-                <div class="wrap" style="margin-top:4px"><span class="ev source">original</span><span class="ev info">primary</span><span class="ev evidence">direct</span></div>
-                <div class="tl-who">asserted by magne · 22 Jun 2026</div>
+              <div class="prov-claim">
+                <span class="conf" data-level="very-high"><span class="dot"></span></span>
+                <div>
+                  <div>Baptism register, Trinity Church — 14 Apr 1850</div>
+                  <div class="wrap" style="margin-top:4px"><span class="ev source">original</span><span class="ev info">primary</span><span class="ev evidence">direct</span></div>
+                  <div class="tl-who">asserted by magne · 22 Jun 2026</div>
+                </div>
               </div>
-            </div>
-            <!-- A claim an import read from a record names that record (ADR 0037 §2); it links out when
-                 the dataset has a page per record (Digitalarkivet), and is plain text otherwise. An
-                 imported claim with no citation still opens this popover, beside its ⚠ no source flag,
-                 from a "❝ imported" trigger. -->
-            <div class="prov-claim">
-              <div>
-                <div>from <a href="https://www.digitalarkivet.no/pf01099901000101">record pf01099901000101 in Digitalarkivet</a></div>
-                <div class="tl-who">1910 census, Kristiania</div>
+              <!-- A claim an import read from a record names that record (ADR 0037 §2); it links out when
+                   the dataset has a page per record (Digitalarkivet), and is plain text otherwise. An
+                   imported claim with no citation still opens this popover, beside its ⚠ no source flag,
+                   from a "❝ imported" trigger. -->
+              <div class="prov-claim">
+                <div>
+                  <div>from <a href="https://www.digitalarkivet.no/pf01099901000101">record pf01099901000101 in Digitalarkivet</a></div>
+                  <div class="tl-who">1910 census, Kristiania</div>
+                </div>
               </div>
             </div>
           </div>
@@ -509,7 +511,7 @@
 
         <!-- HISTORY (audit trail — free from the event log) -->
         <div class="tab-pane" data-pane="history">
-          <div class="section-note">Every change is an immutable event recording <b>who</b>, <b>when</b>, and <b>why</b>. This audit trail comes for free from the event-sourced core — no competitor offers it built-in. Any entry can be undone. An identity decision — merged, or marked as a different person — also shows the matching engine's assessment it was made on. Every change one import run made to this record folds into one row, named by what the run imported, with the number of changes it made here muted beside it — not the number of records the run imported.</div>
+          <div class="section-note">Every change is an immutable event recording <b>who</b>, <b>when</b>, and <b>why</b> — an audit trail that comes free from the event-sourced core. Any entry can be undone. An identity decision — merged, or marked as a different person — also shows the matching engine's assessment it was made on. Every change one import run made to this record folds into one row, named by what the run imported, with the number of changes it made here muted beside it — not the number of records the run imported. <b>What it changed</b> opens the row to those changes; a value a re-import replaced says why (see <a href="import.html">Import</a>).</div>
           <div class="timeline">
             <div class="tl-item">
               <div class="tl-when">2026-06-22 14:35</div>
@@ -543,7 +545,7 @@
               <div class="tl-when">2026-06-10 11:02</div>
               <div class="tl-what">Imported from tree.ged<span class="muted tl-count">4 changes</span></div>
               <div class="tl-who">gedcom-import (software agent)</div>
-              <div class="row-actions" style="margin-top:4px"><button class="btn sm ghost">↩ Undo</button></div>
+              <div class="row-actions" style="margin-top:4px"><button class="btn sm ghost" type="button" aria-expanded="false">▸ What it changed</button><button class="btn sm ghost">↩ Undo</button></div>
             </div>
           </div>
         </div>

@@ -547,7 +547,10 @@ The ones that will fail a review if missed:
 - **Every UI change updates [`mockups/`](mockups/) in the same change.** The mockups are the design
   source of truth and describe shipped behaviour, so a change the mockups still contradict is
   incomplete. `mockups/assets/components.css` is the superset — the app sheet must not introduce a
-  rule the mockups lack.
+  rule the mockups lack, and a rule both sheets declare carries the same declarations.
+  `crates/vitni-ui-dioxus/tests/mockup_superset.rs` checks the whole sheet, per selector and per
+  `@media` block; a deliberate difference goes in its `OWN_DECLARATIONS` with the reason. Mockup-only
+  rules (a specimen frame, a faked map surface) are allowed.
 - **Never commit to `main`.** Feature branches and pull requests, merged `--no-ff`. Install the hooks
   with `prek install`.
 

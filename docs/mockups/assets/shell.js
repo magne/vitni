@@ -373,7 +373,7 @@
     });
   }
 
-  // Arrow-key roving selection for role="radio" groups, Space/Enter toggle for
+  // Arrow-key roving selection for role="radio" groups, click toggle for
   // role="switch" — delegated on document so it works on every page (shell-driven
   // or standalone, e.g. design-system.html, preferences.html, plugin-manager.html)
   // without needing per-page wiring. Mirrors wireTabs' arrow-key pattern.
@@ -397,11 +397,13 @@
         items[ni].setAttribute("aria-checked", "true");
         items[ni].setAttribute("tabindex", "0");
         items[ni].focus();
-      } else if (role === "switch") {
-        if (ev.key !== " " && ev.key !== "Enter") return;
-        ev.preventDefault();
-        t.setAttribute("aria-checked", t.getAttribute("aria-checked") === "true" ? "false" : "true");
       }
+    });
+    // A switch is a real <button> (as the app's .switch is), so Space/Enter arrive as a click.
+    document.addEventListener("click", function (ev) {
+      var t = ev.target && ev.target.closest ? ev.target.closest('[role="switch"]') : null;
+      if (!t) return;
+      t.setAttribute("aria-checked", t.getAttribute("aria-checked") === "true" ? "false" : "true");
     });
   }
 
@@ -440,7 +442,6 @@
     var shell = el("div", "shell");
     shell.appendChild(buildTopbar(cfg));
     if (isEntity && cfg.tabstrip) {
-      shell.style.gridTemplateRows = "var(--topbar-h) auto minmax(0, 1fr) var(--statusbar-h)";
       shell.appendChild(buildTabstrip(cfg.tabstrip));
     }
     var wa = el("main", "workarea");

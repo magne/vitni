@@ -206,7 +206,7 @@ pub fn ImportScreen() -> Element {
     let mode = use_signal(|| IMPORT_MODE_BULK.to_owned());
     if mode() == IMPORT_MODE_BULK {
         return rsx! {
-            div { style: "display:flex;flex-direction:column;gap:var(--sp-4);padding:var(--sp-4)",
+            div { style: "display:flex;flex-direction:column;gap:var(--sp-4);padding:var(--sp-4);overflow:auto;height:100%",
                 h1 { style: "border:0;margin:0;font-size:21px", "{chrome.import_tool_heading()}" }
                 ImportModeSwitch { labels: import_mode_labels(&chrome), mode }
                 BulkImportBody {}
@@ -318,7 +318,7 @@ pub fn ImportScreen() -> Element {
     };
 
     rsx! {
-        div { style: "display:flex;flex-direction:column;gap:var(--sp-4);padding:var(--sp-4)",
+        div { style: "display:flex;flex-direction:column;gap:var(--sp-4);padding:var(--sp-4);overflow:auto;height:100%",
             h1 { style: "border:0;margin:0;font-size:21px", "{chrome.import_tool_heading()}" }
             ImportModeSwitch { labels: import_mode_labels(&chrome), mode }
             h2 { style: "border:0;margin:0;font-size:16px", "{chrome.import_heading()}" }
@@ -703,7 +703,7 @@ fn provenance_card(
         .collect();
     let selected = level_token(payload_to_level(confidence())).to_owned();
     rsx! {
-        div { class: "prov", style: "max-width:none;margin-top:var(--sp-4)",
+        div { class: "prov prov-inline",
             h4 { "{chrome.provenance_heading}" }
             {prov_row(&chrome.prov[1], &provenance.source_title)}
             {prov_row(&chrome.prov[2], &provenance.repository)}

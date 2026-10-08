@@ -187,6 +187,9 @@ history-import-run-done = fullført
 history-import-run-running = pågår
 history-import-run-resume = Fortsett
 history-import-run-resume-aria = Fortsett importen fra { $source }
+# Hvorfor en import erstattet en verdi (ADR 0049): kjøringens fil oppga en eksportdato som ikke var
+# tidligere enn da verdien den erstattet ble registrert (ADR 0029 §1). Vises på erstatningen i en kjøringsrad.
+history-import-superseded-why = Verdien den erstattet ble registrert senest da { $source } ble eksportert ({ $date }), så filens verdi erstattet den.
 
 # Endringslogg-operatørlinje
 history-operator-human = { $name } · { $confidence }
@@ -196,6 +199,8 @@ history-operator-ai = KI-modell
 history-operator-unknown = ukjent operatør
 history-undo = Angre: { $what }
 history-undo-short = Angre
+# Utvideren på en importkjørings Historikk-rad som viser endringene den samler (ADR 0049 §3).
+history-import-run-changes-toggle = Hva den endret
 
 # Redigeringsetiketter
 field-nickname = Kallenavn

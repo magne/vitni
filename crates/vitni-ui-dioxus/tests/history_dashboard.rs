@@ -9,7 +9,7 @@ use vitni_ui::{
     ActivityVm, Category, DashboardStats, DashboardVm, DataQualityVm, JumpVm, Localizer, QueuedMatchVm, RecordRef,
     ResumeVm,
 };
-use vitni_ui_dioxus::components::{HistoryEntry, HistoryTimeline};
+use vitni_ui_dioxus::components::{HistoryEntry, HistoryTimeline, RunChanges};
 use vitni_ui_dioxus::screens::dashboard_view;
 use vitni_ui_dioxus::shell::nav_state::NavState;
 
@@ -28,6 +28,7 @@ fn timeline() -> Element {
                 undo_label: "Undo: Name asserted".to_owned(),
                 count: None,
                 evidence: None,
+                changes: None,
             }],
             onundo: move |_| {},
         }
@@ -49,10 +50,72 @@ fn run_timeline() -> Element {
                 undo_label: "Undo: Imported from tree.ged".to_owned(),
                 count: Some("4 changes".to_owned()),
                 evidence: None,
+                changes: None,
             }],
             onundo: move |_| {},
         }
     }
+}
+
+/// An import run's row that folds a supersession and its replacement.
+fn run_with_changes() -> Element {
+    let child = |what: &str, why: Option<&str>| HistoryEntry {
+        when: "2026-06-22 14:35".to_owned(),
+        what: what.to_owned(),
+        who: "gedcom-import (software agent)".to_owned(),
+        why: why.map(ToOwned::to_owned),
+        assertion_id: what.to_owned(),
+        can_undo: false,
+        undo_text: "Undo".to_owned(),
+        undo_label: format!("Undo: {what}"),
+        count: None,
+        evidence: None,
+        changes: None,
+    };
+    rsx! {
+        HistoryTimeline {
+            entries: vec![HistoryEntry {
+                when: "2026-06-22 14:35".to_owned(),
+                what: "Imported from tree.ged".to_owned(),
+                who: "gedcom-import (software agent)".to_owned(),
+                why: None,
+                assertion_id: "a1".to_owned(),
+                can_undo: true,
+                undo_text: "Undo".to_owned(),
+                undo_label: "Undo: Imported from tree.ged".to_owned(),
+                count: Some("2 changes".to_owned()),
+                evidence: None,
+                changes: Some(RunChanges {
+                    label: "What it changed".to_owned(),
+                    entries: vec![
+                        child("Sex asserted", None),
+                        child("Assertion superseded", Some("The value it replaced was recorded at or before the export of tree.ged (2026-06-21), so the file's value replaced it.")),
+                    ],
+                }),
+            }],
+            onundo: move |_| {},
+        }
+    }
+}
+
+#[test]
+fn an_import_run_row_offers_its_changes_behind_a_closed_disclosure() {
+    let mut vdom = VirtualDom::new(run_with_changes);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    assert!(
+        html.contains(r#"aria-expanded="false""#) && html.contains("What it changed"),
+        "the run row carries a closed disclosure naming its changes:\n{html}"
+    );
+    assert!(
+        !html.contains("tl-children") && !html.contains("Assertion superseded"),
+        "the changes stay folded until the disclosure opens:\n{html}"
+    );
+    assert_eq!(
+        html.matches("↩ Undo").count(),
+        1,
+        "only the run row is undoable:\n{html}"
+    );
 }
 
 #[test]
@@ -363,6 +426,7 @@ fn decision_timeline() -> Element {
                 undo_label: "Undo: Persona merged".to_owned(),
                 count: None,
                 evidence: Some("Matched at 97% · probable match · engine 4".to_owned()),
+                changes: None,
             }],
             onundo: move |_| {},
         }

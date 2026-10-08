@@ -91,8 +91,12 @@ none needs an event rewrite — and the first three are gated by an unwritten **
 
 ### Tags
 
-No open items. The area keeps its heading so `area/records/tags` stays a live label and the issues
-already filed against it keep resolving their [`#tags`](#tags) anchor.
+- **The Tag History tab says any entry can be undone.** A tag has no retraction, so its History tab
+  renders no undo control (`on_undo: None` in `crates/vitni-ui-dioxus/src/screens/tag.rs`), yet
+  `shared_tab` gives it the shared `history-note`, which ends "Any entry can be undone." `tag.html`
+  words its note honestly ("Tag history is display-only"), so `tests/mockup_history_note.rs` exempts it
+  by name. *Shape:* a Tag-specific History note key, the exemption dropped. *Exit:* the Tag History tab
+  and `tag.html` say the same thing.
 
 ### Media
 
@@ -180,6 +184,19 @@ only the Overview and their entity-specific tables. So each item here lands on e
 which is what makes them worth fixing in the shared code rather than per screen. Most came out of the
 2026-08-12 GUI walkthrough; the rest from reading the code.
 
+- **History does not show the value an entry recorded or replaced.** `ChangeLogEntry`
+  (`crates/vitni-app/src/history.rs`) carries the event type, operator, time and rationale but no field
+  and no value, and `change_summary` (`crates/vitni-ui/src/i18n.rs`) maps the type to a fixed phrase
+  ("Date asserted"). So a History row never says what a change set a field to, and a supersession — a
+  user's correction, or a re-import replacing a value (ADR 0029, ADR 0049) — never says what it
+  replaced. The mockups already draw it: 17 History items name the value, and `event.html`,
+  `person.html`, `strengths.html` and `tag.html` also name the one replaced ("Date asserted: **14 Jun
+  1876** (was abt 1876)"), describing behaviour that has not shipped. Split from #534, whose merge view
+  shows who, when and why but not the values. *Shape:* a frontend-neutral value summary on
+  `ChangeLogEntry` (the field and its value, plus, on a supersession, the value it replaced), decoded
+  per aggregate like `extract_detail`, rendered in the row's summary through the existing presentation
+  helpers. *Exit:* every History item the mockups draw with a value renders it in the app, and a
+  supersession names the value it replaced. — #545
 - **The change-set commit path is written out 14 times in `services.rs`.** `services.rs:283-497` holds
   the 13 `commit_*_change_set` wrappers plus `commit_new_record`, whose bodies are the same four
   statements — `localizer()`, `open()`, `Session::new(config.operator_agent())`,
@@ -401,11 +418,15 @@ in its own area: research notes (*Notes & research notes*). The one gap running 
 
 - **Lift `prepare_import_target`** into `vitni-app::workspace_registry` — still inline in the CLI
   (the rest of `init` already delegates).
-- **No merge/conflict mockup for reconciled fields** — the Phase 10 plan required a merge/conflict view
-  in `docs/mockups/import.html` showing a reconciled field's audit trail (who/when/why, not an
-  interactive picker), and listed it in the Gate-2 exit criteria. `import.html` has no such view: the
-  ADR 0029 supersede path is invisible in the mockups, so there is no agreed design for showing a user
-  that an import overwrote one of their values. — #534
+- **A re-import's sex supersession names no run.** A first import's "Sex asserted" sits in its run's
+  History row, but when a re-import supersedes the sex (`import_assert_sex`,
+  `crates/vitni-app/src/import.rs`, ADR 0029 §1) its `SexAsserted` and `AssertionSuperseded` carry no
+  record origin, unlike every field the origin gate supersedes. So History cannot fold them into the
+  run's row, and they read as a bare software-agent "Sex asserted" with no derived reason (ADR 0049).
+  Seen in `reimport_reconciles_sex_only_when_the_files_export_date_is_at_least_as_recent`
+  (`crates/vitni-plugin-host/tests/gedcom_round_trip.rs`). *Shape:* give the supersede path the record
+  origin the gate's writes carry. *Exit:* that test's superseding re-import shows in its run's row with
+  the reason.
 - **An unreadable file export date is ignored without notice** — ADR 0029 §3 makes an unparseable date
   additive-only, but nothing says it applied, so a re-import of a newer file updates nothing unseen.
   `begin_run` in `crates/vitni-plugin-host/src/staging.rs` drops a date that fails
@@ -612,38 +633,6 @@ already filed against it keep resolving their [`#backup--restore`](#backup--rest
 
 The `area/docs` label already existed with no `###` home; this is it.
 
-- **The mockup sheet is only partly the superset it is documented to be.** [`CLAUDE.md`](../CLAUDE.md)
-  states that `docs/mockups/assets/components.css` is the superset — "the app sheet must not introduce a
-  rule the mockups lack" — and nothing checks the sheet as a whole, so it does not hold.
-  `cargo xtask css-check` polices hex colour literals only; `tests/hover_affordance.rs` and (since #310)
-  `tests/record_row_css.rs` do compare both sheets rule-for-rule, but each over a *named list* — the
-  ghost-row rules and the record-row rules — so everything outside those two lists is ungated. Measured
-  by stripping comments from both sheets, descending into their `@media` blocks and comparing rules by
-  selector: **24 app rules have no mockup counterpart**, spanning 31 distinct selectors. Whole components
-  are absent — `.switch` (+ `[aria-checked="true"]`), `.menu-anchor`/`.menu-scrim`/`.new-record-menu`
-  (the mockup sheet names `.menu-scrim` only in a comment), `.help-browser`,
-  `.prov-anchor`/`.prov-backdrop`, `.media-save-preview` and `.crop-capture` (what is left of the
-  media set after #309 mirrored the other six and put them under `tests/record_row_css.rs`) —
-  alongside single rules a static page had no need for (`.shell > .topbar|.tabstrip|.workarea|.statusbar`'s
-  grid rows, `.detail-slot`, `.detail-id`, `.card.blocked` + `> h3`, `.conf.conf-unset`,
-  `.list-toolbar .sort`, `.doc p .help-link` + `:hover`, `.specimen .prov`) and the app's `text-box-trim`
-  half-leading rule, whose whole 17-selector list is missing. A second class the same comparison surfaces
-  but does not count: **19 of the 343 selectors present in both sheets carry different declarations**,
-  the sharpest being `.prov` — an anchored popover in the app, an in-flow card in the mockup, so the two
-  sheets disagree about what the component *is*. Some of the 19 are legitimate (a static page's `.shell`
-  is not the app's grid), which is why closing this needs a decided rule and a gate over the whole sheet,
-  not a diff someone reads once. One method trap for whoever writes that gate: comparing selector *text*
-  produces false positives — six `.rail .nav-item*` rules read as missing until you notice the mockup
-  groups each with `.subnav .nav-item`, so it has to compare selector atoms, not selector lists. — #502
-- **Ten mockups quote a History note no shipped string says.** `source.html`, `event.html`,
-  `citation.html`, `place.html`, `repository.html`, `person.html`, `dna-test.html`, `family.html`,
-  `dna-match.html` and `note.html` all carry "This audit trail comes for free from the event-sourced
-  core — no competitor offers it built-in" in their History tab's `.section-note`, while the shipped
-  `history-note` (`vitni-ui/i18n/en/vitni-ui.ftl:70`) says "an audit trail that comes free from the
-  event-sourced core" and makes no competitor claim. Found while auditing `media.html` for #309, which
-  fixed that one page only — the other ten are a mechanical sweep, and worth doing in one pass so the
-  mockups stop advertising something the product does not say. Nothing gates prose against the
-  catalogue, which is why all eleven drifted together. — #501
 - **`main` is protected without required status checks, and that is a choice.** `ci.yml` filters
   `docs/**`, `*.md` and `LICENSE*` out of its triggers, so a documentation-only pull request starts no
   run at all — a required context would sit unfulfilled forever on exactly the changes this repository

@@ -17,6 +17,17 @@ body {
 
 ::selection { background: var(--selection); }
 
+/* The UI font (Noto Sans on Linux) reserves large ascender/descender leading, so single-line text in
+   fixed-height / centred controls rides high with empty space below. Trim the half-leading to the
+   cap-height/alphabetic-baseline box so text sits optically centred. WebKitGTK ≥ 2.46 supports this. */
+/* Only single-line, fixed-height / centred controls — NOT stacked text (row title+subtitle,
+   detail title+subtitle) or labels, where trimming the leading would collapse the air between lines. */
+.btn, .in, input, select, textarea, .badge, .chip, .ev, .conf, .resn, .switch,
+.tab, .rtab, .nav-item .count, .tab-count, .avatar, .avatar-lg {
+  text-box-trim: trim-both;
+  text-box-edge: cap alphabetic;
+}
+
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
@@ -113,13 +124,22 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 /* ---- Right column ---- */
 .shell {
   display: grid;
-  grid-template-rows: var(--topbar-h) minmax(0, 1fr) var(--statusbar-h);
-  /* Bound the single column to the shell width so a wide tabstrip/table scrolls instead of
-     overflowing the window horizontally. */
+  /* The work-area row is `minmax(0, 1fr)` (not `1fr`) for the same reason as `.app`: the `0` floor
+     lets it shrink below content so the work area scrolls internally rather than growing the shell. */
+  grid-template-rows: var(--topbar-h) auto minmax(0, 1fr) var(--statusbar-h);
+  /* Bound the single column to the shell width (an implicit `auto` column would grow to its widest
+     child — the tabstrip or a wide table — and overflow the window horizontally). */
   grid-template-columns: minmax(0, 1fr);
   min-height: 0;
   min-width: 0;
 }
+/* Pin each region to its row so an empty tabstrip (the dashboard has no open
+   records) cannot let the remaining children auto-place into the wrong tracks
+   and float the status bar off the bottom. */
+.shell > .topbar { grid-row: 1; }
+.shell > .tabstrip { grid-row: 2; }
+.shell > .workarea { grid-row: 3; }
+.shell > .statusbar { grid-row: 4; }
 
 /* ---- Topbar: breadcrumb + search + actions ---- */
 .topbar {
@@ -152,7 +172,7 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
   width: 16px; height: 16px; flex: none;
   display: grid; place-items: center;
   border: 0; border-radius: var(--r-pill);
-  background: var(--err); color: #fff;
+  background: var(--err); color: var(--on-err);
   font-size: 10px; line-height: 1; cursor: pointer;
 }
 .icon-btn {
@@ -212,6 +232,20 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
    signal itself (WCAG 1.4.1). */
 .rtab.unsaved { color: var(--ink-2); }
 .rtab .unsaved-dot { color: var(--warn); font-size: var(--fs-xs); line-height: 1; }
+/* ---- New-record menu (the tabstrip "+") ---- */
+.menu-anchor { position: relative; display: inline-flex; }
+/* The scrim is a `<button>` (keyboard-dismissable click-away catcher); strip the UA button face so
+   it stays an invisible overlay rather than a grey wash. */
+.menu-scrim {
+  position: fixed; inset: 0; z-index: 20;
+  appearance: none; background: transparent; border: 0; padding: 0; margin: 0;
+}
+.new-record-menu {
+  position: absolute; top: calc(100% + 4px); left: 0; z-index: 21;
+  min-width: 220px; max-height: 60vh; overflow-y: auto;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-md);
+  box-shadow: var(--shadow-2); padding: var(--sp-1);
+}
 
 /* ====================================================================
    Workarea: master-detail
@@ -245,20 +279,29 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
   flex: 1; min-width: 0; font-weight: 600; color: var(--ink);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+/* The in-app Help browser's bespoke two-pane (topic index + article), independent of the shared
+   editor-area `.master-detail` (which no longer carries a list column). */
+.help-browser {
+  display: grid;
+  grid-template-columns: var(--list-w) 1fr;
+  height: 100%;
+}
 
 /* ---- Entity list (master) ---- */
 .list {
   border-right: 1px solid var(--line);
   background: var(--panel);
-  display: flex; flex-direction: column; min-height: 0;
+  display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden;
 }
 .list-toolbar {
   display: flex; align-items: center; gap: var(--sp-2);
   padding: var(--sp-2) var(--sp-3);
   border-bottom: 1px solid var(--line);
+  min-width: 0;
 }
 .list-toolbar .filter {
-  flex: 1; background: var(--panel-2); border: 1px solid var(--line);
+  flex: 1 1 auto; min-width: 0;
+  background: var(--panel-2); border: 1px solid var(--line);
   border-radius: var(--r-md); padding: var(--sp-1) var(--sp-2);
   color: var(--ink); font-size: var(--fs-sm); outline: none;
 }
@@ -284,13 +327,16 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 }
 .row .row-main { min-width: 0; flex: 1; }
 .row .row-title { font-size: var(--fs-md); font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.row .row-sub { font-size: var(--fs-xs); color: var(--muted); }
-.row .row-id { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--faint); }
+.row .row-sub { font-size: var(--fs-xs); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .row-id { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--faint); white-space: nowrap; flex: none; }
 
 /* ---- Detail (detail) ---- */
 /* Fixed header + tab strip, only the tab body scrolls, so the tabs stay pinned under the header. */
-.detail { overflow: hidden; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.detail { position: relative; overflow: hidden; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .detail + .detail { border-left: 1px solid var(--line); }
+/* The record-detail router's keyed wrapper: layout-neutral so the pane's `.detail-head`/tabs
+   stay direct flex children of `.detail` while the wrapper keeps the pane a keyed dynamic child. */
+.detail-slot { display: contents; }
 /* A fixed (non-scrolling) flex item so Edit / Cancel / Save stay in view while the tab body is
    scrolled (record-editing.html §5) — the pane body scrolls beneath it, not the header. */
 .detail-head {
@@ -329,8 +375,8 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
   border-bottom: 1px solid var(--line);
   overflow-x: auto;
   scrollbar-width: none;
-  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
-  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  -webkit-mask-image: linear-gradient(to right, var(--mask-solid) calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to right, var(--mask-solid) calc(100% - 28px), transparent);
 }
 .tabs::-webkit-scrollbar { display: none; }
 .tab {
@@ -353,6 +399,7 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 .tab-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: var(--sp-5); }
 .tab-pane { display: none; }
 .tab-pane.active { display: block; }
+.detail-id { min-width: 0; }
 
 /* ====================================================================
    Primitives
@@ -391,6 +438,9 @@ table.tbl tr:hover .btn.ghost,
   border-radius: var(--r-lg); padding: var(--sp-4); margin-bottom: var(--sp-4);
 }
 .card > h3 { font-size: var(--fs-md); color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: var(--sp-3); }
+/* A blocked-merge card (matches.html): error border, error-coloured heading. */
+.card.blocked { border-color: var(--err); }
+.card.blocked > h3 { color: var(--err); }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-4); }
 .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-4); }
 
@@ -531,6 +581,7 @@ select.in.modified { border-color: var(--accent); }
 .conf[data-level="normal"]    .dot { background: var(--conf-normal); }
 .conf[data-level="high"]      .dot { background: var(--conf-high); }
 .conf[data-level="very-high"] .dot { background: var(--conf-very-high); }
+.conf.conf-unset { color: var(--faint); font-weight: 400; font-style: italic; }
 
 /* Evidence-axis chips */
 .ev { display: inline-flex; align-items: center; line-height: 1; font-size: var(--fs-xs); font-weight: 600; padding: 3px var(--sp-2); border-radius: var(--r-sm); border: 1px solid; }
@@ -561,6 +612,16 @@ select.in.modified { border-color: var(--accent); }
 /* In the detail header the group trails the badges inside one `.wrap`, where the shared pill metrics
    made it read as three more badges. A rule sets the group apart as the record's privacy state. */
 .detail-head .resn-set { margin-left: var(--sp-1); padding-left: var(--sp-3); border-left: 1px solid var(--line); }
+/* Enabled/disabled switch (role="switch"): a pill button whose text ("On"/"Off") carries the state,
+   never colour alone. Used by the plugin manager (PR21). */
+.switch {
+  display: inline-flex; align-items: center; min-height: 24px; /* WCAG 2.2 §2.5.8 target size */
+  font-size: var(--fs-xs); font-weight: 600; padding: 2px var(--sp-3);
+  border-radius: var(--r-pill); border: 1px solid var(--line); color: var(--faint);
+  background: var(--panel-2); cursor: pointer; user-select: none;
+  appearance: none; font-family: inherit;
+}
+.switch[aria-checked="true"] { color: var(--ok); border-color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); }
 
 /* Source link + no-source warning flag (differentiator cues) */
 .src-link { display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-xs); color: var(--accent); cursor: pointer; }
@@ -615,25 +676,39 @@ table.tbl .no-source, table.tbl .src-link { white-space: nowrap; }
 .tl-who { font-size: var(--fs-xs); color: var(--muted); }
 .tl-why { font-size: var(--fs-sm); color: var(--ink-2); font-style: italic; }
 .tl-evidence { font-size: var(--fs-xs); }
+/* An import run's own changes, shown under its row when its disclosure is open (ADR 0049 §3). */
+.timeline.tl-children { margin-top: var(--sp-3); }
+/* ---- Provenance popover ("why we believe this") — anchored to the claim's source-count link ---- */
+.prov-anchor { position: relative; display: inline-block; }
+.prov-backdrop { position: fixed; inset: 0; z-index: 40; border: 0; padding: 0; background: transparent; cursor: default; }
 
 /* ---- Provenance popover ("why we believe this") ---- */
 .prov {
+  position: absolute; top: 100%; right: 0; z-index: 50; margin-top: var(--sp-2);
   border: 1px solid var(--line); border-radius: var(--r-lg);
   background: var(--panel); box-shadow: var(--shadow-2);
-  padding: var(--sp-4); max-width: 340px;
+  padding: var(--sp-4); min-width: 280px; max-width: 340px; text-align: left;
 }
 .prov h4 { font-size: var(--fs-sm); color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: var(--sp-2); }
 .prov .prov-claim { display: flex; gap: var(--sp-2); padding: var(--sp-2) 0; border-top: 1px solid var(--line); }
+/* In a help specimen the popover is illustrative, not anchored: render it in normal flow inside
+   the specimen card rather than absolutely-positioned (which would escape to the page bottom). */
+.specimen .prov { position: static; margin-top: 0; box-shadow: none; max-width: none; }
+/* An in-flow provenance card (the assisted import's "What will be recorded"): the popover's look,
+   laid out where it is written rather than anchored to a trigger. */
+.prov.prov-inline { position: static; margin-top: var(--sp-4); min-width: 0; max-width: none; }
 
 /* ---- Side panel (slide-in editor) ---- */
 .sidepanel {
+  position: absolute; top: 0; right: 0; bottom: 0; z-index: var(--z-modal);
+  display: flex; flex-direction: column;
   border: 1px solid var(--line); border-radius: var(--r-lg);
   background: var(--panel); box-shadow: var(--shadow-2); width: min(380px, 92vw);
 }
-.sidepanel .sp-head { display: flex; align-items: center; padding: var(--sp-4); border-bottom: 1px solid var(--line); }
+.sidepanel .sp-head { flex: none; display: flex; align-items: center; padding: var(--sp-4); border-bottom: 1px solid var(--line); }
 .sidepanel .sp-head h3 { font-size: var(--fs-lg); }
-.sidepanel .sp-body { padding: var(--sp-4); }
-.sidepanel .sp-foot { display: flex; justify-content: flex-end; gap: var(--sp-2); padding: var(--sp-4); border-top: 1px solid var(--line); }
+.sidepanel .sp-body { flex: 1; overflow-y: auto; padding: var(--sp-4); }
+.sidepanel .sp-foot { flex: none; display: flex; justify-content: flex-end; gap: var(--sp-2); padding: var(--sp-4); border-top: 1px solid var(--line); }
 /* The click-away dismiss layer behind the side panel (mirrors .picker-scrim). `absolute`, escaping
    into the nearest positioned ancestor (`.detail`) — never `.workarea` itself, which is `position:
    relative` only for the toast layer's containing block (#208). A panel mounted with no `.detail`
@@ -644,18 +719,21 @@ table.tbl .no-source, table.tbl .src-link { white-space: nowrap; }
   background: rgba(0, 0, 0, 0.4); border: 0; padding: 0; cursor: default;
 }
 .sidepanel.sidepanel-viewport { position: fixed; }
+/* Mockup-only: a side panel drawn as a specimen sits in the page's flow rather than over a pane. */
+.specimen .sidepanel { position: static; }
 .sidepanel-scrim.sidepanel-scrim-viewport { position: fixed; }
 .sidepanel { animation: slide-in-right 160ms ease-out; }
 .sidepanel-scrim { animation: fade-in 160ms ease-out; }
 
 /* ---- Small modal ---- */
 .modal {
+  max-height: 92vh; display: flex; flex-direction: column;
   border: 1px solid var(--line); border-radius: var(--r-lg);
   background: var(--panel); box-shadow: var(--shadow-2); width: min(440px, 92vw);
 }
-.modal .m-head { padding: var(--sp-4); border-bottom: 1px solid var(--line); font-weight: 600; font-size: var(--fs-lg); }
-.modal .m-body { padding: var(--sp-4); }
-.modal .m-foot { display: flex; justify-content: flex-end; gap: var(--sp-2); padding: var(--sp-4); border-top: 1px solid var(--line); }
+.modal .m-head { flex: none; padding: var(--sp-4); border-bottom: 1px solid var(--line); font-weight: 600; font-size: var(--fs-lg); }
+.modal .m-body { flex: 1; overflow-y: auto; padding: var(--sp-4); }
+.modal .m-foot { flex: none; display: flex; justify-content: flex-end; gap: var(--sp-2); padding: var(--sp-4); border-top: 1px solid var(--line); }
 /* The click-away dismiss layer behind a modal. Transparent — the enclosing `.overlay` already carries
    the backdrop wash; this is only the catcher (a `<button>`, so it has an accessible name), so strip
    the UA button face like .picker-scrim does. */
@@ -814,6 +892,11 @@ table.tbl td.wrap > *, table.tbl td.row-actions > * { margin: 0 var(--sp-2) var(
 .swatch .meta { padding: var(--sp-2); }
 .swatch .meta .name { font-weight: 600; }
 .swatch .meta .var { color: var(--faint); font-family: var(--font-mono); }
+.doc p .help-link {
+  appearance: none; background: none; border: 0; padding: 0; font: inherit; cursor: pointer;
+  color: var(--accent); font-weight: 600; text-decoration: none;
+}
+.doc p .help-link:hover { text-decoration: underline; }
 .specimen { border: 1px solid var(--line); border-radius: var(--r-lg); padding: var(--sp-5); margin-bottom: var(--sp-4); background: var(--panel); }
 .specimen .label { font-size: var(--fs-xs); color: var(--faint); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: var(--sp-3); }
 
@@ -1213,6 +1296,8 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:fo
 .media-full { display: block; width: 100%; height: 100%; object-fit: contain; }
 .media-caption { margin-top: 6px; font-size: var(--fs-xs); }
 .media-preview { height: 320px; }
+.crop-capture { cursor: crosshair; }
+.media-save-preview { display: flex; gap: var(--sp-2); align-items: baseline; margin-top: var(--sp-2); }
 
 /* Similar records (ADR 0038 §8): the hint under a record being created, the engine score on a ranked
    picker row, and the Find similar list. Advice, never a block: warn-tinted, beside the form. */

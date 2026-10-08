@@ -49,7 +49,7 @@ impl HistoryEntryVm {
             when: friendly_timestamp(&entry.occurred_at),
             what: loc.change_summary(entry),
             who: loc.operator_line(entry),
-            why: entry.rationale.clone(),
+            why: entry.rationale.clone().or_else(|| superseded_why(entry, loc)),
             evidence,
             assertion_id: entry.assertion_id.clone(),
             can_undo: entry.can_undo,
@@ -57,6 +57,19 @@ impl HistoryEntryVm {
             children,
         }
     }
+}
+
+/// The generated reason on an import run's supersession: the file's export date, which is what let
+/// it replace a value recorded no later (ADR 0049). `None` for any other entry.
+fn superseded_why(entry: &ChangeLogEntry, loc: &Localizer) -> Option<String> {
+    if entry.event_type != "AssertionSuperseded" {
+        return None;
+    }
+    let run = entry.run.as_ref()?;
+    let exported = run.file_asserted_at.as_deref()?;
+    // A file's export date often carries no time of day, so the time the timestamp holds is not shown.
+    let day = exported.get(..10).unwrap_or(exported);
+    Some(loc.import_superseded_why(&run.source_label, day))
 }
 
 /// The muted text beside a run row: *interrupted* for a run that can be resumed, else the records it
