@@ -13,25 +13,21 @@
 # it cannot see a note that does or doesn't exist. A whole-window `match` against the pre-open shot is
 # the only way to show the discard left no trace, in the UI or (by construction, since nothing but the
 # UI could have written it) on disk.
-#
-# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes. The Notes tab's
-# `+ Attach note` moved with the shared tab frame (#303): the tab's explanation pushed the bar down, and
-# the bar right-aligns its button, so it sits at the pane's right edge.
 description = "A collection tab's Attach panel creates the record it wants to attach, writing nothing until Save (#314)"
 
 [[step]]
 do = "click"
-at = [85, 283]
+at = { role = "listitem", text = "Places" }
 label = "rail: Places"
 
 [[step]]
 do = "click"
-at = [300, 99]
+at = { role = "option", text = "Kristiansand Municipality P0001" }
 label = "explorer: Kristiansand"
 
 [[step]]
 do = "click"
-at = [1121, 248]
+at = { id = "tab-notes" }
 label = "detail tab: Notes"
 
 [[step]]
@@ -40,7 +36,7 @@ name = "tab-before"
 
 [[step]]
 do = "click"
-at = [1727, 357]
+at = { role = "button", text = "Attach note" }
 label = "Attach note"
 
 [[step]]
@@ -49,7 +45,7 @@ name = "panel-open"
 
 [[step]]
 do = "click"
-at = [1608, 242]
+at = { id = "note" }
 label = "picker: click the search input"
 
 [[step]]
@@ -63,7 +59,7 @@ name = "picker-open"
 
 [[step]]
 do = "click"
-at = [1608, 349]
+at = { id = "note-opt-0" }
 label = "picker: + New note \"a\"…"
 
 [[step]]
@@ -81,12 +77,12 @@ name = "tab-after-discard"
 
 [[step]]
 do = "click"
-at = [1727, 357]
+at = { role = "button", text = "Attach note" }
 label = "Attach note — again"
 
 [[step]]
 do = "click"
-at = [1608, 242]
+at = { id = "note" }
 label = "picker: click the search input"
 
 [[step]]
@@ -96,7 +92,7 @@ label = "picker: type a"
 
 [[step]]
 do = "click"
-at = [1608, 349]
+at = { id = "note-opt-0" }
 label = "picker: + New note \"a\"…"
 
 [[step]]
@@ -105,7 +101,7 @@ name = "rail-before"
 
 [[step]]
 do = "click"
-at = [1467, 819]
+at = { role = "button", text = "Save" }
 label = "new note card: Save — commits N0001 and attaches it"
 
 [[step]]
@@ -120,13 +116,13 @@ name = "tab-after-save"
 kind = "differ"
 shots = ["panel-open", "picker-open"]
 because = "typing must render the + New note row and the row's handler must be live"
-region = [1436, 220, 350, 150]
+region = { role = "dialog", offset = [16, 97], size = [350, 150] }
 
 [[assert]]
 kind = "differ"
 shots = ["picker-open", "card-open"]
 because = "picking + New must swap the search field for the draft card"
-region = [1436, 190, 350, 300]
+region = { role = "dialog", offset = [16, 67], size = [350, 300] }
 
 [[assert]]
 kind = "match"
@@ -142,4 +138,4 @@ because = "Save must create the note and attach it, replacing the empty state wi
 kind = "differ"
 shots = ["rail-before", "rail-after"]
 because = "the create marks the workspace changed, so the rail's Notes count goes 0 → 1 (#207)"
-region = [0, 448, 232, 40]
+region = { role = "navigation", offset = [0, 421], size = [232, 40] }

@@ -9,15 +9,15 @@
 //! Scenarios are **data, not code**: each is a TOML file under
 //! `crates/vitni-ui-dioxus/tests/gui-pass/`, so adding one needs no recompile. A top-level
 //! `window = [w, h]` sets the size the window is resized to before its steps run, defaulting to
-//! [`WINDOW`] when omitted — the narrow-window case (below `--bp-lg`) needs its own coordinates, never
-//! a single-pane layout's carried over (see `CLAUDE.md`'s "Writing one"). A file lists `[[step]]`s (a
+//! [`WINDOW`] when omitted — the narrow-window case (below `--bp-lg`) reflows rather than crops, so its
+//! offsets and regions are its own, never a single-pane layout's carried over. A file lists `[[step]]`s (a
 //! click, a chord, a typed word, a drag, a wheel, a screenshot, `wait` to sleep and let a timed effect fire,
 //! `wm-close` to ask the window to close the way a window manager does, or `await-exit` to wait for the
 //! GUI process itself to quit) and `[[assert]]`s over the shots it took —
 //! `differ` for "the UI reacted",
 //! `match` for "the UI returned to this state", `painted` for "this area is not a flat fill". The
 //! first two compare with an RMSE tolerance, so a caret blink is not a difference. Any assertion may
-//! add `region = [x, y, w, h]` to work on a single window sub-rectangle instead of the whole shot —
+//! add a `region` to work on one element's area instead of the whole shot —
 //! needed when a change is provably confined to one area but the rest of the window can legitimately
 //! repaint either way (e.g. the tabstrip repaints on every Save, so a whole-window `differ` cannot
 //! isolate a list-column change), and needed by `painted`, whose whole-window form the surrounding
@@ -25,6 +25,15 @@
 //! `workspace/workspace.toml` on disk for a substring, proving a write reached disk
 //! rather than only an in-memory signal — unavailable under `--real-config`, where that path is the
 //! caller's own workspace.
+//!
+//! A step's `at`/`from` and an assertion's `region` never spell a window pixel: they are targets — an
+//! element by `id`, `data-hook` or ARIA `role`, narrowed by `text`, `within` and `index`, with an optional
+//! offset into it (see [`target`]). A debug GUI started with [`probe::PROBE_VAR`] reports every such
+//! element's rect over loopback HTTP, and the harness resolves each target against that report just
+//! before the step, so a layout change moves the coordinates without touching a scenario. Each shot's
+//! report is saved beside it as `NN-<name>.json`. The probe only observes: every input is still a real X
+//! event from `xdotool`. Startup also waits for the probe to report the page ready, and checks that the
+//! focus click gave the document keyboard focus.
 //!
 //! Each scenario's shot directory also holds a `gui.log` — the GUI child's own stdout and stderr, run
 //! at `RUST_LOG=info`, so a `tracing` line or a webview diagnostic is readable beside the shots it
@@ -81,7 +90,8 @@ const GUI_PASS: Fixture = Fixture {
     seed: seed_gui_pass,
     required_media: &[SEED_MEDIA_REL, SEED_MEDIA_NORDIC_REL],
     required_files: &[SEED_IMPORT_FILE, SEED_LARGE_IMPORT_FILE],
-    env: &[],
+    // Targets match visible text, which is English.
+    env: &[("VITNI_LANGUAGE", "en")],
     serve_archive: true,
 };
 
@@ -113,8 +123,8 @@ pub const DEFAULT_DISPLAY: &str = ":99";
 const MAX_DEFAULT_JOBS: usize = 4;
 /// The virtual screen Xvfb serves. Larger than the window so a resize never clips.
 const SCREEN: &str = "2560x1600x24";
-/// The window size a scenario's coordinates are written against, when it declares no `window` of its
-/// own. There is no window manager on the display, so the window keeps whatever size `xdotool
+/// The window size a scenario runs at, when it declares no `window` of its own. There is no window
+/// manager on the display, so the window keeps whatever size `xdotool
 /// windowsize` gives it.
 const WINDOW: (u32, u32) = (1800, 1200);
 /// The largest x a [`focus_click`] uses, matching today's value at the default [`WINDOW`] — see
@@ -170,8 +180,8 @@ const SAME_SCREEN_RMSE: f64 = 0.01;
 /// One fixture the harness can drive: where its state lives, which scenarios belong to it, and how
 /// its workspace is seeded.
 ///
-/// Two exist. [`GUI_PASS`] is the assertion harness — one place, two media objects, measured
-/// coordinates. `screenshots` (see [`crate::screenshots`]) seeds a demo family instead, because a
+/// Two exist. [`GUI_PASS`] is the assertion harness — one place, two media objects, and the lists and
+/// counts its scenarios assert over. `screenshots` (see [`crate::screenshots`]) seeds a demo family instead, because a
 /// README image of a genealogy program whose rail reads `People 0` argues against the README. They
 /// stay separate fixtures rather than one enriched fixture: every Explorer list and rail count the
 /// scenarios here were measured against would move if persons appeared in this one.
@@ -210,7 +220,7 @@ pub struct Fixture {
 struct Script {
     /// What this scenario demonstrates, printed as the run header.
     description: String,
-    /// The window size this scenario's coordinates are written against; `None` defaults to
+    /// The window size this scenario runs at; `None` defaults to
     /// [`WINDOW`]. `deny_unknown_fields` on this struct is what makes a typo'd key (e.g. `windwo`)
     /// fail to parse instead of silently running the scenario at the default window.
     window: Option<[u32; 2]>,
@@ -242,25 +252,25 @@ fn focus_click(window: (u32, u32)) -> (i32, i32) {
     (half.min(MAX_FOCUS_X), 60)
 }
 
-/// One scripted action. Coordinates are window pixels at the scenario's `window` (defaulting to
-/// [`WINDOW`] — see [`window_size`]), read off an earlier screenshot — the window sits at the display
-/// origin, so they are display coordinates too.
+/// One scripted action. Its [`Point`] resolves to window pixels at the scenario's `window` (defaulting
+/// to [`WINDOW`] — see [`window_size`]) — the window sits at the display origin, so they are display
+/// coordinates too.
 #[derive(Deserialize)]
 #[serde(tag = "do", rename_all = "kebab-case", deny_unknown_fields)]
 enum Step {
     /// Grab the window into `NN-<name>.png`, and make it referenceable by `name` in an assertion.
     Shot { name: String },
     /// Move the pointer to `at` and click button 1.
-    Click { at: At, label: String },
+    Click { at: Point, label: String },
     /// Send a chord in `xdotool key` syntax (`ctrl+k`, `Escape`, `question`).
     Key { chord: String, label: String },
     /// Type `text` into whatever has keyboard focus: one step and one settle for a whole word, not a
     /// `key` step (and a settle) per character. Letters, digits, space and `-.,:/` only — see [`keysyms`].
     Text { text: String, label: String },
     /// Press at `from`, move by `by`, release — a canvas drag (map pan).
-    Drag { from: At, by: [i32; 2], label: String },
+    Drag { from: Point, by: [i32; 2], label: String },
     /// Scroll the wheel at a point: `clicks` notches up (button 4) or down (button 5) when negative.
-    Wheel { at: At, clicks: i32, label: String },
+    Wheel { at: Point, clicks: i32, label: String },
     /// Wait for the GUI process to exit (e.g. after a quit chord), failing if it is still up after
     /// [`AWAIT_EXIT_TIMEOUT`]. Proves a quit actually happened, rather than assuming a chord worked.
     AwaitExit { label: String },
@@ -271,22 +281,6 @@ enum Step {
     /// Sleep for `seconds`, then let the webview settle — proving a timed effect (e.g. a toast's
     /// auto-dismiss) in the real webview rather than assuming it fires.
     Wait { seconds: u64, label: String },
-}
-
-/// Where a step acts: a [`Point`] target, or (until every scenario is converted) raw window pixels.
-#[derive(Deserialize)]
-#[serde(untagged)]
-enum At {
-    Pixels([i32; 2]),
-    Target(Point),
-}
-
-/// What an assertion measures: an [`Area`] target, or (until every scenario is converted) raw pixels.
-#[derive(Debug, PartialEq, Deserialize)]
-#[serde(untagged)]
-enum Region {
-    Pixels([u32; 4]),
-    Target(Area),
 }
 
 /// One check over the shots the script took.
@@ -300,9 +294,9 @@ enum Assertion {
         /// The RMSE the difference must exceed. Lower it for a change that repaints few pixels (a
         /// dropped map point); defaults to [`SAME_SCREEN_RMSE`].
         tolerance: Option<f64>,
-        /// `[x, y, w, h]` window pixels to compare instead of the whole shot. Absent compares the
-        /// whole window, today's behaviour.
-        region: Option<Region>,
+        /// The element area to compare instead of the whole shot, resolved over the first shot's
+        /// snapshot so both are cropped alike. Absent compares the whole window.
+        region: Option<Area>,
     },
     /// The two shots must show the same screen — the UI returned there (e.g. an overlay dismissed).
     Match {
@@ -310,7 +304,7 @@ enum Assertion {
         because: String,
         tolerance: Option<f64>,
         /// See [`Self::Differ`]'s `region`.
-        region: Option<Region>,
+        region: Option<Area>,
     },
     /// One shot must not be a flat colour over `region` — the whole-shot [`assert_painted`] every
     /// grab already runs cannot see a blank *area*, because the rail, toolbar and tabstrip around it
@@ -320,7 +314,7 @@ enum Assertion {
         because: String,
         /// See [`Self::Differ`]'s `region`; absent measures the whole window, which only the chrome
         /// around a blank area would then answer for.
-        region: Option<Region>,
+        region: Option<Area>,
         /// The standard deviation the region must exceed; defaults to [`MIN_STANDARD_DEVIATION`].
         min_deviation: Option<f64>,
     },
@@ -1485,11 +1479,8 @@ impl Window {
 
     /// The window pixel `at` names, re-probing until its target resolves or [`SETTLE_CAP`] has passed —
     /// an element still rendering when the screen went quiet gets that long to appear.
-    fn locate(&self, at: &At) -> Result<[i32; 2]> {
-        match at {
-            At::Pixels(pixels) => Ok(*pixels),
-            At::Target(point) => self.resolve(|elements| target::resolve_point(point, elements, self.size)),
-        }
+    fn locate(&self, point: &Point) -> Result<[i32; 2]> {
+        self.resolve(|elements| target::resolve_point(point, elements, self.size))
     }
 
     /// Runs `resolve` over fresh snapshots until it succeeds or [`SETTLE_CAP`] has passed, then fails
@@ -1787,13 +1778,9 @@ fn check_one(
 
 /// The window rectangle an assertion's `region` covers, resolved over what the probe saw at the shot
 /// named `at` — the first of a pair, so both shots are cropped to the same pixels.
-fn measured(region: Option<&Region>, taken: &[Taken], at: &str, window: (u32, u32)) -> Result<Option<[u32; 4]>> {
-    let Some(region) = region else {
+fn measured(region: Option<&Area>, taken: &[Taken], at: &str, window: (u32, u32)) -> Result<Option<[u32; 4]>> {
+    let Some(area) = region else {
         return Ok(None);
-    };
-    let area = match region {
-        Region::Pixels(pixels) => return Ok(Some(*pixels)),
-        Region::Target(area) => area,
     };
     let Some(shot) = taken.iter().find(|shot| shot.name == at) else {
         bail!("gui-pass: assertion names a shot the script never took: {at}");
@@ -1855,7 +1842,7 @@ fn shot_path(taken: &[Taken], shots: &Path, name: &str) -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::{
-        Assertion, MIN_STANDARD_DEVIATION, Region, Script, Step, WINDOW, available_cores, default_jobs,
+        Assertion, GUI_PASS, MIN_STANDARD_DEVIATION, Script, Step, WINDOW, available_cores, default_jobs,
         describe_region, differing_pixels, focus_click, keysyms, painted_failed, parse_args, read_region, run_queue,
         unique_names, window_size, worker_config, worker_display,
     };
@@ -2090,6 +2077,54 @@ mod tests {
     }
 
     #[test]
+    fn every_committed_scenario_parses() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+        let mut parsed = 0;
+        for dir in [GUI_PASS.script_dir, crate::screenshots::SCREENSHOTS.script_dir] {
+            for entry in std::fs::read_dir(root.join(dir)).expect("the scenario directory exists") {
+                let path = entry.expect("a directory entry").path();
+                if path.extension().is_some_and(|extension| extension == "toml") {
+                    let text = std::fs::read_to_string(&path).expect("readable");
+                    if let Err(error) = toml::from_str::<Script>(&text) {
+                        panic!("{} does not parse: {error}", path.display());
+                    }
+                    parsed += 1;
+                }
+            }
+        }
+        assert!(parsed > 50, "every scenario was found, not just a few: {parsed}");
+    }
+
+    #[test]
+    fn a_step_names_its_element_rather_than_a_window_pixel() {
+        let pixels: Result<Script, _> = toml::from_str(
+            r#"
+            description = "a scenario"
+
+            [[step]]
+            do = "click"
+            at = [85, 175]
+            label = "rail: People"
+            "#,
+        );
+        assert!(pixels.is_err(), "a raw window pixel must not parse");
+        let parsed = script(
+            r#"
+            description = "a scenario"
+
+            [[step]]
+            do = "click"
+            at = { role = "listitem", text = "People" }
+            label = "rail: People"
+            "#,
+        );
+        let [Step::Click { at, .. }] = parsed.steps.as_slice() else {
+            panic!("expected one click step");
+        };
+        assert_eq!(at.matcher.text.as_deref(), Some("People"));
+    }
+
+    #[test]
     fn an_unknown_top_level_key_is_rejected() {
         // A typo'd key must fail to parse, not silently run the scenario at the default window.
         let parsed: Result<Script, _> = toml::from_str(
@@ -2149,7 +2184,7 @@ mod tests {
             [[assert]]
             kind = "painted"
             shot = "polygon-armed"
-            region = [740, 140, 1050, 760]
+            region = { id = "geography-map", offset = [15, 42], size = [1250, 700] }
             min_deviation = 0.02
             because = "the canvas region must show tiles, not a flat fill"
             "#,
@@ -2162,7 +2197,9 @@ mod tests {
         else {
             panic!("one painted assertion, got {} others", parsed.len());
         };
-        assert_eq!(*region, Some(Region::Pixels([740, 140, 1050, 760])));
+        let area = region.as_ref().expect("the region parses");
+        assert_eq!(area.offset, Some([15, 42]));
+        assert_eq!(area.size, Some([1250, 700]));
         assert_eq!(*min_deviation, Some(0.02));
     }
 

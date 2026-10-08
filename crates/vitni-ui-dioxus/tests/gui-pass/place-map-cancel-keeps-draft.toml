@@ -4,43 +4,42 @@
 # save, so Cancel keeps it. Geography always behaved that way; this scenario is what proves the Place
 # Map tab now does too.
 #
-# First scenario in the corpus to reach a Place record's Map tab. The detail tab strip's Map label
-# paints centred on y≈249 in a single (undocked) pane and a click there hits — the ~9-14px offset
-# `docked-detail-tabs.toml` documents is a *post-dock* defect (#285), and nothing here docks.
+# First scenario in the corpus to reach a Place record's Map tab. The Map tab is targeted by its
+# own id; the click offset `docked-detail-tabs.toml` documents is a *post-dock* defect (#285), and
+# nothing here docks.
 #
 # The save card renders below the geometry table, off the fold at every window height (the map card is
 # a flex child, so a taller window grows the map rather than revealing the card). Hence the wheel
-# steps: each shot pair is compared at its own scroll position, never across one. (1156, 1050) is
-# below the map card at scroll-top and over the table/card below it once scrolled, so no wheel notch
-# ever lands on the `MapLibre` canvas and zooms it. The scroll-up over-scrolls deliberately — it
-# clamps at the top, which is what makes `back-at-map` comparable to `point-dropped`.
-#
-# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
+# steps: each shot pair is compared at its own scroll position, never across one. The wheel
+# point, low in the `record-pane`, is below the map card at scroll-top and over the table/card below it
+# once scrolled, so no wheel notch ever lands on the `MapLibre` canvas and zooms it. The scroll-up
+# over-scrolls deliberately — it clamps at the top, which is what makes `back-at-map` comparable to
+# `point-dropped`.
 description = "Cancelling the geometry save keeps the drawn point on the canvas (#282c)"
 
 [[step]]
 do = "click"
-at = [85, 283]
+at = { role = "listitem", text = "Places" }
 label = "rail: Places"
 
 [[step]]
 do = "click"
-at = [324, 99]
+at = { role = "option", text = "Kristiansand Municipality P0001" }
 label = "explorer: Kristiansand"
 
 [[step]]
 do = "click"
-at = [674, 249]
+at = { id = "tab-map" }
 label = "detail tabs: Map"
 
 [[step]]
 do = "click"
-at = [672, 398]
+at = { role = "button", text = "Drop / move a point" }
 label = "toolbar: Drop / move a point"
 
 [[step]]
 do = "click"
-at = [1168, 610]
+at = { id = "place-map", offset = [598, 160] }
 label = "map: drop a point"
 
 [[step]]
@@ -49,12 +48,12 @@ name = "point-dropped"
 
 [[step]]
 do = "click"
-at = [604, 834]
+at = { role = "button", text = "Use this point" }
 label = "Use this point"
 
 [[step]]
 do = "wheel"
-at = [1156, 1050]
+at = { hook = "record-pane", offset = [624, 927] }
 clicks = -8
 label = "scroll down to the save card"
 
@@ -64,7 +63,7 @@ name = "card-open"
 
 [[step]]
 do = "click"
-at = [662, 1102]
+at = { role = "button", text = "Cancel" }
 label = "save card: Cancel"
 
 [[step]]
@@ -73,7 +72,7 @@ name = "cancelled"
 
 [[step]]
 do = "wheel"
-at = [1156, 1050]
+at = { hook = "record-pane", offset = [624, 927] }
 clicks = 12
 label = "scroll back to the top (clamps there)"
 
@@ -84,11 +83,11 @@ name = "back-at-map"
 [[assert]]
 kind = "differ"
 shots = ["card-open", "cancelled"]
-region = [564, 715, 1206, 410]
+region = { id = "panel-map", offset = [32, 451], size = [1206, 410] }
 because = "Cancel must dismiss the geometry save card"
 
 [[assert]]
 kind = "match"
 shots = ["point-dropped", "back-at-map"]
-region = [564, 450, 1206, 320]
+region = { id = "place-map" }
 because = "cancelling the save must keep the dropped point on the canvas, not discard the drawing"

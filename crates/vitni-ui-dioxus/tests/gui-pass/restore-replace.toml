@@ -9,17 +9,17 @@
 # field rather than typing a path that differs per worker and per day. The pre-restore switch is left
 # off, so the `manifest` assertion also proves the replace kept this copy's own `[backup]` setting.
 #
-# Coordinates are at the default 1800x1200 window, with the Preferences screen scrolled to its end.
+# The Preferences screen is scrolled to its end first, where the Backup card sits.
 description = "A restore over the open workspace asks for its name, then replaces it and restarts (ADR 0044)"
 
 [[step]]
 do = "click"
-at = [85, 935]
+at = { role = "listitem", text = "Preferences" }
 label = "rail: Preferences"
 
 [[step]]
 do = "wheel"
-at = [1100, 700]
+at = { role = "main", offset = [868, 625] }
 clicks = -60
 label = "scroll to the Backup card at the end"
 
@@ -29,7 +29,7 @@ name = "card"
 
 [[step]]
 do = "click"
-at = [1118, 986]
+at = { id = "backup-pre-restore" }
 label = "switch the pre-restore backup off"
 
 [[step]]
@@ -38,7 +38,7 @@ name = "switched-off"
 
 [[step]]
 do = "click"
-at = [1115, 945]
+at = { id = "replace-archive" }
 label = "the replace archive field"
 
 [[step]]
@@ -48,7 +48,7 @@ label = "an archive that does not exist"
 
 [[step]]
 do = "click"
-at = [551, 1071]
+at = { role = "button", text = "Replace workspace…" }
 label = "Replace workspace…"
 
 [[step]]
@@ -66,7 +66,7 @@ name = "typed"
 
 [[step]]
 do = "click"
-at = [1135, 502]
+at = { role = "button", text = "Replace workspace", within = "alertdialog" }
 label = "Replace: the archive is missing, so it fails"
 
 [[step]]
@@ -75,7 +75,7 @@ name = "failed"
 
 [[step]]
 do = "click"
-at = [1115, 274]
+at = { id = "backup-path" }
 label = "the Back up file field"
 
 [[step]]
@@ -90,7 +90,7 @@ label = "copy it"
 
 [[step]]
 do = "click"
-at = [508, 399]
+at = { role = "button", text = "Back up" }
 label = "Back up"
 
 [[step]]
@@ -100,7 +100,7 @@ label = "outlast the Backed-up notice"
 
 [[step]]
 do = "click"
-at = [1115, 945]
+at = { id = "replace-archive" }
 label = "the replace archive field"
 
 [[step]]
@@ -115,7 +115,7 @@ label = "paste the new backup's path over it"
 
 [[step]]
 do = "click"
-at = [551, 1071]
+at = { role = "button", text = "Replace workspace…" }
 label = "Replace workspace…"
 
 [[step]]
@@ -125,7 +125,7 @@ label = "type the workspace name"
 
 [[step]]
 do = "click"
-at = [1135, 502]
+at = { role = "button", text = "Replace workspace", within = "alertdialog" }
 label = "Replace"
 
 # The screen stays quiet while the replace runs off the render, so the settle alone can shoot before
@@ -147,29 +147,29 @@ because = "the switch writes [backup] pre_restore at once, and a replace keeps t
 [[assert]]
 kind = "differ"
 shots = ["card", "switched-off"]
-region = [1108, 976, 20, 20]
+region = { role = "main", offset = [876, 901], size = [20, 20] }
 because = "the pre-restore switch must uncheck"
 
 [[assert]]
 kind = "differ"
 shots = ["asking", "typed"]
-region = [1050, 485, 172, 36]
+region = { role = "alertdialog", offset = [254, 338], size = [172, 36] }
 because = "typing the workspace's name into the focused field must enable Replace"
 
 [[assert]]
 kind = "differ"
 shots = ["typed", "failed"]
-region = [796, 146, 440, 392]
+region = { role = "alertdialog" }
 because = "a failed replace must close the confirm"
 
 [[assert]]
 kind = "differ"
 shots = ["card", "replaced"]
-region = [8, 920, 216, 32]
+region = { role = "navigation", offset = [8, 893], size = [216, 32] }
 because = "a replace must restart the app, which lands on the Dashboard: Preferences is no longer the active rail item"
 
 [[assert]]
 kind = "differ"
 shots = ["failed", "replaced"]
-region = [760, 1096, 520, 66]
+region = { role = "main", offset = [528, 1021], size = [520, 66] }
 because = "the restarted shell must raise the replace's notice, left for it across the restart"

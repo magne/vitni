@@ -8,8 +8,8 @@
 # paint nothing at all. Dragging a handle is `map-vertex-drag.toml`; inserting a vertex mid-ring is
 # still a backlog item, not a verification gap.
 #
-# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes. The canvas
-# region asserted below sits inside the surface both before and after the Finish/Clear row shrinks it.
+# The canvas region asserted below sits inside the surface both before and after the Finish/Clear row
+# shrinks it.
 #
 # Also asserts the rail highlight and the toolbar draw-target chip (#255): the whole-window `differ`
 # below passes today only because the map recentres, and says nothing about either. The chip sits
@@ -19,7 +19,7 @@ description = "The polygon tool turns canvas clicks into a ring and hands it to 
 
 [[step]]
 do = "click"
-at = [85, 861]
+at = { role = "listitem", text = "Geography" }
 label = "rail: Geography"
 
 [[step]]
@@ -28,7 +28,7 @@ name = "map"
 
 [[step]]
 do = "click"
-at = [324, 220]
+at = { role = "option", text = "Kristiansand Municipality" }
 label = "place list: Kristiansand"
 
 [[step]]
@@ -37,7 +37,7 @@ name = "selected"
 
 [[step]]
 do = "click"
-at = [1480, 110]
+at = { role = "button", text = "Draw polygon" }
 label = "toolbar: Draw polygon"
 
 [[step]]
@@ -46,7 +46,7 @@ name = "armed"
 
 [[step]]
 do = "click"
-at = [900, 400]
+at = { id = "geography-map", offset = [415, 242] }
 label = "map: first vertex"
 
 [[step]]
@@ -55,7 +55,7 @@ name = "vertex-one"
 
 [[step]]
 do = "click"
-at = [1200, 420]
+at = { id = "geography-map", offset = [715, 262] }
 label = "map: second vertex"
 
 [[step]]
@@ -64,7 +64,7 @@ name = "ring-open"
 
 [[step]]
 do = "click"
-at = [1100, 700]
+at = { id = "geography-map", offset = [615, 542] }
 label = "map: third vertex"
 
 [[step]]
@@ -73,7 +73,7 @@ name = "ring-closed"
 
 [[step]]
 do = "click"
-at = [541, 1048]
+at = { role = "button", text = "Finish polygon" }
 label = "Finish polygon"
 
 [[step]]
@@ -88,13 +88,13 @@ because = "picking a place must recentre and zoom the map onto it"
 [[assert]]
 kind = "differ"
 shots = ["map", "selected"]
-region = [232, 190, 240, 60]
+region = { role = "option", text = "Kristiansand Municipality" }
 because = "the rail must highlight the row a drawn shape will attach to (#255)"
 
 [[assert]]
 kind = "differ"
 shots = ["map", "selected"]
-region = [544, 95, 260, 40]
+region = { role = "main", offset = [312, 20], size = [260, 40] }
 because = "the toolbar must name the place a drawn shape will attach to (#255)"
 
 [[assert]]
@@ -105,7 +105,7 @@ because = "arming the polygon tool must offer the finish and clear actions"
 [[assert]]
 kind = "painted"
 shot = "armed"
-region = [500, 200, 1250, 700]
+region = { id = "geography-map", offset = [15, 42], size = [1250, 700] }
 # Until #252 this frame's canvas was flat: the row shrank the surface, MapLibre resized the canvas, and
 # the repaint never composited. The `differ` above passed anyway — a blanked canvas differs too.
 because = "the Finish/Clear row must not cost the map its tiles"
@@ -118,7 +118,7 @@ shots = ["armed", "vertex-one"]
 # assertion above already covers that repaint), so the only thing that can change inside the box is the
 # handle. Region-scoped and tight: one ~24px circle on a full-frame map is far under the whole-window
 # tolerance. Before #259 this click painted nothing whatsoever.
-region = [860, 360, 80, 80]
+region = { id = "geography-map", offset = [375, 202], size = [80, 80] }
 tolerance = 0.001
 because = "the first polygon vertex must draw a visible handle, not wait for a second click (#259)"
 

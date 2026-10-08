@@ -6,17 +6,11 @@
 # The fixture seeds no tags (`xtask/src/gui_pass.rs`), so the scenario makes its own: `⌘N` on the Tags
 # category creates one, and the place's Tags tab attaches it. That keeps the fixture as every other
 # scenario measured it — a seeded tag would move the rail's Tags count and the Tags list in all of them.
-#
-# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes; the chip's `×` was
-# located by zooming its crop (`convert <shot> -crop 120x40+154+424 +repage -scale 400% <out>`), because
-# it is 8 px of glyph beside the label it belongs to. The Tags tab's own coordinates moved with the shared
-# tab frame (#303): the tab's explanation pushed the bar and the chips down, and the bar's button is now
-# right-aligned, so `Add tag` sits at the pane's right edge rather than its left.
 description = "Removing a tag opens the reason panel, and its confirm is what removes the chip (#315)"
 
 [[step]]
 do = "click"
-at = [85, 543]
+at = { role = "listitem", text = "Tags" }
 label = "rail: Tags"
 
 [[step]]
@@ -46,32 +40,32 @@ label = "type: o"
 
 [[step]]
 do = "click"
-at = [1754, 151]
+at = { role = "button", text = "Save" }
 label = "New tag: Save"
 
 [[step]]
 do = "click"
-at = [85, 283]
+at = { role = "listitem", text = "Places" }
 label = "rail: Places"
 
 [[step]]
 do = "click"
-at = [300, 99]
+at = { role = "option", text = "Kristiansand Municipality P0001" }
 label = "explorer: Kristiansand"
 
 [[step]]
 do = "click"
-at = [1391, 244]
+at = { id = "tab-tags" }
 label = "detail tab: Tags"
 
 [[step]]
 do = "click"
-at = [1740, 380]
+at = { role = "button", text = "Add tag" }
 label = "Tags tab: + Add tag"
 
 [[step]]
 do = "click"
-at = [1467, 698]
+at = { role = "button", text = "Save" }
 label = "Add tag panel: Save — the only tag is preselected"
 
 [[step]]
@@ -80,7 +74,7 @@ name = "chip"
 
 [[step]]
 do = "click"
-at = [620, 420]
+at = { role = "button", text = "Remove tag todo" }
 label = "tags: the todo chip's ×"
 
 [[step]]
@@ -118,7 +112,7 @@ name = "reason-typed"
 
 [[step]]
 do = "click"
-at = [1490, 415]
+at = { role = "button", text = "Remove tag", within = "dialog" }
 label = "panel: Remove tag"
 
 [[step]]
@@ -130,24 +124,24 @@ kind = "differ"
 shots = ["chip", "panel-open"]
 # The side panel's own area. The chip is still on screen behind it, which is the point: the `×` must
 # arm a panel, not remove anything yet.
-region = [1420, 130, 380, 320]
+region = { hook = "record-pane", offset = [888, 7], size = [380, 320] }
 because = "the chip's × must open the reason panel instead of committing the removal (#315)"
 
 [[assert]]
 kind = "differ"
 shots = ["panel-open", "reason-typed"]
-region = [1420, 280, 380, 60]
+region = { role = "dialog", offset = [0, 157], size = [380, 60] }
 because = "the reason field must take the typing, which is the rationale the removal carries"
 
 [[assert]]
 kind = "differ"
 shots = ["chip", "removed"]
 # The chip's own row, left of the panel: the confirm is what removes it, and nothing before it did.
-region = [552, 400, 300, 40]
+region = { id = "panel-tags", offset = [20, 136], size = [300, 40] }
 because = "the panel's confirm must remove the tag, so the chip goes"
 
 [[assert]]
 kind = "differ"
 shots = ["chip", "removed"]
-region = [1360, 232, 74, 26]
+region = { id = "tab-tags", offset = [2, 5], size = [74, 26] }
 because = "and the removal must reach the projection, so the Tags tab count goes 1 → 0"

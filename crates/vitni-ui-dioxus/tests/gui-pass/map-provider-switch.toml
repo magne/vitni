@@ -4,8 +4,7 @@
 # (`demotiles.maplibre.org`) that looks nothing like the built-in OSM raster default, so a `differ`
 # cannot be faked by an unrelated repaint.
 #
-# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes. The provider
-# select sits at the toolbar's far right; [1698, 113] is inside its closed control. `map-view.toml`
+# The step targets the provider select by its `geography-provider` id. `map-view.toml`
 # once noted this control as undrivable — its own option list is a GTK popup rendered outside the
 # window this harness screenshots, so the popup itself is never seen in a shot — but `xdotool key`
 # reaches it anyway: keys go to the display's current keyboard focus, not to a named window, and the
@@ -15,7 +14,7 @@ description = "The provider select switches the running map without a remount (#
 
 [[step]]
 do = "click"
-at = [85, 861]
+at = { role = "listitem", text = "Geography" }
 label = "rail: Geography"
 
 [[step]]
@@ -24,7 +23,7 @@ name = "map"
 
 [[step]]
 do = "click"
-at = [1698, 113]
+at = { id = "geography-provider" }
 label = "toolbar: open the provider select"
 
 [[step]]
@@ -44,11 +43,11 @@ name = "switched"
 [[assert]]
 kind = "differ"
 shots = ["map", "switched"]
-region = [500, 200, 1250, 700]
+region = { id = "geography-map", offset = [15, 42], size = [1250, 700] }
 because = "switching to the demo MapLibre style must repaint the canvas — it looks nothing like the built-in OSM raster default"
 
 [[assert]]
 kind = "painted"
 shot = "switched"
-region = [500, 200, 1250, 700]
+region = { id = "geography-map", offset = [15, 42], size = [1250, 700] }
 because = "the repaint must be actual tiles/vector layers, not a blank canvas left by a failed style fetch"

@@ -8,35 +8,33 @@
 # The note is created *by the scenario*, not seeded: `attach-creates-and-links.toml` and
 # `attach-new-row-keyboard.toml` both depend on the fixture place having zero notes (their pickers must
 # start genuinely empty, and the rail's Notes count must go 0 → 1), so seeding one in
-# `xtask/src/gui_pass.rs` would break them. The attach flow here is `attach-creates-and-links.toml`'s,
-# with its coordinates; the new ground this scenario covers starts at the `row-before` shot.
-#
-# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
+# `xtask/src/gui_pass.rs` would break them. The attach flow here is `attach-creates-and-links.toml`'s;
+# the new ground this scenario covers starts at the `row-before` shot.
 description = "An attached note's row opens the note record from the record that references it (#304)"
 
 [[step]]
 do = "click"
-at = [85, 283]
+at = { role = "listitem", text = "Places" }
 label = "rail: Places"
 
 [[step]]
 do = "click"
-at = [300, 99]
+at = { role = "option", text = "Kristiansand Municipality P0001" }
 label = "explorer: Kristiansand"
 
 [[step]]
 do = "click"
-at = [1121, 248]
+at = { id = "tab-notes" }
 label = "detail tab: Notes"
 
 [[step]]
 do = "click"
-at = [1727, 357]
+at = { role = "button", text = "Attach note" }
 label = "Attach note"
 
 [[step]]
 do = "click"
-at = [1608, 242]
+at = { id = "note" }
 label = "picker: click the search input"
 
 [[step]]
@@ -46,12 +44,12 @@ label = "picker: type a"
 
 [[step]]
 do = "click"
-at = [1608, 349]
+at = { id = "note-opt-0" }
 label = "picker: + New note \"a\"…"
 
 [[step]]
 do = "click"
-at = [1467, 819]
+at = { role = "button", text = "Save" }
 label = "new note card: Save — commits N0001 and attaches it to the place"
 
 # The Save raises the shell's "Saved" toast, which auto-dismisses after 6s. Without this wait the toast
@@ -66,13 +64,12 @@ label = "wait past the Saved toast's 6s auto-dismiss"
 do = "shot"
 name = "row-before"
 
-# The row's leading cell, not the row: the link is a 22x25 `button.src-link` at the left of the Note
-# column, and the first coordinate tried here (mid-row, in the empty part of the Content column) still
-# produced a whole-window `differ` — off the link entirely. Column-scanned off `01-row-before.png`
-# (`convert <shot> -crop 60x1+544+445 +repage txt:-`), the chip spans x 564..586, y 433..458.
+# The row's leading cell, not the row: the link is a small `button.src-link` at the left of the Note
+# column, so the step targets that button in `panel-notes`. A click mid-row, in the empty part of the
+# Content column, still produced a whole-window `differ` — off the link entirely.
 [[step]]
 do = "click"
-at = [575, 445]
+at = { role = "button", text = "a", within = "panel-notes", index = 1 }
 label = "notes table: the note link in the row's leading cell"
 
 [[step]]
@@ -90,5 +87,5 @@ shots = ["row-before", "note-open"]
 # Scoped to the record header — the avatar, the title and the id pill. The whole-window assertion above
 # would also pass on a repaint anywhere in the window; this one only passes if the editor is showing a
 # *different record* than the place the click started from.
-region = [544, 128, 700, 90]
+region = { hook = "detail-head", offset = [12, 5], size = [700, 90] }
 because = "the editor must now hold the note, not the place that referenced it"

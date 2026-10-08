@@ -7,20 +7,19 @@
 # Resume no more, and the Import tool's Earlier imports lists both runs. SSR renders the row and the
 # list; only the live app shows the click handing the run to the wizard and the wizard re-running it.
 #
-# The fixture seeds `large.ged` beside the workspace's data without importing it. Coordinates are
-# window pixels at 1800x1200, read off the shots this scenario writes.
+# The fixture seeds `large.ged` beside the workspace's data without importing it.
 description = "A bulk import cancelled while writing is resumed from History (#496)"
 # Writing large.ged keeps the disk busy enough to starve the GUIs beside it.
 exclusive = true
 
 [[step]]
 do = "click"
-at = [70, 786]
+at = { role = "listitem", text = "Import" }
 label = "rail: Import"
 
 [[step]]
 do = "click"
-at = [1394, 408]
+at = { id = "bulk-import-source" }
 label = "source file field"
 
 [[step]]
@@ -30,7 +29,7 @@ label = "type: large.ged"
 
 [[step]]
 do = "click"
-at = [300, 642]
+at = { role = "button", text = "Import" }
 label = "Import"
 
 [[step]]
@@ -44,12 +43,12 @@ name = "plan"
 
 [[step]]
 do = "click"
-at = [1730, 512]
+at = { role = "button", text = "Import" }
 label = "Plan: Import"
 
 [[step]]
 do = "click"
-at = [303, 429]
+at = { role = "button", text = "Cancel" }
 label = "Cancel while writing"
 
 [[step]]
@@ -58,7 +57,7 @@ name = "cancelled"
 
 [[step]]
 do = "click"
-at = [70, 135]
+at = { role = "listitem", text = "Dashboard" }
 label = "rail: Dashboard"
 
 [[step]]
@@ -72,7 +71,7 @@ name = "dashboard"
 
 [[step]]
 do = "click"
-at = [574, 417]
+at = { role = "button", text = "Resume" }
 label = "Resume"
 
 [[step]]
@@ -86,7 +85,7 @@ name = "resumed-plan"
 
 [[step]]
 do = "click"
-at = [1417, 554]
+at = { role = "button", text = "Decide all later and import" }
 label = "Decide all later and import"
 
 [[step]]
@@ -100,7 +99,7 @@ name = "resumed-done"
 
 [[step]]
 do = "click"
-at = [70, 135]
+at = { role = "listitem", text = "Dashboard" }
 label = "rail: Dashboard"
 
 [[step]]
@@ -114,7 +113,7 @@ name = "dashboard-after"
 
 [[step]]
 do = "click"
-at = [70, 786]
+at = { role = "listitem", text = "Import" }
 label = "rail: Import"
 
 [[step]]
@@ -129,7 +128,7 @@ name = "earlier"
 [[assert]]
 kind = "differ"
 shots = ["plan", "resumed-plan"]
-region = [248, 308, 1536, 240]
+region = { role = "main", offset = [16, 233], size = [1536, 240] }
 because = "the resumed plan must resolve what the cancelled run wrote as unchanged, not plan it all as new"
 
 [[assert]]
@@ -140,5 +139,5 @@ because = "importing the resumed plan must write the rest and end on the summary
 [[assert]]
 kind = "differ"
 shots = ["dashboard", "dashboard-after"]
-region = [256, 340, 760, 120]
+region = { role = "main", offset = [24, 265], size = [760, 120] }
 because = "once the resumed run has written the rest, the interrupted row must no longer offer Resume"

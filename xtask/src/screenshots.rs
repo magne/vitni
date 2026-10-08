@@ -45,7 +45,7 @@ use crate::gui_pass::{self, Fixture, Options};
 ///
 /// The workspace directory is named `demo` because the status bar prints the open workspace's
 /// *directory* name, and that name is in every shot.
-const SCREENSHOTS: Fixture = Fixture {
+pub(crate) const SCREENSHOTS: Fixture = Fixture {
     name: "screenshots",
     out_dir: "target/screenshots",
     script_dir: "crates/vitni-ui-dioxus/tests/screenshots",

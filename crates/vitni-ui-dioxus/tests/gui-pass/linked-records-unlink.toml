@@ -7,15 +7,13 @@
 # shows the cluster, whose Linked records tab sits last, past the visible tabs: clicking Timeline and
 # pressing End selects it.
 #
-# The asserts are scoped to the People list (x 232-531) and the rail's People count, away from the
+# The asserts are scoped to the People list and the rail's People count, away from the
 # notices at the bottom of the window.
-#
-# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
 description = "Unlink on Linked records restores two people (#416)"
 
 [[step]]
 do = "click"
-at = [85, 175]
+at = { role = "listitem", text = "People" }
 label = "rail: People"
 
 [[step]]
@@ -25,7 +23,7 @@ label = "⌘N: a new Person draft"
 
 [[step]]
 do = "click"
-at = [1150, 486]
+at = { id = "given" }
 label = "field: Given name"
 
 [[step]]
@@ -35,7 +33,7 @@ label = "type: John"
 
 [[step]]
 do = "click"
-at = [1150, 636]
+at = { id = "surname" }
 label = "field: Surname"
 
 [[step]]
@@ -45,22 +43,22 @@ label = "type: Smith"
 
 [[step]]
 do = "click"
-at = [1754, 151]
+at = { role = "button", text = "Save" }
 label = "New person: Save"
 
 [[step]]
 do = "click"
-at = [756, 101]
+at = { role = "button", text = "Create a new record" }
 label = "tabstrip: +"
 
 [[step]]
 do = "click"
-at = [825, 148]
+at = { role = "menuitem", text = "New person" }
 label = "menu: New person"
 
 [[step]]
 do = "click"
-at = [1150, 486]
+at = { id = "given" }
 label = "field: Given name"
 
 [[step]]
@@ -70,7 +68,7 @@ label = "type: John"
 
 [[step]]
 do = "click"
-at = [1150, 636]
+at = { id = "surname" }
 label = "field: Surname"
 
 [[step]]
@@ -80,12 +78,12 @@ label = "type: Smyth"
 
 [[step]]
 do = "click"
-at = [1754, 151]
+at = { role = "button", text = "Save" }
 label = "New person: Save"
 
 [[step]]
 do = "click"
-at = [108, 749]
+at = { role = "listitem", text = "Matches" }
 label = "rail: Matches"
 
 [[step]]
@@ -94,7 +92,7 @@ name = "table"
 
 [[step]]
 do = "click"
-at = [1680, 391]
+at = { role = "button", text = "Compare I0001 with I0002" }
 label = "person row: Compare"
 
 [[step]]
@@ -103,12 +101,12 @@ name = "compare"
 
 [[step]]
 do = "click"
-at = [1690, 642]
+at = { role = "button", text = "Same (reversible)" }
 label = "Same (reversible)"
 
 [[step]]
 do = "click"
-at = [85, 175]
+at = { role = "listitem", text = "People" }
 label = "rail: People"
 
 [[step]]
@@ -117,7 +115,7 @@ name = "merged"
 
 [[step]]
 do = "click"
-at = [1735, 267]
+at = { id = "tab-timeline" }
 label = "tab: Timeline"
 
 [[step]]
@@ -131,7 +129,7 @@ name = "linked"
 
 [[step]]
 do = "click"
-at = [1647, 499]
+at = { role = "button", text = "Unlink John Smyth" }
 label = "row I0002: Unlink"
 
 [[step]]
@@ -140,7 +138,7 @@ name = "panel"
 
 [[step]]
 do = "click"
-at = [1609, 316]
+at = { id = "retract-reason" }
 label = "field: Reason for this change"
 
 [[step]]
@@ -150,7 +148,7 @@ label = "type: different fathers"
 
 [[step]]
 do = "click"
-at = [1471, 434]
+at = { role = "button", text = "Unlink", within = "dialog" }
 label = "panel: Unlink"
 
 [[step]]
@@ -161,16 +159,16 @@ name = "unlinked"
 kind = "differ"
 shots = ["merged", "linked"]
 because = "End from Timeline must select the Linked records tab"
-region = [552, 300, 1228, 240]
+region = { id = "panel-overview", offset = [20, 13], size = [1228, 240] }
 
 [[assert]]
 kind = "differ"
 shots = ["linked", "unlinked"]
 because = "after Unlink the person list shows both people again"
-region = [232, 75, 299, 120]
+region = { role = "listbox", offset = [0, 3], size = [299, 120] }
 
 [[assert]]
 kind = "differ"
 shots = ["merged", "unlinked"]
 because = "the rail's People count goes back from 1 to 2"
-region = [184, 162, 30, 22]
+region = { role = "listitem", text = "People", offset = [176, 8], size = [30, 22] }

@@ -8,18 +8,17 @@
 # alone; only the live app shows the driver loop handing the host's plan and pairs to the wizard and
 # their answers back, and focus landing on the compare view so y / l decide.
 #
-# The fixture seeds `rerun.ged` beside the workspace's data without importing it. Coordinates are
-# window pixels at 1800x1200, read off the shots this scenario writes.
+# The fixture seeds `rerun.ged` beside the workspace's data without importing it.
 description = "A bulk import shows its plan, then reviews its possible matches pair by pair (#413)"
 
 [[step]]
 do = "click"
-at = [70, 786]
+at = { role = "listitem", text = "Import" }
 label = "rail: Import"
 
 [[step]]
 do = "click"
-at = [1394, 408]
+at = { id = "bulk-import-source" }
 label = "source file field"
 
 [[step]]
@@ -29,7 +28,7 @@ label = "type: rerun.ged"
 
 [[step]]
 do = "click"
-at = [300, 642]
+at = { role = "button", text = "Import" }
 label = "Import"
 
 [[step]]
@@ -43,7 +42,7 @@ name = "first-plan"
 
 [[step]]
 do = "click"
-at = [1730, 696]
+at = { role = "button", text = "Import" }
 label = "Import"
 
 [[step]]
@@ -57,12 +56,12 @@ name = "first-done"
 
 [[step]]
 do = "click"
-at = [330, 486]
+at = { role = "button", text = "Import another" }
 label = "Import another"
 
 [[step]]
 do = "click"
-at = [300, 642]
+at = { role = "button", text = "Import" }
 label = "Import the same file again"
 
 [[step]]
@@ -85,7 +84,7 @@ name = "different"
 
 [[step]]
 do = "click"
-at = [1153, 418]
+at = { role = "button", text = "Import anyway" }
 label = "Import anyway, as a different tree"
 
 [[step]]
@@ -99,7 +98,7 @@ name = "second-plan"
 
 [[step]]
 do = "click"
-at = [1657, 737]
+at = { role = "button", text = "Review 3 possible matches" }
 label = "Review 3 possible matches"
 
 [[step]]
@@ -135,7 +134,7 @@ name = "reviewed"
 
 [[step]]
 do = "click"
-at = [1730, 696]
+at = { role = "button", text = "Import" }
 label = "Ready to import: Import"
 
 [[step]]
@@ -175,5 +174,5 @@ because = "answering the last pair must show the plan as the answers leave it"
 [[assert]]
 kind = "match"
 shots = ["first-done", "second-done"]
-region = [248, 230, 1536, 300]
+region = { role = "main", offset = [16, 155], size = [1536, 300] }
 because = "importing the reviewed plan must write the import and end on its summary, as the first did"

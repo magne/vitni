@@ -3,10 +3,10 @@
 # that pressing one moves the camera, that a tile is still drawn at the camera's ceiling, or that the
 # ceiling and floor actually stop a gesture. `tests/map_zoom.rs` covers the readout's own markup.
 #
-# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes. The MapLibre
-# controls are positioned by MapLibre itself, 10px inside the canvas: the canvas fills x 485..1797,
-# y 159..1057 with Pan armed, so the `+`/`−` buttons land at (511, 182)/(511, 212) and the scale bar
-# at x 496..578, y 1026..1046. The readout sits between Fit and the provider select at x 1607..1633.
+# MapLibre positions its own controls inside the canvas: the `+` button is targeted by its label, and the
+# scale bar, which carries no id or role, is a region offset into `geography-map` near its bottom-left
+# corner. The readout regions are the readout element itself (`zoom-readout`), fixed-width so `z1.0`
+# and `z19.0` fill the same box.
 #
 # Notch counts are measured, not guessed: one `xdotool click 4` moves MapLibre's camera ≈0.167 of a
 # zoom level, so a first attempt at 40 notches only reached z11.7 and every clamp assert below compared
@@ -17,7 +17,7 @@ description = "The map's zoom is bounded to the tiles, and visible and adjustabl
 
 [[step]]
 do = "click"
-at = [85, 861]
+at = { role = "listitem", text = "Geography" }
 label = "rail: Geography"
 
 [[step]]
@@ -26,7 +26,7 @@ name = "map"
 
 [[step]]
 do = "click"
-at = [511, 182]
+at = { role = "button", text = "Zoom in" }
 label = "map: NavigationControl +"
 
 [[step]]
@@ -35,7 +35,7 @@ name = "nav-zoomed-in"
 
 [[step]]
 do = "wheel"
-at = [1130, 600]
+at = { id = "geography-map", offset = [645, 442] }
 clicks = 120
 label = "map: 120 notches in — past the source's last zoom"
 
@@ -45,7 +45,7 @@ name = "at-ceiling"
 
 [[step]]
 do = "wheel"
-at = [1130, 600]
+at = { id = "geography-map", offset = [645, 442] }
 clicks = 60
 label = "map: 60 more notches in"
 
@@ -55,7 +55,7 @@ name = "still-at-ceiling"
 
 [[step]]
 do = "wheel"
-at = [1130, 600]
+at = { id = "geography-map", offset = [645, 442] }
 clicks = -180
 label = "map: 180 notches out — past the whole-globe view"
 
@@ -65,7 +65,7 @@ name = "at-floor"
 
 [[step]]
 do = "wheel"
-at = [1130, 600]
+at = { id = "geography-map", offset = [645, 442] }
 clicks = -60
 label = "map: 60 more notches out"
 
@@ -78,19 +78,18 @@ name = "still-at-floor"
 [[assert]]
 kind = "differ"
 shots = ["map", "nav-zoomed-in"]
-region = [500, 200, 1250, 700]
+region = { id = "geography-map", offset = [15, 42], size = [1250, 700] }
 because = "pressing the map's own + button must zoom the camera in, with no wheel involved"
 
 # The readout's own rectangle only, here and below. A whole-window compare is answered by the canvas
 # redraw, which says nothing about whether the level shown ever changed.
 #
-# The readout is right-aligned and ends at x=1600, so the rectangle runs *left* from there: `z19.0` at
-# the ceiling starts at 1560 where `z1.0` at the floor starts at 1570. It stops short of the provider
-# select (1610) and of `Fit` (ends 1545), so neither can answer for the readout.
+# The region is the readout element alone, so neither `Fit` nor the provider select beside it can
+# answer for the readout.
 [[assert]]
 kind = "differ"
 shots = ["map", "nav-zoomed-in"]
-region = [1554, 98, 46, 24]
+region = { hook = "zoom-readout" }
 tolerance = 0.001
 because = "the readout must follow the camera, not stay at the level the map opened with"
 
@@ -104,7 +103,7 @@ because = "the readout must follow the camera, not stay at the level the map ope
 [[assert]]
 kind = "painted"
 shot = "at-ceiling"
-region = [500, 200, 1250, 700]
+region = { id = "geography-map", offset = [15, 42], size = [1250, 700] }
 min_deviation = 0.01
 because = "tiles must still be drawn at the camera's zoom ceiling"
 
@@ -116,14 +115,14 @@ because = "maxZoom must stop the camera — 60 more notches in can change nothin
 [[assert]]
 kind = "match"
 shots = ["at-ceiling", "still-at-ceiling"]
-region = [1554, 98, 46, 24]
+region = { hook = "zoom-readout" }
 tolerance = 0.001
 because = "the readout must sit still at the ceiling too, not creep past the last zoom the tiles exist at"
 
 [[assert]]
 kind = "differ"
 shots = ["at-ceiling", "at-floor"]
-region = [500, 200, 1250, 700]
+region = { id = "geography-map", offset = [15, 42], size = [1250, 700] }
 because = "zooming back out must move the camera, or the pair of floor asserts below prove nothing"
 
 # The floor view keeps map-repaint.toml's 0.03: a whole-globe frame has coastlines in it and measures
@@ -131,7 +130,7 @@ because = "zooming back out must move the camera, or the pair of floor asserts b
 [[assert]]
 kind = "painted"
 shot = "at-floor"
-region = [500, 200, 1250, 700]
+region = { id = "geography-map", offset = [15, 42], size = [1250, 700] }
 min_deviation = 0.03
 because = "tiles must still be drawn at the camera's zoom floor"
 
@@ -143,7 +142,7 @@ because = "minZoom must stop the camera — 60 more notches out can change nothi
 [[assert]]
 kind = "match"
 shots = ["at-floor", "still-at-floor"]
-region = [1554, 98, 46, 24]
+region = { hook = "zoom-readout" }
 tolerance = 0.001
 because = "the readout must sit still at the floor too"
 
@@ -152,5 +151,5 @@ because = "the readout must sit still at the floor too"
 [[assert]]
 kind = "painted"
 shot = "map"
-region = [496, 1026, 84, 22]
+region = { id = "geography-map", offset = [11, 868], size = [84, 22] }
 because = "a metric scale bar must be drawn bottom-left, saying what the zoom level means on the ground"

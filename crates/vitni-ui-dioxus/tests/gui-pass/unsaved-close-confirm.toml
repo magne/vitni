@@ -13,23 +13,21 @@
 # focus ring is a real pixel difference, and the remounted pane after the round trip has no focus) and
 # park the pointer exactly where the scrim click later lands, so no frame differs from another by a rail
 # item's hover styling alone.
-#
-# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
 description = "The close confirm raised by ⌘W over a dirty record cancels, cycles and saves (#244)"
 
 [[step]]
 do = "click"
-at = [85, 283]
+at = { role = "listitem", text = "Places" }
 label = "rail: Places"
 
 [[step]]
 do = "click"
-at = [300, 99]
+at = { role = "option", text = "Kristiansand Municipality P0001" }
 label = "explorer: Kristiansand"
 
 [[step]]
 do = "click"
-at = [1740, 145]
+at = { role = "button", text = "Edit" }
 label = "detail head: Edit"
 
 [[step]]
@@ -38,7 +36,7 @@ name = "edit-mode"
 
 [[step]]
 do = "click"
-at = [1150, 438]
+at = { id = "place-id" }
 label = "field: ID input"
 
 [[step]]
@@ -53,7 +51,7 @@ label = "Type: Municipality → Parish"
 
 [[step]]
 do = "click"
-at = [300, 1100]
+at = { hook = "explorer", offset = [68, 1073] }
 label = "park the pointer on empty list space"
 
 [[step]]
@@ -62,17 +60,17 @@ name = "dirty"
 
 [[step]]
 do = "click"
-at = [85, 135]
+at = { role = "listitem", text = "Dashboard" }
 label = "rail: Dashboard"
 
 [[step]]
 do = "click"
-at = [85, 283]
+at = { role = "listitem", text = "Places" }
 label = "rail: Places"
 
 [[step]]
 do = "click"
-at = [300, 1100]
+at = { hook = "explorer", offset = [68, 1073] }
 label = "park the pointer where the scrim click lands"
 
 [[step]]
@@ -132,7 +130,7 @@ label = "⌘W again"
 
 [[step]]
 do = "click"
-at = [300, 1100]
+at = { role = "button", text = "Dismiss", offset = [300, 1073] }
 label = "confirm: click the scrim"
 
 [[step]]
@@ -146,7 +144,7 @@ label = "⌘W a third time"
 
 [[step]]
 do = "click"
-at = [1072, 301]
+at = { role = "button", text = "Save", within = "dialog" }
 label = "confirm: Save"
 
 [[step]]

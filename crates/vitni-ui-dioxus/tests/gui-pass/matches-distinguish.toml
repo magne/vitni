@@ -8,16 +8,14 @@
 # After the first Save the record sits in edit mode, where ⌘N does not open a draft, so the second
 # person comes from the tabstrip's "+" menu.
 #
-# Every assertion is scoped to the matches table card, y 211-451, below the filters, where the person
-# pair is the second row, after the fixture's two media of one checksum: the *Created* and decision notices
-# repaint the bottom of the window, and the rail's selection moves between the visits.
-#
-# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
+# Every assertion is scoped to the matches table card (a band of the main pane below the filters), where
+# the person pair is the second row, after the fixture's two media of one checksum: the *Created* and
+# decision notices repaint the bottom of the window, and the rail's selection moves between the visits.
 description = "Not the same removes the pair from the matches table for good (#403)"
 
 [[step]]
 do = "click"
-at = [85, 175]
+at = { role = "listitem", text = "People" }
 label = "rail: People"
 
 [[step]]
@@ -27,7 +25,7 @@ label = "⌘N: a new Person draft"
 
 [[step]]
 do = "click"
-at = [1150, 486]
+at = { id = "given" }
 label = "field: Given name"
 
 [[step]]
@@ -37,7 +35,7 @@ label = "type: John"
 
 [[step]]
 do = "click"
-at = [1150, 636]
+at = { id = "surname" }
 label = "field: Surname"
 
 [[step]]
@@ -47,22 +45,22 @@ label = "type: Smith"
 
 [[step]]
 do = "click"
-at = [1754, 151]
+at = { role = "button", text = "Save" }
 label = "New person: Save"
 
 [[step]]
 do = "click"
-at = [756, 101]
+at = { role = "button", text = "Create a new record" }
 label = "tabstrip: +"
 
 [[step]]
 do = "click"
-at = [825, 148]
+at = { role = "menuitem", text = "New person" }
 label = "menu: New person"
 
 [[step]]
 do = "click"
-at = [1150, 486]
+at = { id = "given" }
 label = "field: Given name"
 
 [[step]]
@@ -72,7 +70,7 @@ label = "type: John"
 
 [[step]]
 do = "click"
-at = [1150, 636]
+at = { id = "surname" }
 label = "field: Surname"
 
 [[step]]
@@ -82,12 +80,12 @@ label = "type: Smyth"
 
 [[step]]
 do = "click"
-at = [1754, 151]
+at = { role = "button", text = "Save" }
 label = "New person: Save"
 
 [[step]]
 do = "click"
-at = [108, 749]
+at = { role = "listitem", text = "Matches" }
 label = "rail: Matches"
 
 [[step]]
@@ -96,7 +94,7 @@ name = "table"
 
 [[step]]
 do = "click"
-at = [1680, 391]
+at = { role = "button", text = "Compare I0001 with I0002" }
 label = "person row: Compare"
 
 [[step]]
@@ -105,7 +103,7 @@ name = "compare"
 
 [[step]]
 do = "click"
-at = [463, 642]
+at = { id = "merge-reason" }
 label = "field: Reason for this decision"
 
 [[step]]
@@ -115,7 +113,7 @@ label = "type: different fathers"
 
 [[step]]
 do = "click"
-at = [1515, 642]
+at = { role = "button", text = "Not the same" }
 label = "Not the same"
 
 [[step]]
@@ -124,12 +122,12 @@ name = "decided"
 
 [[step]]
 do = "click"
-at = [85, 175]
+at = { role = "listitem", text = "People" }
 label = "rail: People — leave the tool"
 
 [[step]]
 do = "click"
-at = [108, 749]
+at = { role = "listitem", text = "Matches" }
 label = "rail: Matches — come back"
 
 [[step]]
@@ -140,16 +138,16 @@ name = "revisit"
 kind = "differ"
 shots = ["table", "compare"]
 because = "Compare must open the wizard for the proposed pair"
-region = [232, 211, 1568, 240]
+region = { role = "main", offset = [0, 136], size = [1568, 240] }
 
 [[assert]]
 kind = "differ"
 shots = ["table", "decided"]
 because = "after Not the same the screen returns to a matches table the pair has left"
-region = [232, 211, 1568, 240]
+region = { role = "main", offset = [0, 136], size = [1568, 240] }
 
 [[assert]]
 kind = "match"
 shots = ["decided", "revisit"]
 because = "a distinguished pair never reappears, not even after leaving the tool and coming back"
-region = [232, 211, 1568, 240]
+region = { role = "main", offset = [0, 136], size = [1568, 240] }

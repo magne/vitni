@@ -43,25 +43,21 @@
 # The three zoom steps are identical in both hosts and Fit is the only one that tracks its container.
 # Before this change the same steps measured 759/714/503-wide *chords* in the dialog against 813/777/505
 # in the tab — different magnifications from the same button, which is what the report described.
-#
-# Coordinates are window pixels at the default 1800x1200, read off this scenario's own shots. The
-# dialog's canvas content box is x 651-1680, y 326 down. The zoom buttons sit at y 301, with borders at
-# x 651-682 (Fit), 687-738 (100%), 743-793 (150%) and 798-848 (200%) — centres 667 / 712 / 768 / 823.
 description = "Every zoom step resizes the image in the preview dialog, by a multiple of the image, not the canvas"
 
 [[step]]
 do = "click"
-at = [85, 431]
+at = { role = "listitem", text = "Media" }
 label = "rail: Media"
 
 [[step]]
 do = "click"
-at = [300, 99]
+at = { role = "option", text = "portrait.png O0001" }
 label = "explorer: the seeded portrait.png row"
 
 [[step]]
 do = "click"
-at = [1150, 490]
+at = { role = "button", text = "Open portrait.png" }
 label = "overview: the preview frame"
 
 [[step]]
@@ -70,7 +66,7 @@ name = "zoom-fit"
 
 [[step]]
 do = "click"
-at = [712, 301]
+at = { role = "button", text = "100%" }
 label = "viewer: 100%"
 
 [[step]]
@@ -79,7 +75,7 @@ name = "zoom-100"
 
 [[step]]
 do = "click"
-at = [768, 301]
+at = { role = "button", text = "150%" }
 label = "viewer: 150%"
 
 [[step]]
@@ -88,7 +84,7 @@ name = "zoom-150"
 
 [[step]]
 do = "click"
-at = [823, 301]
+at = { role = "button", text = "200%" }
 label = "viewer: 200%"
 
 [[step]]
@@ -97,7 +93,7 @@ name = "zoom-200"
 
 [[step]]
 do = "click"
-at = [667, 301]
+at = { role = "button", text = "Fit" }
 label = "viewer: back to Fit"
 
 [[step]]
@@ -107,36 +103,36 @@ name = "zoom-back-to-fit"
 [[assert]]
 kind = "differ"
 shots = ["zoom-fit", "zoom-100"]
-# Beyond the 100% image's right edge (x 1131) and inside the canvas: image at Fit, empty panel at 100%.
-region = [1212, 400, 200, 120]
+# Beyond the 100% image's right edge and inside the canvas: image at Fit, empty panel at 100%.
+region = { role = "button", text = "Open portrait.png", offset = [643, 66], size = [200, 120] }
 because = "Fit fills the canvas and 100% is the image's own 480px — they cannot render identically"
 
 [[assert]]
 kind = "differ"
 shots = ["zoom-100", "zoom-150"]
-region = [712, 450, 200, 120]
+region = { hook = "media-frame", offset = [61, 124], size = [200, 120] }
 because = "150% must magnify what 100% shows"
 
 [[assert]]
 kind = "differ"
 shots = ["zoom-150", "zoom-200"]
-region = [712, 450, 200, 120]
+region = { role = "button", text = "Open portrait.png", offset = [143, 116], size = [200, 120] }
 because = "200% must magnify what 150% shows — every step has to act, not just the first"
 
 [[assert]]
 kind = "match"
 shots = ["zoom-100", "zoom-150"]
-# Beyond both steps' right edges (651 + 480 and 651 + 720) and well inside the canvas (ends 1680). Under
+# Beyond both steps' right edges and well inside the canvas. Under
 # a container-relative zoom every step is at least the canvas's width, so this strip could never be
 # empty panel at all; it says nothing about *which* multiple, which is why the table above is measured.
-region = [1411, 526, 100, 100]
+region = { role = "button", text = "Open portrait.png", offset = [842, 192], size = [100, 100] }
 because = "no zoom step fills the canvas — the image is sized from itself, not from the box it sits in"
 
 [[assert]]
 kind = "painted"
 shot = "zoom-200"
 because = "the zoomed image must still be the image's own bytes, not a blank stretched box"
-region = [1462, 700, 120, 120]
+region = { hook = "media-canvas", offset = [812, 375], size = [120, 120] }
 min_deviation = 0.05
 
 [[assert]]

@@ -4,10 +4,9 @@
 # "never click the rail row" before finishing the polygon.
 #
 # The refusal toast renders in the shell's notice layer (#208), which is out of grid flow, so it no longer
-# moves the Finish/Clear row: both Finish clicks below aim at the same y=1048. When the toast was a grid
-# row it pushed that row up to y=995, and the second click stayed aimed there after #208. It then landed
-# on the canvas and added a fourth vertex, which is what made `targeted`/`recovered` differ while the
-# geometry panel never opened.
+# moves the Finish/Clear row, so both Finish clicks resolve to the same button. When the toast was a grid
+# row it pushed that row up, and a click aimed at the old position landed on the canvas instead and added
+# a fourth vertex, which is what made `targeted`/`recovered` differ while the geometry panel never opened.
 #
 # "The draft survives the refusal" is asserted by *finishing again* after picking a place, not by
 # clicking Clear and watching the ring vanish: Clear does erase the ring (`map-clear-draft.toml` covers
@@ -15,13 +14,11 @@
 # forcing a redraw after the draft push), but a Clear/no-Clear compare here would only prove that fix,
 # not this one. Re-finishing is the actual recovery path the refusal toast promises: the geometry panel
 # can only open if the draft still held its three vertices.
-#
-# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
 description = "Finishing a shape with no draw target is refused, and the draft survives the refusal (#255)"
 
 [[step]]
 do = "click"
-at = [85, 861]
+at = { role = "listitem", text = "Geography" }
 label = "rail: Geography"
 
 [[step]]
@@ -30,22 +27,22 @@ name = "no-target"
 
 [[step]]
 do = "click"
-at = [1480, 110]
+at = { role = "button", text = "Draw polygon" }
 label = "toolbar: Draw polygon"
 
 [[step]]
 do = "click"
-at = [900, 400]
+at = { id = "geography-map", offset = [415, 242] }
 label = "map: first vertex"
 
 [[step]]
 do = "click"
-at = [1200, 420]
+at = { id = "geography-map", offset = [715, 262] }
 label = "map: second vertex"
 
 [[step]]
 do = "click"
-at = [1100, 700]
+at = { id = "geography-map", offset = [615, 542] }
 label = "map: third vertex"
 
 [[step]]
@@ -54,7 +51,7 @@ name = "ring-closed"
 
 [[step]]
 do = "click"
-at = [541, 1048]
+at = { role = "button", text = "Finish polygon" }
 label = "Finish polygon"
 
 [[step]]
@@ -63,7 +60,7 @@ name = "refused"
 
 [[step]]
 do = "click"
-at = [324, 220]
+at = { role = "option", text = "Kristiansand Municipality" }
 label = "place list: Kristiansand"
 
 [[step]]
@@ -72,7 +69,7 @@ name = "targeted"
 
 [[step]]
 do = "click"
-at = [541, 1048]
+at = { role = "button", text = "Finish polygon" }
 label = "Finish polygon, again"
 
 [[step]]
@@ -89,7 +86,7 @@ kind = "differ"
 shots = ["refused", "targeted"]
 # The rail's Kristiansand row only. A whole-window compare here is answered by the recentre the
 # selection triggers, which says nothing about the highlight this issue is about.
-region = [232, 190, 240, 60]
+region = { role = "option", text = "Kristiansand Municipality" }
 because = "picking a place must highlight it as the draw target"
 
 [[assert]]
@@ -97,5 +94,5 @@ kind = "differ"
 shots = ["targeted", "recovered"]
 # The geometry panel's header band, top right: a whole-window compare also passed when the click missed
 # Finish and only added a vertex to the ring.
-region = [1420, 30, 380, 60]
+region = { role = "search", text = "Search ⌘K", offset = [0, -4], size = [380, 60] }
 because = "a refused draft must survive, so finishing again with a target opens the geometry panel"

@@ -9,13 +9,11 @@
 #
 # Every assertion is scoped to the region the step should change: the hint's band under the Overview
 # card, the compare below it, the side panel, the Matches view, and the tabstrip.
-#
-# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
 description = "Typing a stored person's name and birth year raises the similar-record hint (#415)"
 
 [[step]]
 do = "click"
-at = [85, 175]
+at = { role = "listitem", text = "People" }
 label = "rail: People"
 
 [[step]]
@@ -25,7 +23,7 @@ label = "⌘N: a new Person draft"
 
 [[step]]
 do = "click"
-at = [1150, 486]
+at = { id = "given" }
 label = "field: Given name"
 
 [[step]]
@@ -35,7 +33,7 @@ label = "type: Guldbrand"
 
 [[step]]
 do = "click"
-at = [1150, 636]
+at = { id = "surname" }
 label = "field: Surname"
 
 [[step]]
@@ -45,7 +43,7 @@ label = "type: Olsen"
 
 [[step]]
 do = "click"
-at = [1150, 785]
+at = { id = "born" }
 label = "field: Born"
 
 [[step]]
@@ -55,7 +53,7 @@ label = "type: 1852"
 
 [[step]]
 do = "click"
-at = [1754, 151]
+at = { role = "button", text = "Save" }
 label = "New person: Save"
 
 [[step]]
@@ -64,12 +62,12 @@ name = "saved"
 
 [[step]]
 do = "click"
-at = [794, 101]
+at = { role = "button", text = "Create a new record" }
 label = "tabstrip: +"
 
 [[step]]
 do = "click"
-at = [863, 148]
+at = { role = "menuitem", text = "New person" }
 label = "menu: New person"
 
 [[step]]
@@ -78,7 +76,7 @@ name = "blank"
 
 [[step]]
 do = "click"
-at = [1150, 486]
+at = { id = "given" }
 label = "field: Given name"
 
 [[step]]
@@ -88,7 +86,7 @@ label = "type: Gulbrand"
 
 [[step]]
 do = "click"
-at = [1150, 636]
+at = { id = "surname" }
 label = "field: Surname"
 
 [[step]]
@@ -98,7 +96,7 @@ label = "type: Olsen"
 
 [[step]]
 do = "click"
-at = [1150, 785]
+at = { id = "born" }
 label = "field: Born"
 
 [[step]]
@@ -112,7 +110,7 @@ name = "hint"
 
 [[step]]
 do = "click"
-at = [1621, 859]
+at = { role = "button", text = "Compare" }
 label = "hint: Compare"
 
 [[step]]
@@ -121,7 +119,7 @@ name = "compare"
 
 [[step]]
 do = "click"
-at = [1754, 151]
+at = { role = "button", text = "Save" }
 label = "New person: Save, past the hint"
 
 [[step]]
@@ -130,7 +128,7 @@ name = "saved-anyway"
 
 [[step]]
 do = "click"
-at = [1681, 151]
+at = { role = "button", text = "Find similar" }
 label = "header: Find similar"
 
 [[step]]
@@ -139,7 +137,7 @@ name = "find-similar"
 
 [[step]]
 do = "click"
-at = [1552, 339]
+at = { role = "button", text = "Compare" }
 label = "Find similar: Compare"
 
 [[step]]
@@ -148,12 +146,12 @@ name = "matches"
 
 [[step]]
 do = "click"
-at = [85, 175]
+at = { role = "listitem", text = "People" }
 label = "rail: People"
 
 [[step]]
 do = "click"
-at = [380, 600]
+at = { hook = "explorer", offset = [148, 573] }
 label = "empty list space"
 
 [[step]]
@@ -163,7 +161,7 @@ label = "⌘N: a new Person draft"
 
 [[step]]
 do = "click"
-at = [1150, 486]
+at = { id = "given" }
 label = "field: Given name"
 
 [[step]]
@@ -173,7 +171,7 @@ label = "type: Guldbrand"
 
 [[step]]
 do = "click"
-at = [1150, 636]
+at = { id = "surname" }
 label = "field: Surname"
 
 [[step]]
@@ -187,7 +185,7 @@ name = "hint-two"
 
 [[step]]
 do = "click"
-at = [1716, 859]
+at = { role = "button", text = "Use existing", index = 0 }
 label = "hint: Use existing on Guldbrand Olsen"
 
 [[step]]
@@ -198,28 +196,28 @@ name = "used"
 kind = "differ"
 shots = ["blank", "hint"]
 because = "a stored person's name and birth year must raise the hint under the Overview card"
-region = [552, 826, 1228, 60]
+region = { hook = "record-pane", offset = [20, 703], size = [1228, 60] }
 
 [[assert]]
 kind = "differ"
 shots = ["hint", "compare"]
 because = "Compare must open the draft beside the stored record, inside the hint"
-region = [552, 880, 1228, 290]
+region = { hook = "record-pane", offset = [20, 757], size = [1228, 290] }
 
 [[assert]]
 kind = "differ"
 shots = ["saved-anyway", "find-similar"]
 because = "Find similar must open its panel listing the stored record"
-region = [1420, 120, 380, 1050]
+region = { role = "main", offset = [888, -3], size = [380, 1050] }
 
 [[assert]]
 kind = "differ"
 shots = ["find-similar", "matches"]
 because = "the panel's Compare must open the pair in the Matches tool's compare view"
-region = [532, 120, 1268, 600]
+region = { role = "main", offset = [0, -3], size = [1268, 600] }
 
 [[assert]]
 kind = "differ"
 shots = ["hint-two", "used"]
 because = "Use existing must drop the draft's tab for the stored record's"
-region = [532, 80, 1268, 45]
+region = { hook = "record-tabs", offset = [0, 5], size = [1268, 45] }

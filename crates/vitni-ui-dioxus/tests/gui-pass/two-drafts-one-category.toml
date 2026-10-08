@@ -22,28 +22,18 @@
 # reference taken with the caret in Given name would compare a ring in one field against a ring in
 # another. The `I` typed into draft 2's ID is backspaced away again for the same reason.
 #
-# The form's own field coordinates were re-measured for #310, which put every record row's label and
-# value on one line: the Person create form's rows now sit 50px apart, ID at y 298-333 (centre 316) and
-# Given name at y 468-503 (centre 486), column-scanned at x=1150. The old y=336 was on ID's focus ring
-# and y=564 was in the gap below Nickname, so the "park the caret in ID" steps were landing on a border
-# and the typing went nowhere. The Given-name `differ` region moved with it, and to x=660 rather than the
-# old 546: the person card's label column is 140px, so its label ink runs x 546-616 and the input's own
-# text starts at 693 — 546 is on the label, identical in both frames, so including it
-# would only dilute the three glyphs the assertion is about.
+# The Given-name `differ` region starts past the person card's label column rather than at the field's
+# left edge: the label ink is identical in both frames, so including it would only dilute the three
+# glyphs the assertion is about.
 #
-# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes. The two draft
-# tabs are **column-scanned**, not eyeballed, and re-scanned on the shot immediately before each click,
-# because a draft tab resizes as it is typed into — the text changes and the `●` appears: while draft 2
-# still reads "New person (2)" the boxes are 588-677 and 683-831, but once the two read "Ada" and "Bob" they
-# are 588-677 and 683-772 — so the x 800 that was tab 2's label before typing is past it after. The
-# clicks below aim at the label
-# glyphs on row y 103 (`convert <shot> -crop 400x1+520+92 +repage txt:-` for the boxes,
-# `-crop 1x60+610+70` for the row).
+# The two draft tabs are targeted by role and text ("Ada", "Bob"), resolved when each click runs,
+# because a draft tab resizes as it is typed into — the text changes and the `●` appears — so where a
+# tab sat before typing is not where it sits after.
 description = "A second ⌘N opens another draft of one category, with its own form, caret and buffer (#260)"
 
 [[step]]
 do = "click"
-at = [85, 175]
+at = { role = "listitem", text = "People" }
 label = "rail: People"
 
 [[step]]
@@ -53,7 +43,7 @@ label = "⌘N: the first Person draft"
 
 [[step]]
 do = "click"
-at = [1150, 486]
+at = { id = "given" }
 label = "field: Given name"
 
 [[step]]
@@ -63,7 +53,7 @@ label = "type: Ada — draft 1 names itself Ada"
 
 [[step]]
 do = "click"
-at = [1150, 316]
+at = { id = "human-id" }
 label = "field: ID — park the caret where a remount would autofocus it"
 
 [[step]]
@@ -72,7 +62,7 @@ name = "one-parked"
 
 [[step]]
 do = "click"
-at = [1150, 486]
+at = { id = "given" }
 label = "field: Given name again — the caret is in a field the next ⌘N destroys"
 
 [[step]]
@@ -104,7 +94,7 @@ label = "clear it again, so the ID is empty for the reference frames below"
 
 [[step]]
 do = "click"
-at = [1150, 486]
+at = { id = "given" }
 label = "field: Given name"
 
 [[step]]
@@ -118,7 +108,7 @@ name = "two-typed"
 
 [[step]]
 do = "click"
-at = [1150, 316]
+at = { id = "human-id" }
 label = "field: ID — park the caret for the reference frame"
 
 [[step]]
@@ -127,7 +117,7 @@ name = "two-parked"
 
 [[step]]
 do = "click"
-at = [625, 103]
+at = { role = "tab", text = "Ada" }
 label = "record tab: draft 1 (Ada), on its label — not the ✕ four glyphs to the right"
 
 [[step]]
@@ -136,7 +126,7 @@ name = "back-to-one"
 
 [[step]]
 do = "click"
-at = [725, 103]
+at = { role = "tab", text = "Bob" }
 label = "record tab: draft 2 (Bob), on its label"
 
 [[step]]
@@ -146,22 +136,22 @@ name = "back-to-two"
 [[assert]]
 kind = "differ"
 shots = ["one-typed", "two-fresh"]
-region = [532, 130, 1268, 1040]
+region = { hook = "record-pane" }
 because = "a second ⌘N must build a fresh, empty form — a reused component instance would still show draft 1's text (#260)"
 
 [[assert]]
 kind = "differ"
 shots = ["two-fresh", "two-id"]
-region = [532, 130, 1268, 1040]
+region = { hook = "record-pane" }
 because = "the caret must be inside the new form, or the keystroke reaches the shell dispatcher instead"
 
 [[assert]]
 kind = "match"
 shots = ["two-fresh", "two-id"]
-# The strip's ‹ › history controls, left of the first tab at x 612 — the part of the shell chrome the
+# The strip's ‹ › history controls, left of the first tab — the part of the shell chrome the
 # keystroke may not touch. The tabs themselves are excluded on purpose: the key lands in draft 2's ID,
 # which marks that draft unsaved and paints its `●` (#307).
-region = [532, 80, 78, 45]
+region = { role = "button", text = "Back", offset = [-12, -8], size = [78, 45] }
 # Byte-identical when it works (RMSE 0.0000): a field took the keystroke, so no shell chrome repainted.
 # An overlay opening instead — `?` is one keystroke away from an unfocused shell — paints over the whole
 # strip, controls included, and the `differ` above alone could not tell the two apart.
@@ -171,13 +161,13 @@ because = "and it must be a *field* that took it, not the shell — an overlay w
 [[assert]]
 kind = "differ"
 shots = ["two-id", "two-typed"]
-region = [532, 80, 1268, 45]
+region = { hook = "record-tabs", offset = [0, 5], size = [1268, 45] }
 because = "typing a name into a draft renames its own tab, live (#260)"
 
 [[assert]]
 kind = "match"
 shots = ["one-parked", "back-to-one"]
-region = [532, 130, 1268, 1040]
+region = { hook = "record-pane" }
 # RMSE 0.0019 — the residue is the remount's own repaint (the per-field reset ↺ on the restored,
 # modified input), not the text: over the Given name field alone the two frames are identical.
 because = "returning to draft 1 must restore draft 1's own buffer, from the shell, after its pane was torn down"
@@ -185,7 +175,7 @@ because = "returning to draft 1 must restore draft 1's own buffer, from the shel
 [[assert]]
 kind = "match"
 shots = ["two-parked", "back-to-two"]
-region = [532, 130, 1268, 1040]
+region = { hook = "record-pane" }
 because = "and returning to draft 2 must restore draft 2's, not the one it was rebuilt beside"
 
 [[assert]]
@@ -193,5 +183,5 @@ kind = "differ"
 shots = ["back-to-one", "back-to-two"]
 # The Given name input alone. Three glyphs are 0.0044 of the whole form pane — under any tolerance that
 # would still call the two restore frames above a match — and 0.0521 of the field they sit in.
-region = [660, 471, 300, 32]
+region = { hook = "record-pane", offset = [128, 348], size = [300, 32] }
 because = "the two restored forms must not be the same form — one buffer shared between the drafts is the defect (#260)"

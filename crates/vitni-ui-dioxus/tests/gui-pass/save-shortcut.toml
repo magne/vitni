@@ -7,28 +7,26 @@
 # Dirtying a record without a typing step: same trick as `unsaved-close-confirm.toml` — the Type
 # `<select>` is the one control a keypress alone can change, reached via `Tab` off the ID field rather
 # than a native click (which would open a GTK popup that grabs the keyboard).
-#
-# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
 description = "Ctrl+S saves the dirty active record and reports nothing to save on a second press (#206)"
 
 [[step]]
 do = "click"
-at = [85, 283]
+at = { role = "listitem", text = "Places" }
 label = "rail: Places"
 
 [[step]]
 do = "click"
-at = [300, 99]
+at = { role = "option", text = "Kristiansand Municipality P0001" }
 label = "explorer: Kristiansand"
 
 [[step]]
 do = "click"
-at = [1740, 145]
+at = { role = "button", text = "Edit" }
 label = "detail head: Edit"
 
 [[step]]
 do = "click"
-at = [1150, 438]
+at = { id = "place-id" }
 label = "field: ID input"
 
 [[step]]
@@ -43,7 +41,7 @@ label = "Type: Municipality → Parish"
 
 [[step]]
 do = "click"
-at = [300, 1100]
+at = { hook = "explorer", offset = [68, 1073] }
 label = "park the pointer on empty list space"
 
 [[step]]

@@ -6,17 +6,15 @@
 # The fixture seeds no persons (and must not — every scenario is measured against its lists), so the
 # scenario creates John Smith and John Smyth itself, as matches-distinguish.toml does.
 #
-# Every assertion is scoped to the matches table card, y 211-451, below the filters, where the person
+# Every assertion is scoped to the matches table card, below the filters, where the person
 # pair is the second row, after the fixture's two media of one checksum: the *Created* and decision notices
 # repaint the bottom of the window. The baseline is shot with the pointer on the
 # row, as it is after the Compare click, so the row's hover highlight is in both.
-#
-# Coordinates are window pixels at 1800x1200, read off the shots this scenario writes.
 description = "The compare view decides a pair by keyboard: l leaves it proposed, y merges it (#411)"
 
 [[step]]
 do = "click"
-at = [85, 175]
+at = { role = "listitem", text = "People" }
 label = "rail: People"
 
 [[step]]
@@ -26,7 +24,7 @@ label = "⌘N: a new Person draft"
 
 [[step]]
 do = "click"
-at = [1150, 486]
+at = { id = "given" }
 label = "field: Given name"
 
 [[step]]
@@ -36,7 +34,7 @@ label = "type: John"
 
 [[step]]
 do = "click"
-at = [1150, 636]
+at = { id = "surname" }
 label = "field: Surname"
 
 [[step]]
@@ -46,22 +44,22 @@ label = "type: Smith"
 
 [[step]]
 do = "click"
-at = [1754, 151]
+at = { role = "button", text = "Save" }
 label = "New person: Save"
 
 [[step]]
 do = "click"
-at = [756, 101]
+at = { role = "button", text = "Create a new record" }
 label = "tabstrip: +"
 
 [[step]]
 do = "click"
-at = [825, 148]
+at = { role = "menuitem", text = "New person" }
 label = "menu: New person"
 
 [[step]]
 do = "click"
-at = [1150, 486]
+at = { id = "given" }
 label = "field: Given name"
 
 [[step]]
@@ -71,7 +69,7 @@ label = "type: John"
 
 [[step]]
 do = "click"
-at = [1150, 636]
+at = { id = "surname" }
 label = "field: Surname"
 
 [[step]]
@@ -81,17 +79,17 @@ label = "type: Smyth"
 
 [[step]]
 do = "click"
-at = [1754, 151]
+at = { role = "button", text = "Save" }
 label = "New person: Save"
 
 [[step]]
 do = "click"
-at = [108, 749]
+at = { role = "listitem", text = "Matches" }
 label = "rail: Matches"
 
 [[step]]
 do = "click"
-at = [1000, 391]
+at = { role = "cell", text = "Same given name" }
 label = "row: an inert cell, so the baseline carries the row's hover like the later shot"
 
 [[step]]
@@ -100,7 +98,7 @@ name = "table"
 
 [[step]]
 do = "click"
-at = [1680, 391]
+at = { role = "button", text = "Compare I0001 with I0002" }
 label = "person row: Compare"
 
 [[step]]
@@ -118,7 +116,7 @@ name = "later"
 
 [[step]]
 do = "click"
-at = [1680, 391]
+at = { role = "button", text = "Compare I0001 with I0002" }
 label = "person row: Compare — again"
 
 [[step]]
@@ -132,12 +130,12 @@ name = "merged"
 
 [[step]]
 do = "click"
-at = [85, 175]
+at = { role = "listitem", text = "People" }
 label = "rail: People — leave the tool"
 
 [[step]]
 do = "click"
-at = [108, 749]
+at = { role = "listitem", text = "Matches" }
 label = "rail: Matches — come back"
 
 [[step]]
@@ -148,22 +146,22 @@ name = "revisit"
 kind = "differ"
 shots = ["table", "compare"]
 because = "Compare must open the compare view for the proposed pair"
-region = [232, 211, 1568, 240]
+region = { role = "main", offset = [0, 136], size = [1568, 240] }
 
 [[assert]]
 kind = "match"
 shots = ["table", "later"]
 because = "l (Decide later) returns to the matches table with the pair still proposed"
-region = [232, 211, 1568, 240]
+region = { role = "main", offset = [0, 136], size = [1568, 240] }
 
 [[assert]]
 kind = "differ"
 shots = ["table", "merged"]
 because = "y (Same) merges the pair, which leaves the matches table"
-region = [232, 211, 1568, 240]
+region = { role = "main", offset = [0, 136], size = [1568, 240] }
 
 [[assert]]
 kind = "match"
 shots = ["merged", "revisit"]
 because = "y left the compare view for the table the merged pair is gone from, which stays so on a revisit"
-region = [232, 211, 1568, 240]
+region = { role = "main", offset = [0, 136], size = [1568, 240] }
