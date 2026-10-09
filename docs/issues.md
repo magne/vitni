@@ -383,6 +383,20 @@ in its own area: research notes (*Notes & research notes*). The one gap running 
   workspace (#328), which is why its person views are not in the README.
   *Shape:* the `--citation`/`--confidence`/`--rationale` trio `person add-name` already takes, threaded
   into the same participation command.
+- **Ten CLI attach verbs take a UUID the CLI never prints.** `attach-note` and `attach-media` on
+  `event`, `place` and `source`, and `attach-note` on `repository`, `media`, `dna-test` and `dna-match`,
+  declare `--note`/`--media` as a `Uuid` (`vitni-cli/src/commands/*.rs`); `citation attach-note` takes
+  `N0001`. The CLI prints only human ids, so `vitni event attach-note --note N0001 E0001` fails with
+  `invalid value 'N0001' for '--note <NOTE>'` and nothing the CLI shows can be passed instead. The cause
+  is in the app layer: those ten `attach_*` use-cases take a `NoteId`/`MediaId`, where Person, Family
+  and Citation take human ids, so `vitni-app` keeps ten `import_attach_*` wrappers that resolve the
+  human id first. The GUI, the staging writer and the plugin host go through the wrappers; the CLI
+  calls the use-cases directly. The wrappers are the copies that dropped the attach form's provenance
+  in #424. `--tag` stays a UUID: tags have no human id and `tag create` prints it. *Shape:* the ten
+  use-cases take the note or media human id and resolve it, as `attach_person_note` does; the
+  `import_attach_*` wrappers are deleted and their callers call the use-cases; the CLI arguments become
+  human ids. *Exit:* each of the ten CLI verbs attaches by human id, and no `import_attach_*`
+  remains. — #549
 
 ## Import, export & plugins
 
