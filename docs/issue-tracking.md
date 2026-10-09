@@ -176,7 +176,7 @@ rather than kept as history — the archive is the record.
 
 | Milestone | Contents |
 | --- | --- |
-| **`0.9 — UI stabilization`** | Bugfix and correctness before shipping. **Expected to grow substantially** — the list below is a floor, not a scope: most of what belongs here has not been found yet, because it takes real GUI use to surface. The 2026-08-12 walkthrough proved that twice over: the milestone had reached zero open issues, and one pass through the GUI refilled it with 15. Highest first: attaching a note or media on seven record kinds discarding the attach form's provenance (#424). |
+| **`0.9 — UI stabilization`** | Bugfix and correctness before shipping. **Expected to grow substantially** — the list below is a floor, not a scope: most of what belongs here has not been found yet, because it takes real GUI use to surface. The 2026-08-12 walkthrough proved that twice over: the milestone had reached zero open issues, and one pass through the GUI refilled it with 15. Highest first: a date row's four controls stacking instead of sitting on one line (#500). |
 | **`0.10 — Record matching`** | Import that never duplicates and never guesses: record origins and import runs, the matching engine, identity decisions, staged import with side-by-side review, and versioned workspace backup (ADRs 0037–0041). Groomed in full in §4, in dependency order. |
 | **`1.0`** | Release mechanics only (#210–#215): generate real release keys, verify `release.yml` end-to-end on the first real tag, give `.deb` a default system plugin path (same fix as the duplicated/divergent embedded plugin-dir resolver), add the missing `[profile.release]`, and settle the cross-platform decision. Also the deletion of the pre-1.0 backup upgraders, which freezes backup format v1 (#392, ADR 0041 §4). |
 
@@ -201,14 +201,13 @@ one pass through the real GUI, looking at nothing but what a user sees, refilled
 those are defects no SSR test could have caught, because they are about what reaches the DOM, the
 stylesheet or the webview rather than what the view logic decided. Treat the count as a floor again.
 
-**Open now (2026-10-04).** #424 and #382 are what is left of that round. The other four were filed on
+**Open now (2026-10-04).** #382 is what is left of that round; #424 closed on 2026-10-09. The other four were filed on
 2026-10-04 from bullets already in `issues.md`: one shipped screen that contradicts its mockup, two
 mockup/sheet drifts against the rule that the mockups describe shipped behaviour, and the `gui-pass`
 flakes that make every scenario's first assertion unreliable.
 
 | Item | Why it gates a release |
 | --- | --- |
-| [Attaching a note or media on seven record kinds discards the attach form's provenance](https://github.com/magne/vitni/issues/424) | The reason, surety and citations a user enters are silently lost from History, so the audit trail records less than the user asserted |
 | [A date row's four controls stack instead of sitting on one line](https://github.com/magne/vitni/issues/500) | Every date field on all 13 record screens draws a 5-row block where the mockup draws one row |
 | [Ten mockups quote a History note no shipped string says](https://github.com/magne/vitni/issues/501) | The mockups advertise a competitor claim the product does not make |
 | [The mockup sheet is only partly the superset it is documented to be](https://github.com/magne/vitni/issues/502) | 24 app rules have no mockup counterpart and nothing gates the sheet as a whole; needs a decided rule first |
@@ -222,7 +221,7 @@ flakes that make every scenario's first assertion unreliable.
 vehicle rule like #322: the walkthroughs that refill this milestone move the layout, and each move
 re-calibrates scenarios that test something else.
 
-The 2026-08-12 round, closed except #424:
+The 2026-08-12 round, closed in full:
 
 | Item | Why it gated a release |
 | --- | --- |
@@ -251,8 +250,8 @@ cleanups whose absence changes nothing a user sees. The **design questions** tha
 walkthrough are filed *without* a milestone, because each needs a call before it needs code — the
 Attach-versus-Add model (#314) among them.
 
-#424 came later, from code reading while closing #421 rather than from the walkthrough. It sits second
-because it silently drops data the user entered, which only the hang outranks.
+#424 came later, from code reading while closing #421 rather than from the walkthrough. It sat second
+because it silently dropped data the user entered, which only the hang outranked.
 
 **The previous round closed in full** — #200, #201, #203–#209, #231–#233, #239, #240, #244, #247,
 #252–#261, #266, #279, #281–#285 — and their bullets left `issues.md` per §6. What those closures
