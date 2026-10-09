@@ -139,6 +139,12 @@ const RESTORE_FRAMES: u8 = 8;
 /// The control to restore is the live `document.activeElement` whenever the browser still has one, and
 /// [`TRACK_FOCUS`]'s record otherwise: a side panel inerts the pane it covers, which blurs the very
 /// control that opened it, leaving `activeElement` as the body (#312).
+///
+/// The restore only fills a vacuum: it gives up once anything but the body holds focus, so a control
+/// the dialog's own action focused — a create form opened from the palette puts the caret in its first
+/// field — is never pulled back. When the control to restore has gone (the action navigated away and
+/// unmounted it), focus goes to `.app` instead, never `<body>`, which sits outside the shell's key
+/// dispatcher and would drop the next chord (#541).
 fn enter_and_restore_script() -> String {
     format!(
         "{DIALOG_CONTROLS}
@@ -149,9 +155,14 @@ if (dialog !== null) {{
     : window.__vitniLastFocused;
   (controls[0] ?? dialog).focus();
   const restoreFocus = (attempts) => {{
-    if (!(restore instanceof HTMLElement) || !restore.isConnected || dialog.contains(restore)) return;
-    restore.focus();
-    if (document.activeElement !== restore && attempts > 0) {{
+    const current = document.activeElement;
+    if (current instanceof HTMLElement && current !== document.body) return;
+    const target = restore instanceof HTMLElement && restore.isConnected && !dialog.contains(restore)
+      ? restore
+      : document.querySelector('.app');
+    if (!(target instanceof HTMLElement)) return;
+    target.focus();
+    if (document.activeElement !== target && attempts > 0) {{
       requestAnimationFrame(() => restoreFocus(attempts - 1));
     }}
   }};
@@ -313,6 +324,14 @@ mod tests {
         assert!(
             script.contains("requestAnimationFrame"),
             "and for the background's inert to be lifted with it:\n{script}"
+        );
+        assert!(
+            script.contains("current !== document.body) return"),
+            "the restore never takes focus from a control the dialog's action focused:\n{script}"
+        );
+        assert!(
+            script.contains("document.querySelector('.app')"),
+            "a vanished restore target falls back inside the shell, not to the body (#541):\n{script}"
         );
     }
 

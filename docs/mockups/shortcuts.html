@@ -107,7 +107,9 @@
       never reach the shell behind them; focus moves in when the dialog opens and back to the control
       that opened it when it closes. The palette and this help overlay hold focus on their single
       control, and likewise take focus when they open and hand it back when they close — by
-      <kbd>Esc</kbd> or a click on the scrim — so the next shortcut still reaches the shell.
+      <kbd>Esc</kbd> or a click on the scrim — so the next shortcut still reaches the shell. Focus is
+      only handed back when nothing else took it (a command that opens a form keeps the caret in it),
+      and when the control that had it is gone, it goes to the app shell instead.
       <kbd>Esc</kbd> closes — and over a pending close it is the confirm's <b>Cancel</b>, so
       nothing is discarded.</li>
     <li><b>Skip link</b> ("Skip to content") is the first tab stop, jumping past the rail to
