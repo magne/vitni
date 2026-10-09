@@ -784,7 +784,7 @@ fn summarize(view: &RepositoryView, lookups: &RepositoryLookups) -> RepositorySu
     }
 }
 
-/// Attaches a note (by its `human_id`) to a repository — the importer-facing wrapper.
+/// Attaches a note (by its `human_id`) to a repository — the frontend/importer-facing wrapper.
 ///
 /// # Errors
 ///
@@ -795,6 +795,7 @@ pub async fn import_attach_repository_note(
     session: &Session,
     repository_human_id: &str,
     note_human_id: &str,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let note_id = use_case::resolve_id(
@@ -802,14 +803,7 @@ pub async fn import_attach_repository_note(
         vitni_core::note::NoteView::note_id,
         || AppError::NoteNotFound(note_human_id.to_owned()),
     )?;
-    attach_repository_note(
-        workspace,
-        session,
-        repository_human_id,
-        note_id,
-        MutationMeta::default(),
-    )
-    .await
+    attach_repository_note(workspace, session, repository_human_id, note_id, meta).await
 }
 
 /// Summarises a cluster — its root first, then its members — as one repository (ADR 0039 §5): the root's

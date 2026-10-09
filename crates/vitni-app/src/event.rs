@@ -568,9 +568,8 @@ pub struct ImportedMediaRef {
     pub input: MediaRefInput,
 }
 
-/// Attaches a media object (by its `human_id`) to an event — the importer-facing wrapper that
-/// resolves the media `human_id` to its id, so a bulk importer never handles UUIDs. `provenance` is
-/// the caller's confidence template (ADR 0017 §7).
+/// Attaches a media object (by its `human_id`) to an event — the frontend/importer-facing wrapper
+/// that resolves the media `human_id` to its id, so a caller never handles UUIDs.
 ///
 /// # Errors
 ///
@@ -581,7 +580,7 @@ pub async fn import_attach_event_media(
     session: &Session,
     event_human_id: &str,
     media: ImportedMediaRef,
-    provenance: Provenance,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let media_id = use_case::resolve_id(
@@ -589,15 +588,10 @@ pub async fn import_attach_event_media(
         vitni_core::media::MediaView::media_id,
         || AppError::MediaNotFound(media.media_human_id.clone()),
     )?;
-    let meta = MutationMeta {
-        provenance,
-        ..MutationMeta::default()
-    };
     attach_event_media(workspace, session, event_human_id, media_id, media.input, meta).await
 }
 
-/// Attaches a note (by its `human_id`) to an event — the importer-facing wrapper. `provenance` is the
-/// caller's confidence template (ADR 0017 §7).
+/// Attaches a note (by its `human_id`) to an event — the frontend/importer-facing wrapper.
 ///
 /// # Errors
 ///
@@ -608,7 +602,7 @@ pub async fn import_attach_event_note(
     session: &Session,
     event_human_id: &str,
     note_human_id: &str,
-    provenance: Provenance,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let note_id = use_case::resolve_id(
@@ -616,10 +610,6 @@ pub async fn import_attach_event_note(
         vitni_core::note::NoteView::note_id,
         || AppError::NoteNotFound(note_human_id.to_owned()),
     )?;
-    let meta = MutationMeta {
-        provenance,
-        ..MutationMeta::default()
-    };
     attach_event_note(workspace, session, event_human_id, note_id, meta).await
 }
 

@@ -7,8 +7,8 @@
 use std::collections::BTreeSet;
 
 use vitni_app::{
-    AppError, ChildParentRelationship, ImportedMediaRef, MediaRefInput, NewFact, NewParticipation, Provenance,
-    Restriction, Session, Workspace, add_child, add_citation_attribute, add_event_citation, add_family_citation,
+    AppError, ChildParentRelationship, ImportedMediaRef, MediaRefInput, NewFact, NewParticipation, Restriction,
+    Session, Workspace, add_child, add_citation_attribute, add_event_citation, add_family_citation,
     add_media_attribute, add_media_citation, add_name, add_note_translation, add_partner, add_person_citation,
     add_place_citation, add_place_name, add_repository_address, add_repository_url, add_source_attribute,
     assert_association, assert_child_relationship, assert_citation_date_value, assert_event_address, assert_fact,
@@ -1614,13 +1614,13 @@ async fn dispatch_event_edit_to(
                 media_human_id: media_id.clone(),
                 input: MediaRefInput::default(),
             };
-            import_attach_event_media(workspace, session, human_id, media, Provenance::default())
+            import_attach_event_media(workspace, session, human_id, media, prov.meta())
                 .await
                 .map(|()| human_id.clone())
         }
         EventEdit::SetMediaRegion { .. } => event_set_region(workspace, session, edit, prov).await,
         EventEdit::AttachNote { human_id, note_id } => {
-            import_attach_event_note(workspace, session, human_id, note_id, Provenance::default())
+            import_attach_event_note(workspace, session, human_id, note_id, prov.meta())
                 .await
                 .map(|()| human_id.clone())
         }
@@ -1747,7 +1747,7 @@ async fn dispatch_place_edit_to(
                 .map(|()| human_id.clone())
         }
         PlaceEdit::AttachMedia { human_id, media_id } => {
-            import_attach_place_media(workspace, session, human_id, media_id)
+            import_attach_place_media(workspace, session, human_id, media_id, prov.meta())
                 .await
                 .map(|()| human_id.clone())
         }
@@ -1769,9 +1769,11 @@ async fn dispatch_place_edit_to(
         )
         .await
         .map(|()| human_id.clone()),
-        PlaceEdit::AttachNote { human_id, note_id } => import_attach_place_note(workspace, session, human_id, note_id)
-            .await
-            .map(|()| human_id.clone()),
+        PlaceEdit::AttachNote { human_id, note_id } => {
+            import_attach_place_note(workspace, session, human_id, note_id, prov.meta())
+                .await
+                .map(|()| human_id.clone())
+        }
         PlaceEdit::Tag {
             human_id,
             tag_id,
@@ -1968,13 +1970,13 @@ async fn dispatch_source_edit_to(
         .await
         .map(|()| human_id.clone()),
         SourceEdit::AttachMedia { human_id, media_id } => {
-            import_attach_source_media(workspace, session, human_id, media_id)
+            import_attach_source_media(workspace, session, human_id, media_id, prov.meta())
                 .await
                 .map(|()| human_id.clone())
         }
         SourceEdit::SetMediaRegion { .. } => source_set_region(workspace, session, edit, prov).await,
         SourceEdit::AttachNote { human_id, note_id } => {
-            import_attach_source_note(workspace, session, human_id, note_id)
+            import_attach_source_note(workspace, session, human_id, note_id, prov.meta())
                 .await
                 .map(|()| human_id.clone())
         }
@@ -2092,7 +2094,7 @@ async fn dispatch_repository_edit_to(
         .await
         .map(|()| human_id.clone()),
         RepositoryEdit::AttachNote { human_id, note_id } => {
-            import_attach_repository_note(workspace, session, human_id, note_id)
+            import_attach_repository_note(workspace, session, human_id, note_id, prov.meta())
                 .await
                 .map(|()| human_id.clone())
         }
@@ -2215,9 +2217,11 @@ async fn dispatch_media_edit_to(
                 .await
                 .map(|()| human_id.clone())
         }
-        MediaEdit::AttachNote { human_id, note_id } => import_attach_media_note(workspace, session, human_id, note_id)
-            .await
-            .map(|()| human_id.clone()),
+        MediaEdit::AttachNote { human_id, note_id } => {
+            import_attach_media_note(workspace, session, human_id, note_id, prov.meta())
+                .await
+                .map(|()| human_id.clone())
+        }
         MediaEdit::Tag {
             human_id,
             tag_id,
@@ -2945,7 +2949,7 @@ pub async fn dispatch_dna_test_edit(
                 .map(|()| human_id.clone())
         }
         DnaTestEdit::AttachNote { human_id, note_id } => {
-            import_attach_dna_test_note(workspace, session, human_id, note_id)
+            import_attach_dna_test_note(workspace, session, human_id, note_id, prov.meta())
                 .await
                 .map(|()| human_id.clone())
         }
@@ -3010,7 +3014,7 @@ pub async fn dispatch_dna_match_edit(
                 .map(|()| human_id.clone())
         }
         DnaMatchEdit::AttachNote { human_id, note_id } => {
-            import_attach_dna_match_note(workspace, session, human_id, note_id)
+            import_attach_dna_match_note(workspace, session, human_id, note_id, prov.meta())
                 .await
                 .map(|()| human_id.clone())
         }

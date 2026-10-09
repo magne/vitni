@@ -424,7 +424,7 @@ fn parse_tag_id(id: &str) -> Result<TagId, AppError> {
         .map_err(|_| AppError::TagNotFound(id.to_owned()))
 }
 
-/// Attaches a note (by its `human_id`) to a media object — the importer-facing wrapper.
+/// Attaches a note (by its `human_id`) to a media object — the frontend/importer-facing wrapper.
 ///
 /// # Errors
 ///
@@ -435,6 +435,7 @@ pub async fn import_attach_media_note(
     session: &Session,
     media_human_id: &str,
     note_human_id: &str,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let note_id = use_case::resolve_id(
@@ -442,7 +443,7 @@ pub async fn import_attach_media_note(
         vitni_core::note::NoteView::note_id,
         || AppError::NoteNotFound(note_human_id.to_owned()),
     )?;
-    attach_media_note(workspace, session, media_human_id, note_id, MutationMeta::default()).await
+    attach_media_note(workspace, session, media_human_id, note_id, meta).await
 }
 
 /// The outcome of [`merge_media`]: the survivor's refreshed summary and the merged media object's

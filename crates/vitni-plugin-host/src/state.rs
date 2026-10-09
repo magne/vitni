@@ -741,7 +741,7 @@ impl commands::Host for HostState {
                 media_human_id: media,
                 input: media_ref_input(crop, caption),
             },
-            self.provenance(),
+            self.mutation_meta(),
         )
         .await
         .map_err(|error| to_capability_error(&error))
@@ -749,7 +749,7 @@ impl commands::Host for HostState {
 
     async fn attach_event_note(&mut self, event: String, note: String) -> Result<(), types::CapabilityError> {
         self.begin_write()?;
-        vitni_app::import_attach_event_note(&self.workspace, &self.session, &event, &note, self.provenance())
+        vitni_app::import_attach_event_note(&self.workspace, &self.session, &event, &note, self.mutation_meta())
             .await
             .map_err(|error| to_capability_error(&error))
     }

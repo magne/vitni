@@ -310,7 +310,7 @@ async fn event_media_attach_round_trips_crop_and_caption() {
             media_human_id: media,
             input: crop_input(),
         },
-        Provenance::default(),
+        MutationMeta::default(),
     )
     .await
     .expect("attach with crop");
@@ -339,7 +339,7 @@ async fn source_media_ref_gains_a_crop_through_the_update_use_case() {
     .await
     .expect("source");
     let media = media_with_path(&ws, &session).await;
-    import_attach_source_media(&ws, &session, &source, &media)
+    import_attach_source_media(&ws, &session, &source, &media, MutationMeta::default())
         .await
         .expect("attach");
 
@@ -387,7 +387,7 @@ async fn place_media_ref_gains_a_crop_through_the_update_use_case() {
     .await
     .expect("place");
     let media = media_with_path(&ws, &session).await;
-    import_attach_place_media(&ws, &session, &place, &media)
+    import_attach_place_media(&ws, &session, &place, &media, MutationMeta::default())
         .await
         .expect("attach");
 
