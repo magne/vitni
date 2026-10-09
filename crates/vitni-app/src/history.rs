@@ -214,18 +214,7 @@ struct EnvelopeHeader {
 pub async fn change_log_for_person(workspace: &Workspace, human_id: &str) -> Result<Vec<ChangeLogEntry>, AppError> {
     let store = workspace.store();
     let person_id = resolve_person_id(store, human_id).await?;
-    let events = store.read_aggregate_events("person", &person_id.to_string()).await?;
-
-    let retracted = retracted_targets(&events)?;
-    let mut entries = Vec::with_capacity(events.len());
-    for event in &events {
-        let header = parse_header(event)?;
-        let assertion_id = header.assertion_id.to_string();
-        let can_undo = is_undoable(&event.event_type) && !retracted.contains(&assertion_id);
-        entries.push(entry(event, &header, Some(human_id.to_owned()), can_undo));
-    }
-    entries.reverse();
-    label_runs(store, entries).await
+    record_log(store, "person", &person_id.to_string(), Some(human_id), true).await
 }
 
 /// Reads the most recent changes across the whole workspace, newest first (the Dashboard activity
@@ -395,20 +384,7 @@ pub async fn undo_assertion(
 pub async fn change_log_for_citation(workspace: &Workspace, human_id: &str) -> Result<Vec<ChangeLogEntry>, AppError> {
     let store = workspace.store();
     let citation_id = resolve_citation_id(store, human_id).await?;
-    let events = store
-        .read_aggregate_events("citation", &citation_id.to_string())
-        .await?;
-
-    let retracted = retracted_targets(&events)?;
-    let mut entries = Vec::with_capacity(events.len());
-    for event in &events {
-        let header = parse_header(event)?;
-        let assertion_id = header.assertion_id.to_string();
-        let can_undo = is_undoable(&event.event_type) && !retracted.contains(&assertion_id);
-        entries.push(entry(event, &header, Some(human_id.to_owned()), can_undo));
-    }
-    entries.reverse();
-    label_runs(store, entries).await
+    record_log(store, "citation", &citation_id.to_string(), Some(human_id), true).await
 }
 
 /// Undoes a citation assertion by retracting it (non-destructive — the log is append-only).
@@ -447,18 +423,7 @@ pub async fn undo_citation_assertion(
 pub async fn change_log_for_family(workspace: &Workspace, human_id: &str) -> Result<Vec<ChangeLogEntry>, AppError> {
     let store = workspace.store();
     let family_id = resolve_family_id(store, human_id).await?;
-    let events = store.read_aggregate_events("family", &family_id.to_string()).await?;
-
-    let retracted = retracted_targets(&events)?;
-    let mut entries = Vec::with_capacity(events.len());
-    for event in &events {
-        let header = parse_header(event)?;
-        let assertion_id = header.assertion_id.to_string();
-        let can_undo = is_undoable(&event.event_type) && !retracted.contains(&assertion_id);
-        entries.push(entry(event, &header, Some(human_id.to_owned()), can_undo));
-    }
-    entries.reverse();
-    label_runs(store, entries).await
+    record_log(store, "family", &family_id.to_string(), Some(human_id), true).await
 }
 
 /// Undoes a family assertion by retracting it (non-destructive — the log is append-only).
@@ -497,18 +462,7 @@ pub async fn undo_family_assertion(
 pub async fn change_log_for_event(workspace: &Workspace, human_id: &str) -> Result<Vec<ChangeLogEntry>, AppError> {
     let store = workspace.store();
     let event_id = resolve_event_id(store, human_id).await?;
-    let events = store.read_aggregate_events("event", &event_id.to_string()).await?;
-
-    let retracted = retracted_targets(&events)?;
-    let mut entries = Vec::with_capacity(events.len());
-    for event in &events {
-        let header = parse_header(event)?;
-        let assertion_id = header.assertion_id.to_string();
-        let can_undo = is_undoable(&event.event_type) && !retracted.contains(&assertion_id);
-        entries.push(entry(event, &header, Some(human_id.to_owned()), can_undo));
-    }
-    entries.reverse();
-    label_runs(store, entries).await
+    record_log(store, "event", &event_id.to_string(), Some(human_id), true).await
 }
 
 /// Undoes an event assertion by retracting it (non-destructive — the log is append-only).
@@ -547,18 +501,7 @@ pub async fn undo_event_assertion(
 pub async fn change_log_for_place(workspace: &Workspace, human_id: &str) -> Result<Vec<ChangeLogEntry>, AppError> {
     let store = workspace.store();
     let place_id = resolve_place_id(store, human_id).await?;
-    let events = store.read_aggregate_events("place", &place_id.to_string()).await?;
-
-    let retracted = retracted_targets(&events)?;
-    let mut entries = Vec::with_capacity(events.len());
-    for event in &events {
-        let header = parse_header(event)?;
-        let assertion_id = header.assertion_id.to_string();
-        let can_undo = is_undoable(&event.event_type) && !retracted.contains(&assertion_id);
-        entries.push(entry(event, &header, Some(human_id.to_owned()), can_undo));
-    }
-    entries.reverse();
-    label_runs(store, entries).await
+    record_log(store, "place", &place_id.to_string(), Some(human_id), true).await
 }
 
 /// Undoes a place assertion by retracting it (non-destructive — the log is append-only).
@@ -597,18 +540,7 @@ pub async fn undo_place_assertion(
 pub async fn change_log_for_source(workspace: &Workspace, human_id: &str) -> Result<Vec<ChangeLogEntry>, AppError> {
     let store = workspace.store();
     let source_id = resolve_source_id(store, human_id).await?;
-    let events = store.read_aggregate_events("source", &source_id.to_string()).await?;
-
-    let retracted = retracted_targets(&events)?;
-    let mut entries = Vec::with_capacity(events.len());
-    for event in &events {
-        let header = parse_header(event)?;
-        let assertion_id = header.assertion_id.to_string();
-        let can_undo = is_undoable(&event.event_type) && !retracted.contains(&assertion_id);
-        entries.push(entry(event, &header, Some(human_id.to_owned()), can_undo));
-    }
-    entries.reverse();
-    label_runs(store, entries).await
+    record_log(store, "source", &source_id.to_string(), Some(human_id), true).await
 }
 
 /// Undoes a source assertion by retracting it (non-destructive — the log is append-only).
@@ -648,20 +580,7 @@ pub async fn undo_source_assertion(
 pub async fn change_log_for_repository(workspace: &Workspace, human_id: &str) -> Result<Vec<ChangeLogEntry>, AppError> {
     let store = workspace.store();
     let repository_id = resolve_repository_id(store, human_id).await?;
-    let events = store
-        .read_aggregate_events("repository", &repository_id.to_string())
-        .await?;
-
-    let retracted = retracted_targets(&events)?;
-    let mut entries = Vec::with_capacity(events.len());
-    for event in &events {
-        let header = parse_header(event)?;
-        let assertion_id = header.assertion_id.to_string();
-        let can_undo = is_undoable(&event.event_type) && !retracted.contains(&assertion_id);
-        entries.push(entry(event, &header, Some(human_id.to_owned()), can_undo));
-    }
-    entries.reverse();
-    label_runs(store, entries).await
+    record_log(store, "repository", &repository_id.to_string(), Some(human_id), true).await
 }
 
 /// Undoes a repository assertion by retracting it (non-destructive — the log is append-only).
@@ -700,18 +619,7 @@ pub async fn undo_repository_assertion(
 pub async fn change_log_for_media(workspace: &Workspace, human_id: &str) -> Result<Vec<ChangeLogEntry>, AppError> {
     let store = workspace.store();
     let media_id = resolve_media_id(store, human_id).await?;
-    let events = store.read_aggregate_events("media", &media_id.to_string()).await?;
-
-    let retracted = retracted_targets(&events)?;
-    let mut entries = Vec::with_capacity(events.len());
-    for event in &events {
-        let header = parse_header(event)?;
-        let assertion_id = header.assertion_id.to_string();
-        let can_undo = is_undoable(&event.event_type) && !retracted.contains(&assertion_id);
-        entries.push(entry(event, &header, Some(human_id.to_owned()), can_undo));
-    }
-    entries.reverse();
-    label_runs(store, entries).await
+    record_log(store, "media", &media_id.to_string(), Some(human_id), true).await
 }
 
 /// Undoes a media assertion by retracting it (non-destructive — the log is append-only).
@@ -750,18 +658,7 @@ pub async fn undo_media_assertion(
 pub async fn change_log_for_note(workspace: &Workspace, human_id: &str) -> Result<Vec<ChangeLogEntry>, AppError> {
     let store = workspace.store();
     let note_id = resolve_note_id(store, human_id).await?;
-    let events = store.read_aggregate_events("note", &note_id.to_string()).await?;
-
-    let retracted = retracted_targets(&events)?;
-    let mut entries = Vec::with_capacity(events.len());
-    for event in &events {
-        let header = parse_header(event)?;
-        let assertion_id = header.assertion_id.to_string();
-        let can_undo = is_undoable(&event.event_type) && !retracted.contains(&assertion_id);
-        entries.push(entry(event, &header, Some(human_id.to_owned()), can_undo));
-    }
-    entries.reverse();
-    label_runs(store, entries).await
+    record_log(store, "note", &note_id.to_string(), Some(human_id), true).await
 }
 
 /// Undoes a note assertion by retracting it (non-destructive — the log is append-only).
@@ -805,20 +702,14 @@ pub async fn change_log_for_research_note(
 ) -> Result<Vec<ChangeLogEntry>, AppError> {
     let store = workspace.store();
     let research_note_id = resolve_research_note_id(store, human_id).await?;
-    let events = store
-        .read_aggregate_events("research_note", &research_note_id.to_string())
-        .await?;
-
-    let retracted = retracted_targets(&events)?;
-    let mut entries = Vec::with_capacity(events.len());
-    for event in &events {
-        let header = parse_header(event)?;
-        let assertion_id = header.assertion_id.to_string();
-        let can_undo = is_undoable(&event.event_type) && !retracted.contains(&assertion_id);
-        entries.push(entry(event, &header, Some(human_id.to_owned()), can_undo));
-    }
-    entries.reverse();
-    label_runs(store, entries).await
+    record_log(
+        store,
+        "research_note",
+        &research_note_id.to_string(),
+        Some(human_id),
+        true,
+    )
+    .await
 }
 
 /// Undoes a research-note assertion by retracting it (non-destructive — the log is append-only).
@@ -860,20 +751,7 @@ pub async fn undo_research_note_assertion(
 pub async fn change_log_for_dna_test(workspace: &Workspace, human_id: &str) -> Result<Vec<ChangeLogEntry>, AppError> {
     let store = workspace.store();
     let dna_test_id = resolve_dna_test_id(store, human_id).await?;
-    let events = store
-        .read_aggregate_events("dna_test", &dna_test_id.to_string())
-        .await?;
-
-    let retracted = retracted_targets(&events)?;
-    let mut entries = Vec::with_capacity(events.len());
-    for event in &events {
-        let header = parse_header(event)?;
-        let assertion_id = header.assertion_id.to_string();
-        let can_undo = is_undoable(&event.event_type) && !retracted.contains(&assertion_id);
-        entries.push(entry(event, &header, Some(human_id.to_owned()), can_undo));
-    }
-    entries.reverse();
-    label_runs(store, entries).await
+    record_log(store, "dna_test", &dna_test_id.to_string(), Some(human_id), true).await
 }
 
 /// Undoes a DNA test assertion by retracting it (non-destructive — the log is append-only).
@@ -912,20 +790,7 @@ pub async fn undo_dna_test_assertion(
 pub async fn change_log_for_dna_match(workspace: &Workspace, human_id: &str) -> Result<Vec<ChangeLogEntry>, AppError> {
     let store = workspace.store();
     let dna_match_id = resolve_dna_match_id(store, human_id).await?;
-    let events = store
-        .read_aggregate_events("dna_match", &dna_match_id.to_string())
-        .await?;
-
-    let retracted = retracted_targets(&events)?;
-    let mut entries = Vec::with_capacity(events.len());
-    for event in &events {
-        let header = parse_header(event)?;
-        let assertion_id = header.assertion_id.to_string();
-        let can_undo = is_undoable(&event.event_type) && !retracted.contains(&assertion_id);
-        entries.push(entry(event, &header, Some(human_id.to_owned()), can_undo));
-    }
-    entries.reverse();
-    label_runs(store, entries).await
+    record_log(store, "dna_match", &dna_match_id.to_string(), Some(human_id), true).await
 }
 
 /// Undoes a DNA match assertion by retracting it (non-destructive — the log is append-only).
@@ -972,15 +837,7 @@ pub async fn change_log_for_tag(workspace: &Workspace, id: &str) -> Result<Vec<C
     if store.find_tag(&tag_id.to_string()).await?.is_none() {
         return Err(AppError::TagNotFound(id.to_owned()));
     }
-    let events = store.read_aggregate_events("tag", &tag_id.to_string()).await?;
-
-    let mut entries = Vec::with_capacity(events.len());
-    for event in &events {
-        let header = parse_header(event)?;
-        entries.push(entry(event, &header, None, false));
-    }
-    entries.reverse();
-    label_runs(store, entries).await
+    record_log(store, "tag", &tag_id.to_string(), None, false).await
 }
 
 /// Counts every aggregate's projected records for the Dashboard and the rail badges. A person merged
@@ -1030,6 +887,33 @@ fn undo_provenance(rationale: Option<String>) -> Provenance {
         evidence_analysis: None,
         origin: None,
     }
+}
+
+/// One record's change log, newest first: every event of its stream with its provenance parsed. An
+/// entry is undoable when `undoable` holds for the record kind, its event type can be undone, and no
+/// later correction already retracted or superseded it.
+///
+/// # Errors
+///
+/// [`AppError`] on a store read or payload-parse failure.
+async fn record_log(
+    store: &Store,
+    kind: &str,
+    aggregate_id: &str,
+    human_id: Option<&str>,
+    undoable: bool,
+) -> Result<Vec<ChangeLogEntry>, AppError> {
+    let events = store.read_aggregate_events(kind, aggregate_id).await?;
+    let retracted = retracted_targets(&events)?;
+    let mut entries = Vec::with_capacity(events.len());
+    for event in &events {
+        let header = parse_header(event)?;
+        let assertion_id = header.assertion_id.to_string();
+        let can_undo = undoable && is_undoable(&event.event_type) && !retracted.contains(&assertion_id);
+        entries.push(entry(event, &header, human_id.map(str::to_owned), can_undo));
+    }
+    entries.reverse();
+    label_runs(store, entries).await
 }
 
 /// Builds a [`ChangeLogEntry`] from a stored event and its parsed provenance header.
