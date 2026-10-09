@@ -540,27 +540,6 @@ fn settle(answers: &[Answers], entities: &mut [PlannedEntity]) {
 
 /// A stored record's display label, or `human_id` when it has none.
 async fn stored_label(workspace: &Workspace, kind: MatchableKind, human_id: &str) -> Result<String, AppError> {
-    let label = match kind {
-        MatchableKind::Person => crate::show_person(workspace, human_id)
-            .await?
-            .and_then(|person| person.display_name),
-        MatchableKind::Place => crate::show_place(workspace, human_id)
-            .await?
-            .map(|place| place.generated_title),
-        MatchableKind::Source => crate::show_source(workspace, human_id)
-            .await?
-            .and_then(|source| source.title),
-        MatchableKind::Repository => crate::show_repository(workspace, human_id)
-            .await?
-            .and_then(|repository| repository.name),
-        MatchableKind::Family
-        | MatchableKind::Event
-        | MatchableKind::Citation
-        | MatchableKind::Media
-        | MatchableKind::Note
-        | MatchableKind::Tag => None,
-    };
-    Ok(label
-        .filter(|label| !label.is_empty())
-        .unwrap_or_else(|| human_id.to_owned()))
+    let label = crate::history::record_label(workspace, kind.as_str(), human_id).await?;
+    Ok(label.unwrap_or_else(|| human_id.to_owned()))
 }

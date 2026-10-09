@@ -3759,6 +3759,8 @@ mod tests {
             detail: None,
             can_undo: false,
             run: None,
+            value: None,
+            replaced: None,
         }
     }
 

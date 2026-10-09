@@ -51,6 +51,11 @@ use crate::session::Session;
 use crate::use_case::{Provenance, map_command_error};
 use crate::workspace::Workspace;
 
+mod values;
+
+pub(crate) use values::record_label;
+pub use values::{ChangeValue, RecordRole, RecordValue};
+
 /// What kind of actor made a change — the DTO twin of [`AgentKind`], without its payload fields.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OperatorKind {
@@ -144,6 +149,11 @@ pub struct ChangeLogEntry {
     /// The import run that wrote this entry: the run named by its record origin, or the run itself
     /// for one of an `import_run`'s own events. `None` for a change made at the keyboard.
     pub run: Option<RunRef>,
+    /// The value this change asserted, when it carries one (#545).
+    pub value: Option<ChangeValue>,
+    /// On a correction's replacement, the value it replaced. Only a record's own change log fills it:
+    /// the Dashboard's window may not hold the replaced assertion.
+    pub replaced: Option<ChangeValue>,
 }
 
 /// Per-aggregate record counts for the workspace — the Dashboard stat cards and the rail badges.
@@ -214,7 +224,7 @@ struct EnvelopeHeader {
 pub async fn change_log_for_person(workspace: &Workspace, human_id: &str) -> Result<Vec<ChangeLogEntry>, AppError> {
     let store = workspace.store();
     let person_id = resolve_person_id(store, human_id).await?;
-    record_log(store, "person", &person_id.to_string(), Some(human_id), true).await
+    record_log(workspace, "person", &person_id.to_string(), Some(human_id), true).await
 }
 
 /// Reads the most recent changes across the whole workspace, newest first (the Dashboard activity
@@ -242,7 +252,7 @@ pub async fn recent_activity(workspace: &Workspace, limit: u32) -> Result<Vec<Ch
         window = window.saturating_mul(4).min(MAX_ACTIVITY_SCAN);
     };
     collapsed.truncate(limit as usize);
-    Ok(collapsed)
+    values::label_records(workspace, collapsed).await
 }
 
 /// The most raw events [`recent_activity`] will scan to fill its window — a backstop against an
@@ -334,6 +344,8 @@ fn run_row(anchor: ChangeLogEntry, children: Vec<ChangeLogEntry>) -> ChangeLogEn
         aggregate_human_id: None,
         event_type: "ImportRun".to_owned(),
         rationale: None,
+        value: None,
+        replaced: None,
         citations: Vec::new(),
         evidence_analysis: None,
         detail: Some(ActivityDetail::ImportRun {
@@ -384,7 +396,7 @@ pub async fn undo_assertion(
 pub async fn change_log_for_citation(workspace: &Workspace, human_id: &str) -> Result<Vec<ChangeLogEntry>, AppError> {
     let store = workspace.store();
     let citation_id = resolve_citation_id(store, human_id).await?;
-    record_log(store, "citation", &citation_id.to_string(), Some(human_id), true).await
+    record_log(workspace, "citation", &citation_id.to_string(), Some(human_id), true).await
 }
 
 /// Undoes a citation assertion by retracting it (non-destructive — the log is append-only).
@@ -423,7 +435,7 @@ pub async fn undo_citation_assertion(
 pub async fn change_log_for_family(workspace: &Workspace, human_id: &str) -> Result<Vec<ChangeLogEntry>, AppError> {
     let store = workspace.store();
     let family_id = resolve_family_id(store, human_id).await?;
-    record_log(store, "family", &family_id.to_string(), Some(human_id), true).await
+    record_log(workspace, "family", &family_id.to_string(), Some(human_id), true).await
 }
 
 /// Undoes a family assertion by retracting it (non-destructive — the log is append-only).
@@ -462,7 +474,7 @@ pub async fn undo_family_assertion(
 pub async fn change_log_for_event(workspace: &Workspace, human_id: &str) -> Result<Vec<ChangeLogEntry>, AppError> {
     let store = workspace.store();
     let event_id = resolve_event_id(store, human_id).await?;
-    record_log(store, "event", &event_id.to_string(), Some(human_id), true).await
+    record_log(workspace, "event", &event_id.to_string(), Some(human_id), true).await
 }
 
 /// Undoes an event assertion by retracting it (non-destructive — the log is append-only).
@@ -501,7 +513,7 @@ pub async fn undo_event_assertion(
 pub async fn change_log_for_place(workspace: &Workspace, human_id: &str) -> Result<Vec<ChangeLogEntry>, AppError> {
     let store = workspace.store();
     let place_id = resolve_place_id(store, human_id).await?;
-    record_log(store, "place", &place_id.to_string(), Some(human_id), true).await
+    record_log(workspace, "place", &place_id.to_string(), Some(human_id), true).await
 }
 
 /// Undoes a place assertion by retracting it (non-destructive — the log is append-only).
@@ -540,7 +552,7 @@ pub async fn undo_place_assertion(
 pub async fn change_log_for_source(workspace: &Workspace, human_id: &str) -> Result<Vec<ChangeLogEntry>, AppError> {
     let store = workspace.store();
     let source_id = resolve_source_id(store, human_id).await?;
-    record_log(store, "source", &source_id.to_string(), Some(human_id), true).await
+    record_log(workspace, "source", &source_id.to_string(), Some(human_id), true).await
 }
 
 /// Undoes a source assertion by retracting it (non-destructive — the log is append-only).
@@ -580,7 +592,14 @@ pub async fn undo_source_assertion(
 pub async fn change_log_for_repository(workspace: &Workspace, human_id: &str) -> Result<Vec<ChangeLogEntry>, AppError> {
     let store = workspace.store();
     let repository_id = resolve_repository_id(store, human_id).await?;
-    record_log(store, "repository", &repository_id.to_string(), Some(human_id), true).await
+    record_log(
+        workspace,
+        "repository",
+        &repository_id.to_string(),
+        Some(human_id),
+        true,
+    )
+    .await
 }
 
 /// Undoes a repository assertion by retracting it (non-destructive — the log is append-only).
@@ -619,7 +638,7 @@ pub async fn undo_repository_assertion(
 pub async fn change_log_for_media(workspace: &Workspace, human_id: &str) -> Result<Vec<ChangeLogEntry>, AppError> {
     let store = workspace.store();
     let media_id = resolve_media_id(store, human_id).await?;
-    record_log(store, "media", &media_id.to_string(), Some(human_id), true).await
+    record_log(workspace, "media", &media_id.to_string(), Some(human_id), true).await
 }
 
 /// Undoes a media assertion by retracting it (non-destructive — the log is append-only).
@@ -658,7 +677,7 @@ pub async fn undo_media_assertion(
 pub async fn change_log_for_note(workspace: &Workspace, human_id: &str) -> Result<Vec<ChangeLogEntry>, AppError> {
     let store = workspace.store();
     let note_id = resolve_note_id(store, human_id).await?;
-    record_log(store, "note", &note_id.to_string(), Some(human_id), true).await
+    record_log(workspace, "note", &note_id.to_string(), Some(human_id), true).await
 }
 
 /// Undoes a note assertion by retracting it (non-destructive — the log is append-only).
@@ -703,7 +722,7 @@ pub async fn change_log_for_research_note(
     let store = workspace.store();
     let research_note_id = resolve_research_note_id(store, human_id).await?;
     record_log(
-        store,
+        workspace,
         "research_note",
         &research_note_id.to_string(),
         Some(human_id),
@@ -751,7 +770,7 @@ pub async fn undo_research_note_assertion(
 pub async fn change_log_for_dna_test(workspace: &Workspace, human_id: &str) -> Result<Vec<ChangeLogEntry>, AppError> {
     let store = workspace.store();
     let dna_test_id = resolve_dna_test_id(store, human_id).await?;
-    record_log(store, "dna_test", &dna_test_id.to_string(), Some(human_id), true).await
+    record_log(workspace, "dna_test", &dna_test_id.to_string(), Some(human_id), true).await
 }
 
 /// Undoes a DNA test assertion by retracting it (non-destructive — the log is append-only).
@@ -790,7 +809,7 @@ pub async fn undo_dna_test_assertion(
 pub async fn change_log_for_dna_match(workspace: &Workspace, human_id: &str) -> Result<Vec<ChangeLogEntry>, AppError> {
     let store = workspace.store();
     let dna_match_id = resolve_dna_match_id(store, human_id).await?;
-    record_log(store, "dna_match", &dna_match_id.to_string(), Some(human_id), true).await
+    record_log(workspace, "dna_match", &dna_match_id.to_string(), Some(human_id), true).await
 }
 
 /// Undoes a DNA match assertion by retracting it (non-destructive — the log is append-only).
@@ -837,7 +856,7 @@ pub async fn change_log_for_tag(workspace: &Workspace, id: &str) -> Result<Vec<C
     if store.find_tag(&tag_id.to_string()).await?.is_none() {
         return Err(AppError::TagNotFound(id.to_owned()));
     }
-    record_log(store, "tag", &tag_id.to_string(), None, false).await
+    record_log(workspace, "tag", &tag_id.to_string(), None, false).await
 }
 
 /// Counts every aggregate's projected records for the Dashboard and the rail badges. A person merged
@@ -897,12 +916,13 @@ fn undo_provenance(rationale: Option<String>) -> Provenance {
 ///
 /// [`AppError`] on a store read or payload-parse failure.
 async fn record_log(
-    store: &Store,
+    workspace: &Workspace,
     kind: &str,
     aggregate_id: &str,
     human_id: Option<&str>,
     undoable: bool,
 ) -> Result<Vec<ChangeLogEntry>, AppError> {
+    let store = workspace.store();
     let events = store.read_aggregate_events(kind, aggregate_id).await?;
     let retracted = retracted_targets(&events)?;
     let mut entries = Vec::with_capacity(events.len());
@@ -912,8 +932,10 @@ async fn record_log(
         let can_undo = undoable && is_undoable(&event.event_type) && !retracted.contains(&assertion_id);
         entries.push(entry(event, &header, human_id.map(str::to_owned), can_undo));
     }
+    values::attach_replaced(&events, &mut entries);
     entries.reverse();
-    label_runs(store, entries).await
+    let entries = label_runs(store, entries).await?;
+    values::label_records(workspace, entries).await
 }
 
 /// Builds a [`ChangeLogEntry`] from a stored event and its parsed provenance header.
@@ -942,6 +964,8 @@ fn entry(event: &StoredEvent, header: &EnvelopeHeader, human_id: Option<String>,
             resume: None,
             file_asserted_at: None,
         }),
+        value: values::extract_value(event),
+        replaced: None,
     }
 }
 
@@ -1465,8 +1489,8 @@ async fn resolve_dna_match_id(store: &Store, human_id: &str) -> Result<vitni_cor
 #[cfg(test)]
 mod tests {
     use super::{
-        ActivityDetail, ChangeLogEntry, OperatorKind, RunRef, change_log_for_person, group_runs, recent_activity,
-        undo_assertion, workspace_counts,
+        ActivityDetail, ChangeLogEntry, ChangeValue, OperatorKind, RunRef, change_log_for_person, group_runs,
+        recent_activity, undo_assertion, workspace_counts,
     };
     use super::{change_log_for_research_note, undo_research_note_assertion};
     use crate::config::{AppDefaults, IdFormats, OperatorConfig, WorkspaceDefaults};
@@ -1605,6 +1629,8 @@ mod tests {
             detail: None,
             can_undo,
             run: run.map(run_ref),
+            value: None,
+            replaced: None,
         }
     }
 
@@ -2165,5 +2191,145 @@ mod tests {
         let counts = workspace_counts(&workspace).await.expect("counts");
         assert_eq!(counts.research_note, 1);
         assert_eq!(counts.note, 0, "a research note is not an ordinary note");
+    }
+
+    /// The newest entry of `human_id`'s log with `event_type`.
+    async fn newest(workspace: &Workspace, human_id: &str, event_type: &str) -> ChangeLogEntry {
+        change_log_for_person(workspace, human_id)
+            .await
+            .expect("log")
+            .into_iter()
+            .find(|entry| entry.event_type == event_type)
+            .expect("an entry of that type")
+    }
+
+    #[tokio::test]
+    async fn a_corrected_value_names_the_value_it_replaced() {
+        let (workspace, human, _dir) = setup().await;
+        let human_id = person_with_sex(&workspace, &human).await;
+        let female = newest(&workspace, &human_id, "SexAsserted").await;
+        assert_eq!(female.value, Some(ChangeValue::Sex(Sex::Female)));
+        assert_eq!(female.replaced, None, "nothing was replaced yet");
+
+        let meta = MutationMeta {
+            supersedes: Some(&female.assertion_id),
+            ..MutationMeta::default()
+        };
+        assert_sex(&workspace, &human, &human_id, Sex::Male, meta)
+            .await
+            .expect("correct");
+
+        let log = change_log_for_person(&workspace, &human_id).await.expect("log");
+        assert_eq!(log[0].event_type, "SexAsserted");
+        assert_eq!(log[0].value, Some(ChangeValue::Sex(Sex::Male)));
+        assert_eq!(log[0].replaced, Some(ChangeValue::Sex(Sex::Female)));
+        assert_eq!(log[1].event_type, "AssertionSuperseded");
+        assert_eq!(log[1].value, None, "the correction itself carries no value");
+        let created = log.last().expect("the creation");
+        assert_eq!((created.value.as_ref(), created.replaced.as_ref()), (None, None));
+    }
+
+    #[tokio::test]
+    async fn recent_activity_names_values_but_not_what_they_replaced() {
+        let (workspace, human, _dir) = setup().await;
+        let human_id = person_with_sex(&workspace, &human).await;
+        let female = newest(&workspace, &human_id, "SexAsserted").await;
+        let meta = MutationMeta {
+            supersedes: Some(&female.assertion_id),
+            ..MutationMeta::default()
+        };
+        assert_sex(&workspace, &human, &human_id, Sex::Male, meta)
+            .await
+            .expect("correct");
+
+        let activity = recent_activity(&workspace, 10).await.expect("activity");
+        assert_eq!(activity[0].value, Some(ChangeValue::Sex(Sex::Male)));
+        assert_eq!(activity[0].replaced, None);
+    }
+
+    #[tokio::test]
+    async fn an_event_names_its_date_and_the_place_it_links() {
+        let (workspace, human, _dir) = setup().await;
+        let place = crate::place::create_place(
+            &workspace,
+            &human,
+            crate::place::NewPlace {
+                human_id: None,
+                place_type: vitni_core::enums::PlaceType::City,
+                name: Some("Trinity Church".to_owned()),
+            },
+            Provenance::default(),
+            &[],
+        )
+        .await
+        .expect("place");
+        let event = crate::event::create_event(
+            &workspace,
+            &human,
+            crate::event::NewEvent {
+                human_id: None,
+                event_type: vitni_core::enums::EventType::Birth,
+            },
+            Provenance::default(),
+            &[],
+        )
+        .await
+        .expect("event");
+        let date = crate::event::DateParts {
+            year: 1850,
+            month: Some(4),
+            day: Some(12),
+        };
+        crate::event::assert_event_date(&workspace, &human, &event, date, MutationMeta::default())
+            .await
+            .expect("date");
+        crate::event::link_place(&workspace, &human, &event, &place, MutationMeta::default())
+            .await
+            .expect("link");
+
+        let log = super::change_log_for_event(&workspace, &event).await.expect("log");
+        let Some(ChangeValue::Record { record: linked, .. }) = &log[0].value else {
+            panic!("the place link names its place: {:?}", log[0]);
+        };
+        assert_eq!(
+            (
+                linked.kind.as_str(),
+                linked.human_id.as_deref(),
+                linked.label.as_deref()
+            ),
+            ("place", Some(place.as_str()), Some("Trinity Church"))
+        );
+        assert!(
+            matches!(&log[1].value, Some(ChangeValue::Date(_))),
+            "the date assertion carries its date: {:?}",
+            log[1]
+        );
+    }
+
+    #[tokio::test]
+    async fn a_tag_is_named_on_the_record_it_was_applied_to() {
+        let (workspace, human, _dir) = setup().await;
+        let human_id = create_bare(&workspace, &human).await;
+        let tag = crate::tag::create_tag(
+            &workspace,
+            &human,
+            "Direct ancestor".to_owned(),
+            Provenance::default(),
+            &[],
+        )
+        .await
+        .expect("tag");
+        crate::person::tag_person(&workspace, &human, &human_id, &tag, false, MutationMeta::default())
+            .await
+            .expect("tag person");
+
+        let tagged = newest(&workspace, &human_id, "Tagged").await;
+        let Some(ChangeValue::Record { record, .. }) = &tagged.value else {
+            panic!("the tag is named: {tagged:?}");
+        };
+        assert_eq!(
+            (record.kind.as_str(), record.label.as_deref()),
+            ("tag", Some("Direct ancestor"))
+        );
     }
 }

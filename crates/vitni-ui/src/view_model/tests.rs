@@ -46,6 +46,8 @@ fn log_entry(kind: &str, human_id: Option<&str>, operator: OperatorKind, who: &s
         detail: None,
         can_undo: false,
         run: None,
+        value: None,
+        replaced: None,
     }
 }
 
