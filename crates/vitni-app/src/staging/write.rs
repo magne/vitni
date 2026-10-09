@@ -665,7 +665,6 @@ impl Writer<'_> {
         let (ws, session) = (self.workspace, self.session);
         let end = |reference: &EntityRef| resolve.human_id(reference).ok_or(LinkError::Dangling);
         let meta = || self.meta(record, item);
-        let provenance = || self.provenance(record, item);
         match link {
             LinkKind::CitationOf { owner: of, citation } => {
                 let citation = end(citation)?;
@@ -694,7 +693,7 @@ impl Writer<'_> {
                             media_human_id: media,
                             input,
                         };
-                        event::import_attach_event_media(ws, session, owner, media, provenance()).await?;
+                        event::import_attach_event_media(ws, session, owner, media, meta()).await?;
                     }
                     Owner::Person => person::attach_person_media(ws, session, owner, &media, input, meta()).await?,
                     Owner::Citation => return Err(LinkError::Dangling),
@@ -704,7 +703,7 @@ impl Writer<'_> {
                 let note = end(note)?;
                 match owner_of(of, resolve)? {
                     Owner::Family => family::attach_family_note(ws, session, owner, &note, meta()).await?,
-                    Owner::Event => event::import_attach_event_note(ws, session, owner, &note, provenance()).await?,
+                    Owner::Event => event::import_attach_event_note(ws, session, owner, &note, meta()).await?,
                     Owner::Citation => citation::attach_citation_note(ws, session, owner, &note, meta()).await?,
                     Owner::Person => person::attach_person_note(ws, session, owner, &note, meta()).await?,
                 }

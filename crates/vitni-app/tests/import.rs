@@ -6,10 +6,10 @@
 use uuid::Uuid;
 use vitni_app::{
     AppDefaults, ChildParentRelationship, Confidence, EventType, ExternalId, ImportedChild, ImportedMediaRef,
-    MediaRefInput, NewEvent, NewMedia, NewNote, OperatorConfig, PersonNameParts, Provenance, Session, Workspace,
-    WorkspaceDefaults, change_log_for_event, change_log_for_family, change_log_for_person, create_event, create_media,
-    create_note, import_add_child, import_add_partner, import_attach_event_media, import_attach_event_note,
-    import_family, import_person, list_families, list_persons, show_person,
+    MediaRefInput, MutationMeta, NewEvent, NewMedia, NewNote, OperatorConfig, PersonNameParts, Provenance, Session,
+    Workspace, WorkspaceDefaults, change_log_for_event, change_log_for_family, change_log_for_person, create_event,
+    create_media, create_note, import_add_child, import_add_partner, import_attach_event_media,
+    import_attach_event_note, import_family, import_person, list_families, list_persons, show_person,
 };
 use vitni_core::ids::AgentId;
 use vitni_core::provenance::{Agent, AgentKind};
@@ -218,6 +218,13 @@ fn low() -> Provenance {
     }
 }
 
+fn low_meta() -> MutationMeta<'static> {
+    MutationMeta {
+        provenance: low(),
+        ..MutationMeta::default()
+    }
+}
+
 #[tokio::test]
 async fn an_assisted_import_stamps_its_template_on_every_person_assertion() {
     let (ws, _dir) = workspace().await;
@@ -332,10 +339,10 @@ async fn an_assisted_import_stamps_its_template_on_family_links_and_event_attach
         media_human_id: media,
         input: MediaRefInput::default(),
     };
-    import_attach_event_media(&ws, &session, &event, media_ref, low())
+    import_attach_event_media(&ws, &session, &event, media_ref, low_meta())
         .await
         .expect("event media");
-    import_attach_event_note(&ws, &session, &event, &note, low())
+    import_attach_event_note(&ws, &session, &event, &note, low_meta())
         .await
         .expect("event note");
 

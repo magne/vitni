@@ -716,6 +716,7 @@ pub async fn import_attach_place_media(
     session: &Session,
     place_human_id: &str,
     media_human_id: &str,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let media_id = use_case::resolve_id(
@@ -729,7 +730,7 @@ pub async fn import_attach_place_media(
         place_human_id,
         media_id,
         MediaRefInput::default(),
-        MutationMeta::default(),
+        meta,
     )
     .await
 }
@@ -745,6 +746,7 @@ pub async fn import_attach_place_note(
     session: &Session,
     place_human_id: &str,
     note_human_id: &str,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let note_id = use_case::resolve_id(
@@ -752,7 +754,7 @@ pub async fn import_attach_place_note(
         vitni_core::note::NoteView::note_id,
         || AppError::NoteNotFound(note_human_id.to_owned()),
     )?;
-    attach_place_note(workspace, session, place_human_id, note_id, MutationMeta::default()).await
+    attach_place_note(workspace, session, place_human_id, note_id, meta).await
 }
 
 /// Applies (or removes) a tag on a place, identified by `human_id`. A removed tag is untagged on

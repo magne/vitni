@@ -326,6 +326,7 @@ pub async fn import_attach_dna_test_note(
     session: &Session,
     test_human_id: &str,
     note_human_id: &str,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let note_id = use_case::resolve_id(
@@ -333,7 +334,7 @@ pub async fn import_attach_dna_test_note(
         vitni_core::note::NoteView::note_id,
         || AppError::NoteNotFound(note_human_id.to_owned()),
     )?;
-    attach_dna_test_note(workspace, session, test_human_id, note_id, MutationMeta::default()).await
+    attach_dna_test_note(workspace, session, test_human_id, note_id, meta).await
 }
 
 /// Loads a single test's summary by `human_id`.

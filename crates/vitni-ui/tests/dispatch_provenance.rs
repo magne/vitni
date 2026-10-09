@@ -10,23 +10,25 @@
 
 use uuid::Uuid;
 use vitni_app::{
-    Age, AgeBound, Agent, AgentId, AgentKind, AppDefaults, Attribute, Calendar, ChangeLogEntry, Confidence, DateInput,
-    DateModifier, DatePoint, DateQuality, EngineVersion, EventType, EvidenceLevel, FactType, GenealogicalDate,
-    GenealogicalDateBody, MatchBand, MatchEvidence, MutationMeta, NewCitation, NewEvent, NewMedia, NewNote, NewPerson,
-    NewPlace, NewSource, OperatorConfig, ParticipantRole, PersonNameParts, PlaceType, Provenance, Rect, Session,
-    Workspace, WorkspaceDefaults, add_child, build_genealogical_date, change_log_for_citation, change_log_for_event,
-    change_log_for_family, change_log_for_media, change_log_for_person, change_log_for_place, change_log_for_source,
-    create_citation, create_event, create_family, create_media, create_note, create_person, create_place,
-    create_source, create_tag, show_citation, show_event, show_family, show_media, show_person, show_place,
-    show_source,
+    Age, AgeBound, Agent, AgentId, AgentKind, AppDefaults, Attribute, Calendar, Centimorgans, ChangeLogEntry,
+    Confidence, DateInput, DateModifier, DatePoint, DateQuality, DnaProvider, EngineVersion, EventType, EvidenceLevel,
+    FactType, GenealogicalDate, GenealogicalDateBody, MatchBand, MatchEvidence, MutationMeta, NewCitation, NewDnaMatch,
+    NewDnaTest, NewEvent, NewMedia, NewNote, NewPerson, NewPlace, NewRepository, NewSource, OperatorConfig,
+    ParticipantRole, PersonNameParts, PlaceType, Provenance, Rect, Session, Workspace, WorkspaceDefaults, add_child,
+    build_genealogical_date, change_log_for_citation, change_log_for_dna_match, change_log_for_dna_test,
+    change_log_for_event, change_log_for_family, change_log_for_media, change_log_for_person, change_log_for_place,
+    change_log_for_repository, change_log_for_source, create_citation, create_dna_test, create_event, create_family,
+    create_media, create_note, create_person, create_place, create_repository, create_source, create_tag,
+    observe_dna_match, show_citation, show_event, show_family, show_media, show_person, show_place, show_source,
 };
 use vitni_app::{DecidableKind, MatchQueueFilter};
 use vitni_ui::{
-    CitationEdit, ConfidenceLevel, DecideMatch, EventEdit, EvidenceKind, FamilyEdit, InformationKind, Intent,
-    IntentOutcome, Localizer, MatchDecision, MediaEdit, PairJudgment, PersonEdit, PlaceEdit, ProvenanceDraft,
-    SourceChangeSetRequest, SourceEdit, SourceQuality, dispatch, dispatch_citation_edit, dispatch_decide_match,
+    CitationEdit, ConfidenceLevel, DecideMatch, DnaMatchEdit, DnaTestEdit, EventEdit, EvidenceKind, FamilyEdit,
+    InformationKind, Intent, IntentOutcome, Localizer, MatchDecision, MediaEdit, PairJudgment, PersonEdit, PlaceEdit,
+    ProvenanceDraft, RepositoryEdit, SourceChangeSetRequest, SourceEdit, SourceQuality, dispatch,
+    dispatch_citation_edit, dispatch_decide_match, dispatch_dna_match_edit, dispatch_dna_test_edit,
     dispatch_event_edit, dispatch_family_edit, dispatch_media_edit, dispatch_person_edit, dispatch_place_edit,
-    dispatch_source_change_set, dispatch_source_edit,
+    dispatch_repository_edit, dispatch_source_change_set, dispatch_source_edit,
 };
 
 fn operator() -> OperatorConfig {
@@ -1469,4 +1471,289 @@ async fn a_place_pair_is_queued_compared_and_merged_from_the_matches_tool() {
         panic!("the list intent loads the matches table");
     };
     assert!(queue.pairs.is_empty(), "{queue:?}");
+}
+
+// --- #424: attaching a note or media keeps the attach form's provenance on every record kind ---
+
+/// The note and media object an attach test links, plus a filled draft citing a fresh citation.
+struct Attachables {
+    note: String,
+    media: String,
+    draft: ProvenanceDraft,
+}
+
+async fn attachables(ws: &Workspace, session: &Session) -> Attachables {
+    let note = create_note(
+        ws,
+        session,
+        NewNote {
+            human_id: None,
+            text: Some("A marginal annotation".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("note");
+    let media = create_media(
+        ws,
+        session,
+        NewMedia {
+            human_id: None,
+            path: Some("register.jpg".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("media");
+    let draft = filled_draft(citation(ws, session).await);
+    Attachables { note, media, draft }
+}
+
+/// Asserts `log` holds an `event_type` entry carrying the filled draft's rationale, confidence and
+/// citation.
+fn assert_attach_carries_draft(log: &[ChangeLogEntry], event_type: &str) {
+    let entry = log
+        .iter()
+        .find(|entry| entry.event_type == event_type)
+        .expect("the attach is in the change log");
+    assert_eq!(
+        entry.rationale.as_deref(),
+        Some("Baptism register gives the date"),
+        "{event_type} carries the draft's rationale"
+    );
+    assert_eq!(
+        entry.confidence,
+        Some(vitni_app::Confidence::High),
+        "{event_type} carries the draft's confidence"
+    );
+    assert_eq!(entry.citations.len(), 1, "{event_type} carries the draft's citation");
+}
+
+#[tokio::test]
+async fn attaching_to_an_event_carries_the_drafts_provenance() {
+    let (ws, session, _dir) = setup().await;
+    let event = create_event(
+        &ws,
+        &session,
+        NewEvent {
+            human_id: None,
+            event_type: EventType::Marriage,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("event");
+    let Attachables { note, media, draft } = attachables(&ws, &session).await;
+
+    let attach_media = EventEdit::AttachMedia {
+        human_id: event.clone(),
+        media_id: media,
+    };
+    dispatch_event_edit(&ws, &session, &attach_media, &draft)
+        .await
+        .expect("attach media");
+    let attach_note = EventEdit::AttachNote {
+        human_id: event.clone(),
+        note_id: note,
+    };
+    dispatch_event_edit(&ws, &session, &attach_note, &draft)
+        .await
+        .expect("attach note");
+
+    let log = change_log_for_event(&ws, &event).await.expect("log");
+    assert_attach_carries_draft(&log, "MediaAttached");
+    assert_attach_carries_draft(&log, "NoteAttached");
+}
+
+#[tokio::test]
+async fn attaching_to_a_place_carries_the_drafts_provenance() {
+    let (ws, session, _dir) = setup().await;
+    let place = create_place(
+        &ws,
+        &session,
+        NewPlace {
+            human_id: None,
+            place_type: PlaceType::City,
+            name: Some("Trondheim".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("place");
+    let Attachables { note, media, draft } = attachables(&ws, &session).await;
+
+    let attach_media = PlaceEdit::AttachMedia {
+        human_id: place.clone(),
+        media_id: media,
+    };
+    dispatch_place_edit(&ws, &session, &attach_media, &draft)
+        .await
+        .expect("attach media");
+    let attach_note = PlaceEdit::AttachNote {
+        human_id: place.clone(),
+        note_id: note,
+    };
+    dispatch_place_edit(&ws, &session, &attach_note, &draft)
+        .await
+        .expect("attach note");
+
+    let log = change_log_for_place(&ws, &place).await.expect("log");
+    assert_attach_carries_draft(&log, "MediaAttached");
+    assert_attach_carries_draft(&log, "NoteAttached");
+}
+
+#[tokio::test]
+async fn attaching_to_a_source_carries_the_drafts_provenance() {
+    let (ws, session, _dir) = setup().await;
+    let source = create_source(
+        &ws,
+        &session,
+        NewSource {
+            human_id: None,
+            title: Some("Probate records".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("source");
+    let Attachables { note, media, draft } = attachables(&ws, &session).await;
+
+    let attach_media = SourceEdit::AttachMedia {
+        human_id: source.clone(),
+        media_id: media,
+    };
+    dispatch_source_edit(&ws, &session, &attach_media, &draft)
+        .await
+        .expect("attach media");
+    let attach_note = SourceEdit::AttachNote {
+        human_id: source.clone(),
+        note_id: note,
+    };
+    dispatch_source_edit(&ws, &session, &attach_note, &draft)
+        .await
+        .expect("attach note");
+
+    let log = change_log_for_source(&ws, &source).await.expect("log");
+    assert_attach_carries_draft(&log, "MediaAttached");
+    assert_attach_carries_draft(&log, "NoteAttached");
+}
+
+#[tokio::test]
+async fn attaching_a_note_to_a_repository_carries_the_drafts_provenance() {
+    let (ws, session, _dir) = setup().await;
+    let repository = create_repository(
+        &ws,
+        &session,
+        NewRepository {
+            human_id: None,
+            name: Some("Regional archive".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("repository");
+    let Attachables { note, draft, .. } = attachables(&ws, &session).await;
+
+    let attach_note = RepositoryEdit::AttachNote {
+        human_id: repository.clone(),
+        note_id: note,
+    };
+    dispatch_repository_edit(&ws, &session, &attach_note, &draft)
+        .await
+        .expect("attach note");
+
+    let log = change_log_for_repository(&ws, &repository).await.expect("log");
+    assert_attach_carries_draft(&log, "NoteAttached");
+}
+
+#[tokio::test]
+async fn attaching_a_note_to_a_media_object_carries_the_drafts_provenance() {
+    let (ws, session, _dir) = setup().await;
+    let Attachables { note, media, draft } = attachables(&ws, &session).await;
+
+    let attach_note = MediaEdit::AttachNote {
+        human_id: media.clone(),
+        note_id: note,
+    };
+    dispatch_media_edit(&ws, &session, &attach_note, &draft)
+        .await
+        .expect("attach note");
+
+    let log = change_log_for_media(&ws, &media).await.expect("log");
+    assert_attach_carries_draft(&log, "NoteAttached");
+}
+
+async fn dna_test(ws: &Workspace, session: &Session) -> String {
+    let person = person(ws, session).await;
+    create_dna_test(
+        ws,
+        session,
+        NewDnaTest { human_id: None, person },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("dna test")
+}
+
+#[tokio::test]
+async fn attaching_a_note_to_a_dna_test_carries_the_drafts_provenance() {
+    let (ws, session, _dir) = setup().await;
+    let test = dna_test(&ws, &session).await;
+    let Attachables { note, draft, .. } = attachables(&ws, &session).await;
+
+    let attach_note = DnaTestEdit::AttachNote {
+        human_id: test.clone(),
+        note_id: note,
+    };
+    dispatch_dna_test_edit(&ws, &session, &attach_note, &draft)
+        .await
+        .expect("attach note");
+
+    let log = change_log_for_dna_test(&ws, &test).await.expect("log");
+    assert_attach_carries_draft(&log, "NoteAttached");
+}
+
+#[tokio::test]
+async fn attaching_a_note_to_a_dna_match_carries_the_drafts_provenance() {
+    let (ws, session, _dir) = setup().await;
+    let test_a = dna_test(&ws, &session).await;
+    let test_b = dna_test(&ws, &session).await;
+    let dna_match = observe_dna_match(
+        &ws,
+        &session,
+        NewDnaMatch {
+            human_id: None,
+            test_a,
+            test_b,
+            provider: DnaProvider::AncestryDna,
+            shared_cm: Centimorgans::from_hundredths(3_500),
+            percent_shared: None,
+            segment_count: 12,
+            largest_segment_cm: Centimorgans::from_hundredths(800),
+            predicted_relationship: None,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("dna match");
+    let Attachables { note, draft, .. } = attachables(&ws, &session).await;
+
+    let attach_note = DnaMatchEdit::AttachNote {
+        human_id: dna_match.clone(),
+        note_id: note,
+    };
+    dispatch_dna_match_edit(&ws, &session, &attach_note, &draft)
+        .await
+        .expect("attach note");
+
+    let log = change_log_for_dna_match(&ws, &dna_match).await.expect("log");
+    assert_attach_carries_draft(&log, "NoteAttached");
 }

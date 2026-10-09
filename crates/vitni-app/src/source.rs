@@ -1041,6 +1041,7 @@ pub async fn import_attach_source_media(
     session: &Session,
     source_human_id: &str,
     media_human_id: &str,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let media_id = use_case::resolve_id(
@@ -1054,7 +1055,7 @@ pub async fn import_attach_source_media(
         source_human_id,
         media_id,
         MediaRefInput::default(),
-        MutationMeta::default(),
+        meta,
     )
     .await
 }
@@ -1070,6 +1071,7 @@ pub async fn import_attach_source_note(
     session: &Session,
     source_human_id: &str,
     note_human_id: &str,
+    meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let note_id = use_case::resolve_id(
@@ -1077,7 +1079,7 @@ pub async fn import_attach_source_note(
         vitni_core::note::NoteView::note_id,
         || AppError::NoteNotFound(note_human_id.to_owned()),
     )?;
-    attach_source_note(workspace, session, source_human_id, note_id, MutationMeta::default()).await
+    attach_source_note(workspace, session, source_human_id, note_id, meta).await
 }
 
 /// Summarises a cluster — its root first, then its members — as one source (ADR 0039 §5): the root's
