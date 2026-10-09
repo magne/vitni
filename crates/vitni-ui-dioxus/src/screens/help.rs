@@ -204,8 +204,8 @@ fn render_timeline_specimen() -> Element {
             div { class: "tl-item",
                 div { class: "tl-when", "2026-06-22 14:35" }
                 div { class: "tl-what",
-                    "Birth date asserted: "
-                    b { "12 Apr 1850" }
+                    "Date asserted: "
+                    b { "1850-04-12" }
                     " (was 1850)"
                 }
                 div { class: "tl-who", "magne · confidence High" }
@@ -213,7 +213,7 @@ fn render_timeline_specimen() -> Element {
             }
             div { class: "tl-item",
                 div { class: "tl-when", "2026-06-18 09:10" }
-                div { class: "tl-what", "Persona I0042b merged into John Smith" }
+                div { class: "tl-what", "Persona merged" }
                 div { class: "tl-who", "magne · reversible" }
             }
             div { class: "tl-item",

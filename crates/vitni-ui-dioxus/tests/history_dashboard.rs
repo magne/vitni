@@ -29,6 +29,8 @@ fn timeline() -> Element {
                 count: None,
                 evidence: None,
                 changes: None,
+                value: None,
+                replaced: None,
             }],
             onundo: move |_| {},
         }
@@ -51,6 +53,8 @@ fn run_timeline() -> Element {
                 count: Some("4 changes".to_owned()),
                 evidence: None,
                 changes: None,
+                value: None,
+                replaced: None,
             }],
             onundo: move |_| {},
         }
@@ -71,6 +75,8 @@ fn run_with_changes() -> Element {
         count: None,
         evidence: None,
         changes: None,
+        value: None,
+        replaced: None,
     };
     rsx! {
         HistoryTimeline {
@@ -92,6 +98,8 @@ fn run_with_changes() -> Element {
                         child("Assertion superseded", Some("The value it replaced was recorded at or before the export of tree.ged (2026-06-21), so the file's value replaced it.")),
                     ],
                 }),
+                value: None,
+                replaced: None,
             }],
             onundo: move |_| {},
         }
@@ -214,6 +222,7 @@ fn dashboard() -> Element {
                 count: None,
                 children: Vec::new(),
                 resume: None,
+                value: Some("John Smith".to_owned()),
             },
             ActivityVm {
                 when: "2026-06-22 14:30".to_owned(),
@@ -223,6 +232,7 @@ fn dashboard() -> Element {
                 count: Some("142 records".to_owned()),
                 children: Vec::new(),
                 resume: None,
+                value: None,
             },
             ActivityVm {
                 when: "2026-06-22 14:20".to_owned(),
@@ -239,6 +249,7 @@ fn dashboard() -> Element {
                     },
                     label: "Resume the import from big.ged".to_owned(),
                 }),
+                value: None,
             },
         ],
         jump_back: vec![JumpVm {
@@ -373,7 +384,7 @@ fn dashboard_renders_stats_activity_and_data_quality() {
         "31",                                                 // needs-attention / no-source count
         "Recent activity",                                    // the activity card
         r#"class="timeline""#,                                // the activity feed reuses the audit timeline
-        "Name asserted",                                      // an activity row
+        "Name asserted: <b>John Smith</b>",                   // an activity row, naming its value
         "Imported from tree.ged",                             // an import run's row
         r#"<span class="muted tl-count">142 records</span>"#, // its count, muted beside it
         r#"<span class="muted tl-count">interrupted</span>"#, // an abandoned run reads interrupted
@@ -427,6 +438,8 @@ fn decision_timeline() -> Element {
                 count: None,
                 evidence: Some("Matched at 97% · probable match · engine 4".to_owned()),
                 changes: None,
+                value: None,
+                replaced: None,
             }],
             onundo: move |_| {},
         }
@@ -442,4 +455,51 @@ fn a_decision_entry_shows_the_assessment_it_was_made_on() {
         html.contains(r#"<div class="tl-evidence muted">Matched at 97% · probable match · engine 4</div>"#),
         "the assessment renders as its own muted line:\n{html}"
     );
+}
+
+/// Renders a correction's History row: the value it asserted and the one it replaced.
+fn corrected_timeline() -> Element {
+    rsx! {
+        HistoryTimeline {
+            entries: vec![HistoryEntry {
+                when: "2026-06-22 14:35".to_owned(),
+                what: "Date asserted".to_owned(),
+                who: "magne · High".to_owned(),
+                why: None,
+                assertion_id: "a1".to_owned(),
+                can_undo: true,
+                undo_text: "Undo".to_owned(),
+                undo_label: "Undo: Date asserted".to_owned(),
+                count: None,
+                evidence: None,
+                changes: None,
+                value: Some("12 Apr 1850".to_owned()),
+                replaced: Some("was 1850".to_owned()),
+            }],
+            onundo: move |_| {},
+        }
+    }
+}
+
+#[test]
+fn a_history_row_names_its_value_and_what_it_replaced() {
+    let mut vdom = VirtualDom::new(corrected_timeline);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    assert!(
+        html.contains("Date asserted: <b>12 Apr 1850</b> (was 1850)"),
+        "the value is bold after the phrase, what it replaced after it:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Undo: Date asserted""#),
+        "the undo label keeps the bare phrase:\n{html}"
+    );
+}
+
+#[test]
+fn a_history_row_without_a_value_reads_as_its_phrase() {
+    let mut vdom = VirtualDom::new(timeline);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    assert!(!html.contains("<b>"), "no value, no bold:\n{html}");
 }

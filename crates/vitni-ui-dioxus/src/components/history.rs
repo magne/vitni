@@ -29,6 +29,10 @@ pub struct HistoryEntry {
     pub evidence: Option<String>,
     /// An import-run row's own entries, folded behind a disclosure (ADR 0049 §3).
     pub changes: Option<RunChanges>,
+    /// The already-localized value the change asserted, shown bold after `what` (#545).
+    pub value: Option<String>,
+    /// On a correction, the already-localized value it replaced (e.g. `was 1850`), after the value.
+    pub replaced: Option<String>,
 }
 
 /// The entries an import-run row folds, and the label of the disclosure that shows them.
@@ -69,7 +73,15 @@ fn HistoryItem(entry: HistoryEntry, onundo: EventHandler<String>) -> Element {
         div { class: "tl-item",
             div { class: "tl-when", "{entry.when}" }
             div { class: "tl-what",
-                "{entry.what}"
+                if let Some(value) = &entry.value {
+                    "{entry.what}: "
+                    b { "{value}" }
+                    if let Some(replaced) = &entry.replaced {
+                        " ({replaced})"
+                    }
+                } else {
+                    "{entry.what}"
+                }
                 if let Some(count) = &entry.count {
                     span { class: "muted tl-count", "{count}" }
                 }

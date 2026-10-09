@@ -204,6 +204,8 @@ fn the_real_history_tab_renders_exactly_one_explanation() {
             count: None,
             evidence: None,
             children: Vec::new(),
+            value: None,
+            replaced: None,
         }];
         tab_frame::<TestForm>(
             &loc,

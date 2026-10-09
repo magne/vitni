@@ -184,19 +184,6 @@ only the Overview and their entity-specific tables. So each item here lands on e
 which is what makes them worth fixing in the shared code rather than per screen. Most came out of the
 2026-08-12 GUI walkthrough; the rest from reading the code.
 
-- **History does not show the value an entry recorded or replaced.** `ChangeLogEntry`
-  (`crates/vitni-app/src/history.rs`) carries the event type, operator, time and rationale but no field
-  and no value, and `change_summary` (`crates/vitni-ui/src/i18n.rs`) maps the type to a fixed phrase
-  ("Date asserted"). So a History row never says what a change set a field to, and a supersession — a
-  user's correction, or a re-import replacing a value (ADR 0029, ADR 0049) — never says what it
-  replaced. The mockups already draw it: 17 History items name the value, and `event.html`,
-  `person.html`, `strengths.html` and `tag.html` also name the one replaced ("Date asserted: **14 Jun
-  1876** (was abt 1876)"), describing behaviour that has not shipped. Split from #534, whose merge view
-  shows who, when and why but not the values. *Shape:* a frontend-neutral value summary on
-  `ChangeLogEntry` (the field and its value, plus, on a supersession, the value it replaced), decoded
-  per aggregate like `extract_detail`, rendered in the row's summary through the existing presentation
-  helpers. *Exit:* every History item the mockups draw with a value renders it in the app, and a
-  supersession names the value it replaced. — #545
 - **The change-set commit path is written out 14 times in `services.rs`.** `services.rs:283-497` holds
   the 13 `commit_*_change_set` wrappers plus `commit_new_record`, whose bodies are the same four
   statements — `localizer()`, `open()`, `Session::new(config.operator_agent())`,

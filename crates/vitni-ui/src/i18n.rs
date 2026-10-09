@@ -21,12 +21,12 @@ use tracing::warn;
 use unic_langid::LanguageIdentifier;
 use vitni_app::DecidableKind;
 use vitni_app::{
-    ActivityDetail, Age, AgeBound, AppError, AssociationRole, BackupError, Calendar, ChangeLogEntry,
+    ActivityDetail, Age, AgeBound, AppError, AssociationRole, BackupError, Calendar, ChangeLogEntry, ChangeValue,
     ChildParentRelationship, ChromosomeSide, CitingContext, DatasetError, DateModifier, DatePoint, DateQuality,
     DbError, DnaGenomeBuild, DnaProvider, DnaTestType, EvidenceKind, EvidenceLevel, FactType, GenealogicalDate,
     GenealogicalDateBody, InformationKind, Kinship, MatchBand, MatchDataError, MatchStatus, NameType, NoteType,
-    OperatorKind, PackError, ParticipantRole, RepositoryType, Sex, SourceMediaType, SourceQuality,
-    SuretyLabelOverrides, UsingKind, config,
+    OperatorKind, PackError, ParticipantRole, RecordRole, RecordValue, RepositoryType, Sex, SourceMediaType,
+    SourceQuality, SuretyLabelOverrides, UsingKind, config,
 };
 
 use crate::action::{ActionLabel, Affordance};
@@ -1780,6 +1780,86 @@ impl Localizer {
             TimelineKind::Fact => fl!(self.loader, "timeline-kind-fact"),
             TimelineKind::Event => fl!(self.loader, "timeline-kind-event"),
         }
+    }
+
+    /// The value a change asserted (#545), worded for the History row beside its phrase: a scalar
+    /// through the same label the record screens use, a linked record as its label and id.
+    #[must_use]
+    pub fn change_value(&self, value: &ChangeValue) -> String {
+        match value {
+            ChangeValue::Text(text) => text.clone(),
+            ChangeValue::Date(date) => self.date(date),
+            ChangeValue::Sex(sex) => self.sex_label(Some(sex)),
+            ChangeValue::EventType(event_type) => self.event_type_label(event_type),
+            ChangeValue::PlaceType(place_type) => self.place_type_label(place_type),
+            ChangeValue::NoteType(note_type) => self.note_type_label(note_type),
+            ChangeValue::RepositoryType(repository_type) => self.repository_type_label(repository_type),
+            ChangeValue::DnaProvider(provider) => self.dna_provider_label(provider),
+            ChangeValue::DnaTestType(test_type) => self.dna_test_type_label(*test_type),
+            ChangeValue::DnaGenomeBuild(build) => self.dna_genome_build_label(*build),
+            ChangeValue::Confidence(confidence) => self.confidence_label(ConfidenceLevel::from(*confidence)),
+            ChangeValue::Restrictions(restrictions) => self.restrictions_value(restrictions),
+            ChangeValue::Coordinates(point) => format!("{}, {}", point.latitude, point.longitude),
+            ChangeValue::Number(number) => number.to_string(),
+            ChangeValue::EvidenceAxes(analysis) => [
+                self.evidence_source_label(analysis.source),
+                self.evidence_information_label(analysis.information),
+                self.evidence_kind_label(analysis.evidence),
+            ]
+            .join(" · "),
+            ChangeValue::DnaObserved {
+                shared_cm,
+                segment_count,
+            } => fl!(
+                self.loader,
+                "history-value-dna",
+                cm = shared_cm.to_string(),
+                segments = i64::from(*segment_count)
+            ),
+            ChangeValue::Record { record, role } => self.record_value(record, role.as_ref()),
+        }
+    }
+
+    /// What a correction replaced, as the History row words it after the new value ("was 1850").
+    #[must_use]
+    pub fn change_replaced(&self, value: &ChangeValue) -> String {
+        fl!(self.loader, "history-replaced", value = self.change_value(value))
+    }
+
+    /// A record's restrictions in one line, or the word for none when they were cleared.
+    fn restrictions_value(&self, restrictions: &[vitni_app::Restriction]) -> String {
+        if restrictions.is_empty() {
+            return fl!(self.loader, "history-value-no-restrictions");
+        }
+        let mut labels = Vec::with_capacity(restrictions.len());
+        for restriction in restrictions {
+            labels.push(self.restriction_label(RestrictionKind::from(*restriction)));
+        }
+        labels.join(", ")
+    }
+
+    /// A linked record as its label and id, or whichever of the two it has, with its role.
+    fn record_value(&self, record: &RecordValue, role: Option<&RecordRole>) -> String {
+        let shown = match (&record.label, &record.human_id) {
+            (Some(label), Some(id)) => fl!(
+                self.loader,
+                "history-value-record",
+                label = label.clone(),
+                id = id.clone()
+            ),
+            (Some(label), None) => label.clone(),
+            (None, Some(id)) => id.clone(),
+            (None, None) => String::new(),
+        };
+        let Some(role) = role else {
+            return shown;
+        };
+        let role = match role {
+            RecordRole::Participant(role) => self.participant_role_label(role),
+            RecordRole::Association(role) => self.association_role_label(role),
+            RecordRole::Child(relationship) => self.relationship_label(relationship),
+        };
+        fl!(self.loader, "history-value-role", record = shown, role = role)
     }
 
     /// A localized phrase summarizing what an entry recorded.
@@ -3759,6 +3839,8 @@ mod tests {
             detail: None,
             can_undo: false,
             run: None,
+            value: None,
+            replaced: None,
         }
     }
 

@@ -200,6 +200,16 @@ history-operator-ai = AI model
 history-operator-unknown = unknown operator
 history-undo = Undo: { $what }
 history-undo-short = Undo
+# The value a History row names beside its phrase (#545): what a correction replaced, a linked record
+# as its label and id, the role it was linked in, a DNA match's totals, and cleared restrictions.
+history-replaced = was { $value }
+history-value-record = { $label } ({ $id })
+history-value-role = { $record } ({ $role })
+history-value-dna = { $cm } cM over { $segments ->
+    [one] 1 segment
+   *[other] { $segments } segments
+}
+history-value-no-restrictions = none
 # The disclosure on an import run's History row that shows the changes it folds (ADR 0049 §3).
 history-import-run-changes-toggle = What it changed
 

@@ -46,6 +46,8 @@ fn log_entry(kind: &str, human_id: Option<&str>, operator: OperatorKind, who: &s
         detail: None,
         can_undo: false,
         run: None,
+        value: None,
+        replaced: None,
     }
 }
 
@@ -1745,4 +1747,99 @@ fn a_run_with_no_export_date_gives_its_supersession_no_reason() {
     let rows = collapse_history(&superseding_run(None), &loc);
 
     assert_eq!(rows[0].children[1].why, None);
+}
+
+/// A History entry of `event_type` that asserted `value`.
+fn valued(event_type: &str, value: vitni_app::ChangeValue) -> ChangeLogEntry {
+    let mut entry = log_entry("person", Some("I0001"), OperatorKind::Human, "magne");
+    entry.event_type = event_type.to_owned();
+    entry.value = Some(value);
+    entry
+}
+
+/// A linked record as the app labels it.
+fn linked_record(kind: &str, human_id: Option<&str>, label: Option<&str>) -> vitni_app::RecordValue {
+    vitni_app::RecordValue {
+        kind: kind.to_owned(),
+        id: "00000000-0000-0000-0000-000000000001".to_owned(),
+        human_id: human_id.map(ToOwned::to_owned),
+        label: label.map(ToOwned::to_owned),
+    }
+}
+
+#[test]
+fn a_correction_names_its_value_and_the_one_it_replaced() {
+    let loc = Localizer::for_test("en");
+    let mut entry = valued("SexAsserted", vitni_app::ChangeValue::Sex(Sex::Male));
+    entry.replaced = Some(vitni_app::ChangeValue::Sex(Sex::Female));
+    let vm = super::HistoryEntryVm::from_entry(&entry, &loc);
+
+    assert_eq!(vm.what, "Sex asserted", "the phrase stays the event's own");
+    assert_eq!(vm.value.as_deref(), Some("male"));
+    assert_eq!(vm.replaced.as_deref(), Some("was female"));
+}
+
+#[test]
+fn a_value_with_nothing_replaced_reads_alone() {
+    let loc = Localizer::for_test("en");
+    let date = year(1876);
+    let vm = super::HistoryEntryVm::from_entry(
+        &valued("DateAsserted", vitni_app::ChangeValue::Date(date.clone())),
+        &loc,
+    );
+
+    assert_eq!(vm.value, Some(loc.date(&date)));
+    assert_eq!(vm.replaced, None);
+}
+
+#[test]
+fn a_linked_record_reads_as_its_label_and_its_id() {
+    let loc = Localizer::for_test("en");
+    let record = |record, role| vitni_app::ChangeValue::Record { record, role };
+    let value = |value| super::HistoryEntryVm::from_entry(&valued("PlaceLinked", value), &loc).value;
+
+    assert_eq!(
+        value(record(
+            linked_record("place", Some("P0003"), Some("Trinity Church")),
+            None
+        ))
+        .as_deref(),
+        Some("Trinity Church (P0003)")
+    );
+    assert_eq!(
+        value(record(linked_record("event", Some("E0002"), None), None)).as_deref(),
+        Some("E0002")
+    );
+    assert_eq!(
+        value(record(linked_record("tag", None, Some("Direct ancestor")), None)).as_deref(),
+        Some("Direct ancestor"),
+        "a tag has no id to show"
+    );
+    let role = vitni_app::RecordRole::Participant(vitni_app::ParticipantRole::Witness);
+    assert_eq!(
+        value(record(linked_record("event", Some("E0002"), None), Some(role.clone()))),
+        Some(format!(
+            "E0002 ({})",
+            loc.participant_role_label(&vitni_app::ParticipantRole::Witness)
+        ))
+    );
+}
+
+#[test]
+fn norwegian_says_what_a_value_replaced_in_norwegian() {
+    let loc = Localizer::for_test("no");
+    let mut entry = valued("SexAsserted", vitni_app::ChangeValue::Sex(Sex::Male));
+    entry.replaced = Some(vitni_app::ChangeValue::Sex(Sex::Female));
+    let vm = super::HistoryEntryVm::from_entry(&entry, &loc);
+
+    assert_eq!(vm.replaced, Some(format!("var {}", loc.sex_label(Some(&Sex::Female)))));
+}
+
+#[test]
+fn an_activity_row_names_its_value() {
+    let loc = Localizer::for_test("en");
+    let entry = valued("SexAsserted", vitni_app::ChangeValue::Sex(Sex::Male));
+    let vm = super::ActivityVm::from_entry(&entry, &loc, &ada());
+
+    assert_eq!(vm.value.as_deref(), Some("male"));
 }

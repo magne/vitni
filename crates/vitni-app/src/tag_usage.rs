@@ -143,7 +143,7 @@ impl Lookups {
 
 /// Truncates a note body to its first line, trimmed and clipped to [`NOTE_SNIPPET_LEN`] characters,
 /// as a readable example label. Returns `None` for an empty body (the `human_id` fallback applies).
-fn note_snippet(text: &str) -> Option<String> {
+pub(crate) fn note_snippet(text: &str) -> Option<String> {
     let first_line = text.lines().next().unwrap_or("").trim();
     if first_line.is_empty() {
         return None;
@@ -157,7 +157,7 @@ fn note_snippet(text: &str) -> Option<String> {
 }
 
 /// The file name (or web reference) of a media path, as a readable example label.
-fn media_label(path: &MediaPath) -> Option<String> {
+pub(crate) fn media_label(path: &MediaPath) -> Option<String> {
     match path {
         MediaPath::File(file) => file
             .rsplit(['/', '\\'])

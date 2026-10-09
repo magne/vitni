@@ -25,6 +25,10 @@ pub struct HistoryEntryVm {
     pub evidence: Option<String>,
     /// For an import-run row, the entries it folds, newest first; empty otherwise.
     pub children: Vec<HistoryEntryVm>,
+    /// The localized value the change asserted (e.g. `12 Apr 1850`), shown after `what` (#545).
+    pub value: Option<String>,
+    /// On a correction, the localized value it replaced (e.g. `was 1850`).
+    pub replaced: Option<String>,
 }
 
 impl HistoryEntryVm {
@@ -50,6 +54,8 @@ impl HistoryEntryVm {
             what: loc.change_summary(entry),
             who: loc.operator_line(entry),
             why: entry.rationale.clone().or_else(|| superseded_why(entry, loc)),
+            value: entry.value.as_ref().map(|value| loc.change_value(value)),
+            replaced: entry.replaced.as_ref().map(|value| loc.change_replaced(value)),
             evidence,
             assertion_id: entry.assertion_id.clone(),
             can_undo: entry.can_undo,
@@ -130,6 +136,9 @@ pub struct ActivityVm {
     pub count: Option<String>,
     /// For an import-run row, the entries it folds, newest first; empty otherwise.
     pub children: Vec<ActivityVm>,
+    /// The localized value the change asserted, shown after `what`. The feed never names what a
+    /// correction replaced: its window may not hold the replaced assertion.
+    pub value: Option<String>,
     /// For an interrupted bulk run's row, its *Resume* (ADR 0040 §5).
     pub resume: Option<ResumeVm>,
 }
@@ -179,6 +188,7 @@ impl ActivityVm {
             count,
             children,
             resume,
+            value: entry.value.as_ref().map(|value| loc.change_value(value)),
         }
     }
 }
@@ -211,6 +221,8 @@ mod tests {
             count: None,
             evidence: None,
             children: Vec::new(),
+            value: None,
+            replaced: None,
         }
     }
 

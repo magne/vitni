@@ -118,6 +118,8 @@ fn timeline_specimen() -> Element {
                     count: None,
                     evidence: None,
                     changes: None,
+                    value: None,
+                    replaced: None,
                 }],
                 onundo: move |_| {},
             }

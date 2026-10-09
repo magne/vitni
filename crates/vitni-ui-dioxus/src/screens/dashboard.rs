@@ -132,7 +132,12 @@ fn activity_feed(loc: &Localizer, recent: &[ActivityVm]) -> Element {
                 div { class: "tl-item",
                     div { class: "tl-when", "{row.when}" }
                     div { class: "tl-what",
-                        "{row.what}"
+                        if let Some(value) = &row.value {
+                            "{row.what}: "
+                            b { "{value}" }
+                        } else {
+                            "{row.what}"
+                        }
                         if let Some(count) = &row.count {
                             span { class: "muted tl-count", "{count}" }
                         }
