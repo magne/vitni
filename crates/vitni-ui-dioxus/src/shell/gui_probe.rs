@@ -1,13 +1,13 @@
 //! The `gui-pass` probe: a debug build started with [`PROBE_VAR`] set serves `GET /elements` on that
 //! loopback address, answering with every element that carries an `id`, a `data-hook` or an ARIA role
 //! (explicit, or implied by its tag) — its rect, text, `aria-label` and the ids, hooks and roles of its
-//! ancestors, whether it holds focus and, for a text field, its value — plus whether the page is ready and focused, and whether every
-//! map container holds a `MapLibre` map that is idle (constructed, loaded and not moving, so nothing
-//! queued has yet to reach its canvas). `cargo xtask gui-pass` resolves a scenario's targets over that
-//! list, so its scenarios name elements instead of window pixels, and waits for idle maps before a step
-//! counts as settled. `GET /hit?x=…&y=…` answers what `document.elementFromPoint` finds at that viewport
-//! point, with it and its reported ancestors, so the harness refuses a target that something else
-//! covers — a click there would land on whatever is on top.
+//! ancestors, whether it holds focus and, for a text field, its value — plus whether the page is ready
+//! and focused, and whether every map container holds a `MapLibre` map that is idle (constructed,
+//! loaded and not moving, so nothing queued has yet to reach its canvas). `cargo xtask gui-pass`
+//! resolves a scenario's targets over that list, so its scenarios name elements instead of window
+//! pixels, and waits for idle maps before a step counts as settled. `GET /hit?x=…&y=…` answers what
+//! `document.elementFromPoint` finds at that viewport point, with it and its reported ancestors, so the
+//! harness refuses a target that something else covers — a click there would land on whatever is on top.
 //!
 //! The probe only **observes**. It never dispatches an event, sets a value, scrolls or moves focus:
 //! every input a scenario sends reaches the webview as a real X event, so what a scenario proves is
