@@ -553,6 +553,27 @@ fn palette_renders_as_a_modal_dialog() {
     assert!(html.contains("open"), "the open footer hint:\n{html}");
 }
 
+/// Closing the palette must hand focus back to the control that had it, or it falls to `<body>` —
+/// outside `.app`, whose dispatcher then drops the next `⌘K` (#541). `DialogFocus` does that for a
+/// dialog marked `data-focus-trap`; an `autofocus` on the input would move focus in before
+/// `DialogFocus` records what to restore, so the input must not carry one.
+#[test]
+fn palette_restores_focus_on_close() {
+    let html = render(palette_open);
+    assert!(
+        html.contains(r#"data-focus-trap="true""#),
+        "the palette is a focus-trapped dialog:\n{html}"
+    );
+    assert!(
+        html.contains(r#"tabindex="-1""#),
+        "the dialog is focusable as the trap's fallback:\n{html}"
+    );
+    assert!(
+        !html.contains("autofocus"),
+        "focus entry belongs to DialogFocus, not autofocus:\n{html}"
+    );
+}
+
 #[test]
 fn palette_lists_recent_records_when_seeded() {
     let html = render(palette_with_recent);

@@ -36,17 +36,17 @@ pub fn HelpOverlay() -> Element {
                 "data-focus-trap": "true",
                 onclick: move |event| event.stop_propagation(),
                 onkeydown: move |event| trap_tab(&event),
-                // `autofocus` on the close button below does not take in the live webview, which left
-                // focus on `body` — outside this subtree, so `Esc` reached no handler and the sheet
-                // could not be closed from the keyboard at all. `DialogFocus` moves focus in (and
-                // restores it on close) the same way the `Modal` layer does.
+                // `autofocus` does not take in the live webview, which left focus on `body` — outside
+                // this subtree, so `Esc` reached no handler and the sheet could not be closed from the
+                // keyboard at all. `DialogFocus` moves focus in (and restores it on close) the same way
+                // the `Modal` layer does; the close button carries no `autofocus`, which would make it
+                // the control `DialogFocus` restores to (#541).
                 DialogFocus {}
                 div { class: "h-head",
                     h3 { "{chrome.0.help_title()}" }
                     span { class: "spacer" }
                     button {
                         class: "icon-btn",
-                        autofocus: true,
                         aria_label: "{chrome.0.close()}",
                         onclick: move |_| nav.close_overlay(),
                         "✕"
