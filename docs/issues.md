@@ -219,19 +219,6 @@ which is what makes them worth fixing in the shared code rather than per screen.
   `retract_side_panel` it mirrors, and `footer` given `#[props(default)]` or dropped. Independent of
   #312, which is fixed: a panel stays where it is authored, registers itself in `NavState::open_panels`
   while open, and every region behind it inerts its own root — so no construction site moved.
-- **A date row's four controls stack instead of sitting on one line.** `DatePicker`
-  (`components/forms.rs:164-203`) emits exactly the row `event.html:186-192` draws — modifier select,
-  date input, quality select, calendar select, each `width:auto` inside a `.fact-row` — but
-  `DraftDate` wraps it in `.field-with-revert` to hang the per-field reset off it, and
-  `.field-with-revert .in { flex: 1 }` (`components.css:979`) then overrides every one of those widths.
-  `.fact-row` is `flex-wrap`, so four controls each claiming the full line become four lines: the app
-  draws a 5-row block where the mockup draws one row plus a separate *Original text* row
-  (`event.html:193-196`). Pre-existing, not introduced by #310 — the same rule applied through
-  `div.field` before the row migration — and reaching it means giving the revert wrapper a rule that
-  does not flatten a multi-control row, which is a CSS decision on all 13 record screens rather than a
-  local fix. Found while re-measuring `picker-sees-new-record` for #310: the succession form's
-  provenance block runs past a 1200px window because of it, so that scenario now scrolls its panel
-  before clicking. — #500
 - **Import run rows cannot be expanded.** An import run is one History row (#393): `group_runs`
   (`vitni-app/src/history.rs`) folds a run's entries into `ActivityDetail::ImportRun`, whose `children`
   the `ActivityVm`/`HistoryEntryVm` carry, and the row shows its count muted beside it. Nothing renders

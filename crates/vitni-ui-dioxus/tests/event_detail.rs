@@ -306,7 +306,7 @@ fn edit_mode_swaps_in_the_inputs_and_header_actions() {
         r#"aria-label="Date modifier""#,
         r#"aria-label="Date quality""#,
         r#"aria-label="Calendar""#,
-        r#"aria-label="Original text""#,
+        r#"for="event-date-original""#,
         r#"value="14 Jun 1876""#,
     ] {
         assert!(

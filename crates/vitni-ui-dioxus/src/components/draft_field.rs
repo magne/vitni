@@ -387,79 +387,73 @@ pub fn DraftDate(
         .position(|calendar| *calendar == value.calendar)
         .unwrap_or(0)
         .to_string();
-    let revert_class = if modified {
-        "field-with-revert modified"
-    } else {
-        "field-with-revert"
-    };
     let error_present = error.is_some();
     let control = rsx! {
-        div { class: "{revert_class}",
-            DatePicker {
-                modifier_label,
-                date_label,
-                quality_label,
-                calendar_label,
-                end_label,
-                modifier_options,
-                modifier_value,
-                quality_options,
-                quality_value,
-                calendar_options,
-                calendar_value,
-                start_value: value.start.clone(),
-                end_value: value.end.clone(),
-                show_end: value.kind.uses_end(),
-                show_date_inputs: value.kind != DateModifierKind::TextOnly,
-                invalid: error_present,
-                onmodifier: {
-                    let value = value.clone();
-                    let choices = choices.clone();
-                    move |index: String| {
-                        if let Some(kind) = index.parse::<usize>().ok().and_then(|index| choices.get(index)) {
-                            let mut draft = value.clone();
-                            draft.kind = *kind;
-                            onchange.call(draft);
-                        }
-                    }
-                },
-                onstart: {
-                    let value = value.clone();
-                    move |text: String| {
+        DatePicker {
+            id: name.clone(),
+            modifier_label,
+            date_label,
+            quality_label,
+            calendar_label,
+            end_label,
+            modifier_options,
+            modifier_value,
+            quality_options,
+            quality_value,
+            calendar_options,
+            calendar_value,
+            start_value: value.start.clone(),
+            end_value: value.end.clone(),
+            show_end: value.kind.uses_end(),
+            show_date_inputs: value.kind != DateModifierKind::TextOnly,
+            invalid: error_present,
+            onmodifier: {
+                let value = value.clone();
+                let choices = choices.clone();
+                move |index: String| {
+                    if let Some(kind) = index.parse::<usize>().ok().and_then(|index| choices.get(index)) {
                         let mut draft = value.clone();
-                        draft.start = text;
+                        draft.kind = *kind;
                         onchange.call(draft);
                     }
-                },
-                onend: {
-                    let value = value.clone();
-                    move |text: String| {
+                }
+            },
+            onstart: {
+                let value = value.clone();
+                move |text: String| {
+                    let mut draft = value.clone();
+                    draft.start = text;
+                    onchange.call(draft);
+                }
+            },
+            onend: {
+                let value = value.clone();
+                move |text: String| {
+                    let mut draft = value.clone();
+                    draft.end = text;
+                    onchange.call(draft);
+                }
+            },
+            onquality: {
+                let value = value.clone();
+                move |index: String| {
+                    if let Some(quality) = index.parse::<usize>().ok().and_then(|index| DATE_QUALITIES.get(index)) {
                         let mut draft = value.clone();
-                        draft.end = text;
+                        draft.quality = *quality;
                         onchange.call(draft);
                     }
-                },
-                onquality: {
-                    let value = value.clone();
-                    move |index: String| {
-                        if let Some(quality) = index.parse::<usize>().ok().and_then(|index| DATE_QUALITIES.get(index)) {
-                            let mut draft = value.clone();
-                            draft.quality = *quality;
-                            onchange.call(draft);
-                        }
+                }
+            },
+            oncalendar: {
+                let value = value.clone();
+                move |index: String| {
+                    if let Some(calendar) = index.parse::<usize>().ok().and_then(|index| DATE_CALENDARS.get(index)) {
+                        let mut draft = value.clone();
+                        draft.calendar = *calendar;
+                        onchange.call(draft);
                     }
-                },
-                oncalendar: {
-                    let value = value.clone();
-                    move |index: String| {
-                        if let Some(calendar) = index.parse::<usize>().ok().and_then(|index| DATE_CALENDARS.get(index)) {
-                            let mut draft = value.clone();
-                            draft.calendar = *calendar;
-                            onchange.call(draft);
-                        }
-                    }
-                },
-            }
+                }
+            },
             if modified {
                 IconButton {
                     icon: "↺".to_owned(),
@@ -469,27 +463,30 @@ pub fn DraftDate(
                 }
             }
         }
-        TextInput {
-            id: "{name}-original",
-            aria_label: "{original_label}",
-            value: Some(value.original_text.clone()),
-            oninput: {
-                let value = value.clone();
-                move |event: FormEvent| {
-                    let mut draft = value.clone();
-                    draft.original_text = event.value();
-                    onchange.call(draft);
-                }
-            },
-        }
-        div { class: "field-hint", "{original_hint}" }
-        if let Some(message) = error {
-            div { class: "field-error", "{message}" }
-        }
     };
+    let original_name = format!("{name}-original");
     rsx! {
         FactRow { label, label_width, name: name.clone(),
-            div { class: "grow", {control} }
+            div { class: "grow",
+                {control}
+                if let Some(message) = error {
+                    div { class: "field-error", "{message}" }
+                }
+            }
+        }
+        FactRow { label: original_label, label_width, name: original_name.clone(),
+            div { class: "grow",
+                TextInput {
+                    id: "{original_name}",
+                    value: Some(value.original_text.clone()),
+                    oninput: move |event: FormEvent| {
+                        let mut draft = value.clone();
+                        draft.original_text = event.value();
+                        onchange.call(draft);
+                    },
+                }
+                div { class: "field-hint", "{original_hint}" }
+            }
         }
     }
 }

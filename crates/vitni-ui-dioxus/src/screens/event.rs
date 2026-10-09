@@ -276,7 +276,7 @@ pub fn event_create_fields(loc: &Localizer, mut draft: Signal<vitni_ui::EventDra
                     loc,
                     "event-date",
                     true,
-                    DEFAULT_LABEL_WIDTH,
+                    RECORD_LABEL_WIDTH,
                     DateFieldBinding {
                         value: draft().date.clone(),
                         original: vitni_ui::DateDraft::default(),

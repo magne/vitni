@@ -1387,7 +1387,7 @@ pub fn place_succession_form_fields(
             loc,
             "succession-date",
             true,
-            DEFAULT_LABEL_WIDTH,
+            RECORD_LABEL_WIDTH,
             DateFieldBinding {
                 value: date(),
                 original: DateDraft::default(),

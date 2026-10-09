@@ -117,6 +117,8 @@ pub fn DateInput(
 /// for a text-only date (`show_date_inputs`), whose value comes from the separate Original-text field.
 #[component]
 pub fn DatePicker(
+    /// The modifier select's id — the first control of the row, so the record row's `<label for>` lands on it.
+    id: String,
     /// The accessible name for the modifier select.
     modifier_label: String,
     /// The accessible name for the (start) date input.
@@ -160,10 +162,13 @@ pub fn DatePicker(
     onquality: EventHandler<String>,
     /// Fired when the calendar changes, with the chosen option value.
     oncalendar: EventHandler<String>,
+    /// Trailing content after the calendar select, on the same row (a record field's reset control).
+    children: Element,
 ) -> Element {
     rsx! {
         div { class: "fact-row",
             SelectInput {
+                id: "{id}",
                 style: "width:auto",
                 aria_label: "{modifier_label}",
                 selected: modifier_value,
@@ -201,6 +206,7 @@ pub fn DatePicker(
                 options: calendar_options,
                 onchange: move |event: FormEvent| oncalendar.call(event.value()),
             }
+            {children}
         }
     }
 }
