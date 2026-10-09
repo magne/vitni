@@ -361,7 +361,6 @@ fn draft_date_edit_mode_carries_the_control_cluster() {
         r#"aria-label="Date quality""#,
         r#"aria-label="Calendar""#,
         r#"aria-label="End date""#,
-        r#"aria-label="Original text""#,
         r#"value="1876""#,
         r#"value="1880""#,
         "The verbatim source string",
@@ -369,6 +368,40 @@ fn draft_date_edit_mode_carries_the_control_cluster() {
     ] {
         assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
     }
+}
+
+/// #500: the date's controls sit on one row as `event.html:186-192` draws it — no revert wrapper
+/// around them (its `flex: 1` stacked them), the reset after the calendar select — and the Original
+/// text is its own labelled row beneath (`event.html:193-196`).
+#[test]
+fn draft_date_edit_mode_draws_one_control_row_and_a_separate_original_text_row() {
+    let html = render_view(draft_date_range_edit);
+    assert!(
+        !html.contains("field-with-revert"),
+        "the date's controls must not sit inside a revert wrapper:\n{html}"
+    );
+    let position = |needle: &str| html.find(needle).unwrap_or(usize::MAX);
+    let calendar = position(r#"aria-label="Calendar""#);
+    let reset = position(r#"aria-label="Reset Date""#);
+    let original_row = position(r#"<label for="event-date-original""#);
+    let original_input = position(r#"id="event-date-original""#);
+    assert!(
+        calendar < reset && reset < original_row && original_row < original_input,
+        "the reset follows the calendar select, then the Original text row's label and input:\n{html}"
+    );
+    assert!(
+        html[original_row..original_input].contains("Original text"),
+        "the Original text row carries a visible label:\n{html}"
+    );
+    assert!(
+        html.contains(r#"<label for="event-date""#) && html.contains(r#"id="event-date""#),
+        "the Date row's label names a control in the row, not a dangling id:\n{html}"
+    );
+    assert_eq!(
+        html.matches(r#"class="fact-row""#).count(),
+        3,
+        "the labelled date row, its control row, and the Original text row:\n{html}"
+    );
 }
 
 #[test]

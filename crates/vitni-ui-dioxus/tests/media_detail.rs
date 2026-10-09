@@ -382,7 +382,7 @@ fn the_checksum_is_locked_and_the_date_is_a_structured_editor() {
     for needle in [
         r#"for="media-date""#,
         r#"aria-label="Date modifier""#,
-        r#"aria-label="Original text""#,
+        r#"for="media-date-original""#,
     ] {
         assert!(
             html.contains(needle),

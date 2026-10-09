@@ -427,7 +427,7 @@ pub fn citation_create_fields(
                     loc,
                     "citation-date",
                     true,
-                    DEFAULT_LABEL_WIDTH,
+                    RECORD_LABEL_WIDTH,
                     DateFieldBinding {
                         value: draft().date.clone(),
                         original: vitni_ui::DateDraft::default(),

@@ -30,10 +30,10 @@ const ROW_SELECTORS: [&str; 22] = [
     ".field-error",
     ".field-hint",
     ".field-with-revert",
-    ".field-with-revert .in",
-    ".field-with-revert .icon-btn",
-    ".field-with-revert select.in",
-    ".field-with-revert select.in ~ .icon-btn",
+    ".field-with-revert > .in",
+    ".field-with-revert > .icon-btn",
+    ".field-with-revert > select.in",
+    ".field-with-revert > select.in ~ .icon-btn",
     ".number-stepper",
     ".number-stepper:focus-within",
     ".number-stepper .stepper-value",
@@ -125,6 +125,31 @@ fn no_record_row_rule_hides_behind_a_field_wrapper() {
                     !ROW_SELECTORS.contains(&inner),
                     "{name}: `{selector}` scopes a record-row rule under a .field wrapper a \
                      one-line .fact-row row does not have"
+                );
+            }
+        }
+    }
+}
+
+/// #500: a revert wrapper may hold a whole multi-control row (a date's modifier · date · quality ·
+/// calendar), so its rules must reach only the wrapper's own control. A descendant rule there gave each
+/// of the date's four controls `flex: 1`, and the wrapping row stacked them one per line.
+#[test]
+fn a_revert_wrapper_rule_reaches_only_its_own_control() {
+    let (app, mockup) = sheets();
+    for (name, sheet) in [
+        ("src/components.css", &app),
+        ("docs/mockups/assets/components.css", &mockup),
+    ] {
+        for rule in top_level_rules(sheet) {
+            for selector in &rule.selectors {
+                let Some(rest) = selector.strip_prefix(".field-with-revert ") else {
+                    continue;
+                };
+                assert!(
+                    rest.starts_with("> "),
+                    "{name}: `{selector}` reaches every descendant of a revert wrapper, not just its \
+                     own control — a date row's controls would each take `flex: 1` and stack"
                 );
             }
         }

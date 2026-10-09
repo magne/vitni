@@ -13,9 +13,9 @@
 # layout rather than for the rows. Detaching restores the geometry exactly; the citation record stays.
 #
 # The panel is scrolled to the bottom of its body **once**, before anything is clicked, and every
-# target below is resolved there. #310's one-line record rows shortened the succession form above the
-# provenance block, but the Date editor stacks four controls in one row's value cell, so the block still
-# runs past the window: before the scroll the new-citation card's Add button was off screen entirely.
+# target below is resolved there. The succession form above the provenance block is taller than a
+# 1200px window once the new-citation card opens — the panel is too narrow for a date's four controls
+# to share one line, so they wrap — and before the scroll the card's Add button was off screen.
 # Scrolling once and never again is what keeps the two picker shots comparable — the `differ` below is
 # over a region, and a second scroll between them would move the floating list for the scroll rather than
 # for the row it is asserting on, the same trap the chip detach below avoids.

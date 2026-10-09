@@ -1001,17 +1001,19 @@ select.in.modified { border-color: var(--accent); }
 .field-error { color: var(--err); font-size: var(--fs-xs); margin-top: 2px; }
 .field-hint { color: var(--muted); font-size: var(--fs-xs); margin-top: 2px; }
 
-/* The revert-to-saved icon sits *inside* the field, overlaid at the right edge (text fields). */
+/* The revert-to-saved icon sits *inside* the field, overlaid at the right edge (text fields). Every rule
+   takes the wrapper's own child only (`>`): a descendant rule also reached the controls of a multi-control
+   row, giving each of a date's four controls `flex: 1` so the wrapping row stacked them (#500). */
 .field-with-revert { position: relative; display: flex; align-items: center; }
-.field-with-revert .in { flex: 1; padding-right: 30px; }
-.field-with-revert .icon-btn {
+.field-with-revert > .in { flex: 1; padding-right: 30px; }
+.field-with-revert > .icon-btn {
   position: absolute; right: 2px; top: 50%; transform: translateY(-50%);
   width: 26px; height: 26px;
 }
 /* A select keeps its chevron (right 10px); shift its reset control left of the chevron so the two
    don't overlap (record-editing.html §4 — reset sits left of any dropdown arrow). */
-.field-with-revert select.in { padding-right: 56px; }
-.field-with-revert select.in ~ .icon-btn { right: 28px; }
+.field-with-revert > select.in { padding-right: 56px; }
+.field-with-revert > select.in ~ .icon-btn { right: 28px; }
 /* Custom number stepper: one bordered control laid out as [ value | revert | ▲▼ ], so the revert sits
    inside the field (left of the arrows, right of the value) and the arrows are ours to place (native
    `<input type=number>` arrows can't be reordered). */
