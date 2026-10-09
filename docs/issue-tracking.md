@@ -1,11 +1,12 @@
 # Issue tracking on GitHub
 
-- **Status:** **Applied 2026-07-27; updated 2026-10-08**: a second `0.9` and `0.10` grooming pass
-  (2026-10-04: the unfiled `0.9` and `0.10` bullets filed; 2026-10-01: `0.9.1 — Fixture provenance` landed; 2026-09-30: that milestone; 2026-09-27: the `0.10` milestone and two area labels). 42 labels and the
-  issue-template forms exist, alongside `.github/labels.toml` and `cargo xtask issue-sync`. `0.8 — UI
-  parity` and `0.9.1 — Fixture provenance` shipped; the three remaining gates are `0.9`, `0.10` and
-  `1.0`.
-- **Date:** 2026-07-27 (updated 2026-10-08)
+- **Status:** **Applied 2026-07-27; updated 2026-10-09**: the `0.9` and `1.0` tables brought current
+  (2026-10-08: a second `0.9` and `0.10` grooming pass; 2026-10-04: the unfiled `0.9` and `0.10`
+  bullets filed; 2026-10-01: `0.9.1 — Fixture provenance` landed; 2026-09-30: that milestone;
+  2026-09-27: the `0.10` milestone and two area labels). 42 labels and the issue-template forms exist,
+  alongside `.github/labels.toml` and `cargo xtask issue-sync`. `0.8 — UI parity` and `0.9.1 — Fixture
+  provenance` shipped; the three remaining gates are `0.9`, `0.10` and `1.0`.
+- **Date:** 2026-07-27 (updated 2026-10-09)
 - **Audience:** anyone filing, triaging, or closing an issue
 - **Companion:** [`issues.md`](issues.md) is the backlog this describes; [`roadmap.md`](roadmap.md)
   owns phase detail.
@@ -176,9 +177,9 @@ rather than kept as history — the archive is the record.
 
 | Milestone | Contents |
 | --- | --- |
-| **`0.9 — UI stabilization`** | Bugfix and correctness before shipping. **Expected to grow substantially** — the list below is a floor, not a scope: most of what belongs here has not been found yet, because it takes real GUI use to surface. The 2026-08-12 walkthrough proved that twice over: the milestone had reached zero open issues, and one pass through the GUI refilled it with 15. Highest first: a date row's four controls stacking instead of sitting on one line (#500). |
+| **`0.9 — UI stabilization`** | Bugfix and correctness before shipping. **Expected to grow substantially** — the list below is a floor, not a scope: most of what belongs here has not been found yet, because it takes real GUI use to surface. The 2026-08-12 walkthrough proved that twice over: the milestone had reached zero open issues, and one pass through the GUI refilled it with 15. Three open, highest first: a date row's four controls stacking instead of sitting on one line (#500). |
 | **`0.10 — Record matching`** | Import that never duplicates and never guesses: record origins and import runs, the matching engine, identity decisions, staged import with side-by-side review, and versioned workspace backup (ADRs 0037–0041). Groomed in full in §4, in dependency order. |
-| **`1.0`** | Release mechanics only (#210–#215): generate real release keys, verify `release.yml` end-to-end on the first real tag, give `.deb` a default system plugin path (same fix as the duplicated/divergent embedded plugin-dir resolver), add the missing `[profile.release]`, and settle the cross-platform decision. Also the deletion of the pre-1.0 backup upgraders, which freezes backup format v1 (#392, ADR 0041 §4). |
+| **`1.0`** | Release mechanics only (#210, #211, #214, #215): generate real release keys, verify `release.yml` end-to-end on the first real tag, add the missing `[profile.release]`, and settle the cross-platform decision. The `.deb` default plugin path and the duplicated plugin-dir resolver (#212, #213) are closed. Also the deletion of the pre-1.0 backup upgraders, which freezes backup format v1 (#392, ADR 0041 §4). |
 
 **A milestone requires groomed, committed scope — not a theme.** Everything else — DNA depth, the
 server/web work, the plugin-UI vocabulary tail, the ADR 0014 plugin-trust out-of-scope list, round-trip
@@ -193,7 +194,7 @@ arithmetic.
 The remaining pre-1.0 gates, itemized from `issues.md` as they stand. Each is small enough to groom,
 which is the point of filing only what is being worked on.
 
-### `0.9 — UI stabilization` (8 open)
+### `0.9 — UI stabilization` (3 open)
 
 Ordered by severity, not area. **This milestone is deliberately open-ended, and the 2026-08-12
 walkthrough is the proof.** Every issue in the previous round closed, leaving the milestone empty — and
@@ -201,25 +202,22 @@ one pass through the real GUI, looking at nothing but what a user sees, refilled
 those are defects no SSR test could have caught, because they are about what reaches the DOM, the
 stylesheet or the webview rather than what the view logic decided. Treat the count as a floor again.
 
-**Open now (2026-10-04).** #382 is what is left of that round; #424 closed on 2026-10-09. The other
-four were filed on 2026-10-04 from bullets already in `issues.md`: one shipped screen that contradicts
-its mockup, two mockup/sheet drifts against the rule that the mockups describe shipped behaviour, and
-the `gui-pass` flakes that make every scenario's first assertion unreliable.
+**Open now (2026-10-09).** #382 is what is left of the 2026-08-12 round. #500 is the one shipped
+screen that contradicts its mockup, filed on 2026-10-04 from a bullet already in `issues.md`. #541 was
+filed on 2026-10-08 from `gui-pass`, whose `overlay-dismiss` scenario clicks the top bar after each
+palette close to work around it (#533).
 
 | Item | Why it gates a release |
 | --- | --- |
 | [A date row's four controls stack instead of sitting on one line](https://github.com/magne/vitni/issues/500) | Every date field on all 13 record screens draws a 5-row block where the mockup draws one row |
-| [Ten mockups quote a History note no shipped string says](https://github.com/magne/vitni/issues/501) | The mockups advertise a competitor claim the product does not make |
-| [The mockup sheet is only partly the superset it is documented to be](https://github.com/magne/vitni/issues/502) | 24 app rules have no mockup counterpart and nothing gates the sheet as a whole; needs a decided rule first |
+| [Closing the command palette strands focus on `<body>`, so the next shell chord is dropped](https://github.com/magne/vitni/issues/541) | After the palette closes, `⌘K`, `?` and the `g`-prefix do nothing until the user clicks back into the app |
 | [Fast typing can lose characters in record text fields](https://github.com/magne/vitni/issues/382) | Typed text silently differs from what was entered; unconfirmed outside Xvfb |
-| [`gui-pass` occasionally grabs a blank first shot](https://github.com/magne/vitni/issues/503) | The harness that tests this milestone's class of defect is flaky at its first assertion |
-| [`gui-pass` steps address elements by window pixels, not by id](https://github.com/magne/vitni/issues/533) | Every layout change this milestone makes breaks unrelated scenarios until their pixels are re-read |
-| [No merge/conflict mockup for reconciled fields](https://github.com/magne/vitni/issues/534) | No agreed design shows a user that an import overwrote one of their values; needs a design first |
-| [History does not show the value an entry recorded or replaced](https://github.com/magne/vitni/issues/545) | Seventeen mockup History items name a value the app never shows; split from #534 |
 
-**Added 2026-10-08.** #533 and #534 come from the second grooming pass. #533 is tooling, here on the
-vehicle rule like #322: the walkthroughs that refill this milestone move the layout, and each move
-re-calibrates scenarios that test something else.
+**Closed since 2026-10-04:** the two mockup/sheet drifts (#501, #502), the `gui-pass` blank first shot
+(#503) and its pixel-addressed steps (#533), the merge/conflict mockup (#534), the History values split
+from it (#545), and #424 below. #533 and #534 came from the 2026-10-08 grooming pass; #533 was tooling,
+here on the vehicle rule like #322, because each layout move re-calibrated scenarios that test
+something else.
 
 The 2026-08-12 round, closed in full:
 
