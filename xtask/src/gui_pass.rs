@@ -78,7 +78,7 @@ use crate::util::{copy_dir, run_cargo};
 mod probe;
 mod target;
 
-use target::{Area, Matcher, Point, Snapshot};
+use target::{Area, Element, Matcher, Point, Snapshot};
 
 /// The `gui-pass` fixture: the assertion scenarios, seeded with one place and two media objects.
 const GUI_PASS: Fixture = Fixture {
@@ -266,7 +266,13 @@ enum Step {
     Key { chord: String, label: String },
     /// Type `text` into whatever has keyboard focus: one step and one settle for a whole word, not a
     /// `key` step (and a settle) per character. Letters, digits, space and `-.,:/` only — see [`keysyms`].
-    Text { text: String, label: String },
+    /// `delay_ms` is the gap between keys, [`TYPE_DELAY_MS`] when absent; set it low to type faster than a
+    /// person (`fast-typing` sends keys 10 ms apart).
+    Text {
+        text: String,
+        label: String,
+        delay_ms: Option<u32>,
+    },
     /// Press at `from`, move by `by`, release — a canvas drag (map pan).
     Drag { from: Point, by: [i32; 2], label: String },
     /// Scroll the wheel at a point: `clicks` notches up (button 4) or down (button 5) when negative.
@@ -342,6 +348,14 @@ enum Assertion {
     Absent {
         shot: String,
         element: Matcher,
+        because: String,
+    },
+    /// The one element `element` names must hold exactly `equals` as its `value` at `shot` — what a
+    /// text field reads, from the probe, rather than a screenshot of its glyphs.
+    Value {
+        shot: String,
+        element: Matcher,
+        equals: String,
         because: String,
     },
 }
@@ -1215,7 +1229,7 @@ fn wait_for_window(display: &str) -> Result<String> {
 }
 
 /// A shot the script took: its name, and what the probe saw when it was grabbed — what an assertion's
-/// [`Area`] resolves against and its `focus`/`present`/`absent` checks read.
+/// [`Area`] resolves against and its `focus`/`present`/`absent`/`value` checks read.
 struct Taken {
     name: String,
     snapshot: Snapshot,
@@ -1253,9 +1267,9 @@ fn drive(window: &Window, steps: &[Step], shots: &Path, session: &mut Session, l
                 xdotool(display, &["key", "--clearmodifiers", chord])?;
                 window.settle()?;
             }
-            Step::Text { text, label } => {
+            Step::Text { text, label, delay_ms } => {
                 log.line(&format!("  {label}"));
-                type_text(display, text)?;
+                type_text(display, text, delay_ms.unwrap_or(TYPE_DELAY_MS))?;
                 window.settle()?;
             }
             Step::Drag { from, by, label } => {
@@ -1374,18 +1388,18 @@ fn drag(display: &str, from: [i32; 2], by: [i32; 2]) -> Result<()> {
     xdotool(display, &["mouseup", "1"])
 }
 
-/// The gap between a [`Step::Text`] step's keystrokes. Measured on Xvfb: keys 12 ms apart lose
-/// characters (3 runs in 4), 30 ms apart none (4 of 4), so this leaves a margin over the latter.
-const TYPE_DELAY_MS: &str = "40";
+/// The default gap between a [`Step::Text`] step's keystrokes, in milliseconds: a brisk typist's pace.
+const TYPE_DELAY_MS: u32 = 40;
 
 /// Types `text` as one `xdotool key` call over explicit keysyms.
 ///
 /// Not `xdotool type`: it remaps keycodes on the fly for each character, and on Xvfb that drops or
 /// reorders characters at any delay ("Oslo" came out as "Oso"). `key` with a fixed keysym per
-/// character and [`TYPE_DELAY_MS`] between them types every character.
-fn type_text(display: &str, text: &str) -> Result<()> {
+/// character and `delay_ms` between them types every character.
+fn type_text(display: &str, text: &str, delay_ms: u32) -> Result<()> {
     let keys = keysyms(text)?;
-    let mut args = vec!["key", "--clearmodifiers", "--delay", TYPE_DELAY_MS];
+    let delay = delay_ms.to_string();
+    let mut args = vec!["key", "--clearmodifiers", "--delay", delay.as_str()];
     for key in &keys {
         args.push(key);
     }
@@ -1852,6 +1866,27 @@ fn check_one(
                 )
             }))
         }
+        Assertion::Value {
+            shot,
+            element,
+            equals,
+            because,
+        } => {
+            let elements = &taken_at(taken, shot)?.snapshot.elements;
+            Ok(misvalued(element, elements, equals).map(|reason| format!("{shot}: {reason}: {because}")))
+        }
+    }
+}
+
+/// Why the one element `element` names does not hold `equals` as its value, or `None` when it does.
+fn misvalued(element: &Matcher, elements: &[Element], equals: &str) -> Option<String> {
+    match target::find(element, elements) {
+        Ok(found) => match found.value.as_deref() {
+            Some(value) if value == equals => None,
+            Some(value) => Some(format!("{element} reads {value:?}, not {equals:?}")),
+            None => Some(format!("{element} has no value")),
+        },
+        Err(reason) => Some(reason),
     }
 }
 
@@ -1995,11 +2030,31 @@ mod tests {
             label = "type: Oslo"
             "#,
         );
-        let [Step::Text { text, label }] = parsed.steps.as_slice() else {
+        let [Step::Text { text, label, delay_ms }] = parsed.steps.as_slice() else {
             panic!("expected one text step");
         };
         assert_eq!(text, "Oslo");
         assert_eq!(label, "type: Oslo");
+        assert_eq!(*delay_ms, None, "the gap defaults to TYPE_DELAY_MS");
+    }
+
+    #[test]
+    fn a_text_step_may_set_its_own_gap_between_keys() {
+        let parsed = script(
+            r#"
+            description = "a scenario"
+
+            [[step]]
+            do = "text"
+            text = "Oslo"
+            delay_ms = 10
+            label = "type fast: Oslo"
+            "#,
+        );
+        let [Step::Text { delay_ms, .. }] = parsed.steps.as_slice() else {
+            panic!("expected one text step");
+        };
+        assert_eq!(*delay_ms, Some(10));
     }
 
     fn args(list: &[&str]) -> Vec<String> {
@@ -2315,6 +2370,7 @@ mod tests {
             rect: [10.0, 10.0, 100.0, 24.0],
             within: Vec::new(),
             active,
+            value: None,
         }
     }
 
@@ -2347,6 +2403,77 @@ mod tests {
             probed("panel-close", "button", "Cancel", false),
             probed("reason", "textbox", "", true),
         ]
+    }
+
+    fn typed(id: &str, value: &str) -> Element {
+        Element {
+            value: Some(value.to_owned()),
+            ..probed(id, "textbox", "", true)
+        }
+    }
+
+    #[test]
+    fn a_value_assert_holds_when_the_field_reads_exactly_that() {
+        let taken = shot("typed", "name", vec![typed("name", "TRee-7 Oslo")]);
+        let held = verdict(
+            r#"kind = "value"
+            shot = "typed"
+            element = { id = "name" }
+            equals = "TRee-7 Oslo"
+            because = "every key lands""#,
+            &taken,
+        );
+        assert_eq!(held, None);
+    }
+
+    #[test]
+    fn a_value_assert_fails_naming_what_the_field_reads_instead() {
+        let taken = shot("typed", "name", vec![typed("name", "TR-7Olo")]);
+        let failure = verdict(
+            r#"kind = "value"
+            shot = "typed"
+            element = { id = "name" }
+            equals = "TRee-7 Oslo"
+            because = "every key lands""#,
+            &taken,
+        )
+        .expect("the field lost characters");
+        assert!(
+            failure.contains("\"TR-7Olo\""),
+            "what the field reads is named: {failure}"
+        );
+        assert!(failure.contains("\"TRee-7 Oslo\""), "{failure}");
+        assert!(failure.contains("every key lands"), "{failure}");
+    }
+
+    #[test]
+    fn a_value_assert_fails_on_an_element_with_no_value() {
+        let taken = shot("typed", "name", panel());
+        let failure = verdict(
+            r#"kind = "value"
+            shot = "typed"
+            element = { id = "panel-close" }
+            equals = ""
+            because = "a button has no value""#,
+            &taken,
+        )
+        .expect("a button has no value");
+        assert!(failure.contains("has no value"), "{failure}");
+    }
+
+    #[test]
+    fn a_value_assert_fails_when_nothing_matches() {
+        let taken = shot("typed", "name", vec![typed("name", "Oslo")]);
+        let failure = verdict(
+            r#"kind = "value"
+            shot = "typed"
+            element = { id = "missing" }
+            equals = "Oslo"
+            because = "every key lands""#,
+            &taken,
+        )
+        .expect("nothing matches");
+        assert!(failure.contains("missing"), "{failure}");
     }
 
     #[test]

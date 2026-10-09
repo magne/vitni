@@ -1,7 +1,7 @@
 //! The `gui-pass` probe: a debug build started with [`PROBE_VAR`] set serves `GET /elements` on that
 //! loopback address, answering with every element that carries an `id`, a `data-hook` or an ARIA role
 //! (explicit, or implied by its tag) — its rect, text, `aria-label` and the ids, hooks and roles of its
-//! ancestors, and whether it holds focus — plus whether the page is ready and focused, and whether every
+//! ancestors, whether it holds focus and, for a text field, its value — plus whether the page is ready and focused, and whether every
 //! map container holds a `MapLibre` map that is idle (constructed, loaded and not moving, so nothing
 //! queued has yet to reach its canvas). `cargo xtask gui-pass` resolves a scenario's targets over that
 //! list, so its scenarios name elements instead of window pixels, and waits for idle maps before a step
@@ -144,6 +144,7 @@ const describe = (el) => {
         rect: [rect.x, rect.y, rect.width, rect.height],
         within,
         active: el === document.activeElement,
+        value: el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' ? el.value : null,
     };
 };
 const viewport = [window.innerWidth, window.innerHeight];
