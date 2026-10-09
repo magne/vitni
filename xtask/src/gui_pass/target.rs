@@ -37,6 +37,9 @@ pub struct Element {
     /// Whether it is `document.activeElement` — what a key press reaches.
     #[serde(default)]
     pub active: bool,
+    /// Its current `value` — what a text field holds — or `None` for an element that has none.
+    #[serde(default)]
+    pub value: Option<String>,
 }
 
 /// What the probe saw at one moment: whether the page is up and focused, and every hooked element.
@@ -535,6 +538,7 @@ mod tests {
             within: Vec::new(),
             role: None,
             active: false,
+            value: None,
         }
     }
 

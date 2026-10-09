@@ -81,11 +81,9 @@ fn typed_reason_block() -> Element {
 #[test]
 fn the_reason_field_renders_the_draft_it_is_bound_to() {
     let html = render(typed_reason_block);
-    // The rationale input must carry a `value` bound to the draft. An unbound one is not merely
-    // "uncontrolled": `value` is a volatile attribute, so a missing one is re-written to the live DOM
-    // as a removal on every diff, blanking the field — which is how a save once carried only the last
-    // character typed (`components/text_input.rs` header). SSR cannot type, but it can prove the
-    // binding is in the markup at all, which is exactly what was missing.
+    // The rationale input must carry a `value` bound to the draft, or a reason restored from a parked
+    // edit buffer comes back as an empty field while the draft still holds it — what the operator sees
+    // and what Save commits would differ. SSR cannot type, but it can prove the binding is in the markup.
     let field = html
         .split('<')
         .find(|tag| tag.contains(r#"name="prov-reason""#))

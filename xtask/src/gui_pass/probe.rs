@@ -130,13 +130,19 @@ mod tests {
     fn a_snapshot_is_fetched_and_moved_into_window_pixels() {
         let json = r#"{"ready": true, "focused": false, "maps_idle": false, "active": "global-search",
             "viewport": [1800, 1170], "elements": [{"id": null, "hook": "rail-item", "text": "People 2", "label": "",
-            "rect": [0, 160, 230, 30], "within": ["rail"]}]}"#;
+            "rect": [0, 160, 230, 30], "within": ["rail"]}, {"id": "given", "hook": null, "role": "textbox",
+            "text": "", "label": "", "value": "Oslo", "rect": [300, 160, 200, 24], "within": []}]}"#;
         let (address, served) = serve_once(ok(json));
         let snapshot = snapshot(&address, 1200).expect("a snapshot");
         assert!(snapshot.ready && !snapshot.focused);
         assert!(!snapshot.maps_idle, "a map still drawing is reported");
         assert_eq!(snapshot.active.as_deref(), Some("global-search"));
         assert_eq!(snapshot.elements[0].rect, [0.0, 190.0, 230.0, 30.0]);
+        assert_eq!(
+            snapshot.elements[0].value, None,
+            "an element with no value reports none"
+        );
+        assert_eq!(snapshot.elements[1].value.as_deref(), Some("Oslo"));
         let request = served.join().expect("served");
         assert!(request.starts_with("GET /elements HTTP/1.1\r\n"), "{request}");
     }
