@@ -228,10 +228,6 @@ which is what makes them worth fixing in the shared code rather than per screen.
   ad-hoc `aria-expanded` on four unrelated widgets. The Dashboard's children are the run's entries
   within the feed's scan window (`MAX_ACTIVITY_SCAN`), so disclosing a large run needs a read of its
   entries by run.
-- **Fast typing can lose characters in record text fields.** Under Xvfb, keys 12 ms apart into a new
-  Tag's Name came out wrong 3 runs in 4 (`TR-7Olo` for "TRee-7 Oslo"). At 30 ms apart none were lost.
-  The suspected cause, unconfirmed, is the controlled input's round trip: a key landing before the
-  re-render writes the old `value` back is overwritten. Needs a check on a real desktop. — #382
 
 ### Lists, search & scale
 
@@ -493,15 +489,6 @@ ADR 0022 out-of-scope tail:
 - `List`/detail descriptions + plugin-driven navigation.
 - Per-field validation vocabulary.
 - Plugin-prefilled field values.
-- **A plugin form's fields are uncontrolled.** `field_input` (`vocabulary_render.rs:95-179`) binds no
-  `value:` on Text, Textarea, Number or Date, so any re-render of the enclosing `FormView` blanks them
-  in the live webview (the volatile-`value` mechanism in `components/text_input.rs`'s header). Not
-  reachable today — `FormView` reads `values` only in `use_signal`'s initializer and in the action
-  button's `onclick`, so it subscribes to nothing the typing writes, and its props are identity-stable
-  under an outer re-render — but one added read makes every plugin field lose what was typed. Fixing it
-  is not the one-line binding the record pane needed: `values` holds the *parsed* JSON a plugin action
-  submits, and round-tripping `Number` through it fights the typist ("1." re-renders as "1.0"), so the
-  numeric field needs a raw-text buffer, and per-field hooks are ruled out by the dynamic field list.
 - The `query` capability for `ui-panel`.
 - Long-running / streaming actions.
 - Multi-panel pages.

@@ -159,13 +159,14 @@ cargo xtask gui-pass --workspace gen     # drive your own config + workspace ins
 ```
 
 Scenarios are **TOML, not Rust** — `crates/vitni-ui-dioxus/tests/gui-pass/*.toml`, so adding one
-needs no rebuild. Each lists `[[step]]`s (`shot`, `click`, `key`, `text` to type a word, `drag`,
-`wheel`, `wait` to sleep and let a timed effect fire, `await-exit` to wait for the GUI process to quit)
-and `[[assert]]`s over the shots by name: `differ` for "the UI reacted",
-`match` for "the UI came back to this state", both with an RMSE tolerance and an optional `region` to
-compare one element's area instead of the whole shot; `focus`, `present` and `absent` read the probe's
-snapshot at one shot instead of its pixels — the `element` named holds keyboard focus, is rendered (mounted, non-zero size — not
-opacity or scroll clipping), or is not; `manifest` checks the running worker's
+needs no rebuild. Each lists `[[step]]`s (`shot`, `click`, `key`, `text` to type a word — `delay_ms`
+sets the gap between keys, default 40 — `drag`, `wheel`, `wait` to sleep and let a timed effect fire,
+`await-exit` to wait for the GUI process to quit) and `[[assert]]`s over the shots by name: `differ` for
+"the UI reacted", `match` for "the UI came back to this state", both with an RMSE tolerance and an
+optional `region` to compare one element's area instead of the whole shot; `focus`, `present`, `absent`
+and `value` read the probe's snapshot at one shot instead of its pixels — the `element` named holds
+keyboard focus, is rendered (mounted, non-zero size — not opacity or scroll clipping), is not, or holds
+exactly `equals` as a text field's value; `manifest` checks the running worker's
 `workspace/workspace.toml` on disk for a substring instead, proving a write reached disk rather than only
 an in-memory signal (unavailable under `--real-config`, whose workspace path is the caller's own).
 
@@ -224,9 +225,9 @@ Writing one:
   first shot. A `shot` that grabs a flat colour is re-grabbed until it is painted, failing only at that
   same 4 s cap.
 - **`text` types letters, digits, space and `-.,:/` only**, 40 ms apart in one `xdotool key` call
-  (`xdotool type` drops characters on Xvfb). Keep per-character `key` steps where the point is a
-  re-render *between* keystrokes (`restriction-edit`, `untag-reason` guard the reason field against being
-  blanked after each one).
+  (`xdotool type` drops characters on Xvfb); `delay_ms = 10` types faster than any person
+  (`fast-typing`). Keep per-character `key` steps where the point is a re-render *between* keystrokes
+  (`restriction-edit`, `untag-reason` guard the reason field against being blanked after each one).
 - **Scenarios run in parallel** by default (one worker per four cores, at most four; `--jobs N` to
   override). Worker *n* has its own display (`:99`+*n*), home and workspace: worker 0 under
   `target/gui-pass/`, the rest under `target/gui-pass/workers/<n>/`, all restored from one shared seed.

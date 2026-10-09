@@ -1,0 +1,123 @@
+# #382: keys sent 10 ms apart into a record's text field must all land, in order. Each keystroke
+# round-trips webview → `oninput` → re-render; when that re-render wrote the field's `value` back, a key
+# that reached the DOM before the write-back of an older value was overwritten ("TRee-7 Oslo" came out
+# `TR-7Olo`). A person typing at 40 ms never saw it, so this types far faster than the `text` step's
+# default gap, and reads the field's value from the probe rather than from its glyphs.
+#
+# Three rounds into a new Tag's Name (autofocused, a `TextInput` alone), cleared between them, then one
+# into a new Person's Given name (a `TextField`): one round can pass by luck at this rate, three in a
+# row could not before the fix.
+description = "Keys typed 10 ms apart all land, in order, in a record's text fields (#382)"
+
+[[step]]
+do = "click"
+at = { role = "listitem", text = "Tags" }
+label = "rail: Tags"
+
+[[step]]
+do = "key"
+chord = "ctrl+n"
+label = "⌘N: a new Tag draft, Name autofocused"
+
+[[step]]
+do = "text"
+text = "TRee-7 Oslo"
+delay_ms = 10
+label = "type fast: TRee-7 Oslo"
+
+[[step]]
+do = "shot"
+name = "tag-first"
+
+[[step]]
+do = "key"
+chord = "ctrl+a"
+label = "select all of Name"
+
+[[step]]
+do = "key"
+chord = "BackSpace"
+label = "clear Name"
+
+[[step]]
+do = "text"
+text = "Bergen kirkebok 1801-1820"
+delay_ms = 10
+label = "type fast: Bergen kirkebok 1801-1820"
+
+[[step]]
+do = "shot"
+name = "tag-second"
+
+[[step]]
+do = "key"
+chord = "ctrl+a"
+label = "select all of Name"
+
+[[step]]
+do = "key"
+chord = "BackSpace"
+label = "clear Name"
+
+[[step]]
+do = "text"
+text = "Folketelling 1910, Oslo"
+delay_ms = 10
+label = "type fast: Folketelling 1910, Oslo"
+
+[[step]]
+do = "shot"
+name = "tag-third"
+
+[[step]]
+do = "click"
+at = { role = "listitem", text = "People" }
+label = "rail: People"
+
+[[step]]
+do = "key"
+chord = "ctrl+n"
+label = "⌘N: a new Person draft"
+
+[[step]]
+do = "click"
+at = { id = "given" }
+label = "Given name"
+
+[[step]]
+do = "text"
+text = "Kari Marie Johansdatter"
+delay_ms = 10
+label = "type fast: Kari Marie Johansdatter"
+
+[[step]]
+do = "shot"
+name = "person-given"
+
+[[assert]]
+kind = "value"
+shot = "tag-first"
+element = { id = "tag-name" }
+equals = "TRee-7 Oslo"
+because = "every key typed 10 ms apart lands in the Tag's Name, in order"
+
+[[assert]]
+kind = "value"
+shot = "tag-second"
+element = { id = "tag-name" }
+equals = "Bergen kirkebok 1801-1820"
+because = "every key typed 10 ms apart lands in the Tag's Name, in order"
+
+[[assert]]
+kind = "value"
+shot = "tag-third"
+element = { id = "tag-name" }
+equals = "Folketelling 1910, Oslo"
+because = "every key typed 10 ms apart lands in the Tag's Name, in order"
+
+[[assert]]
+kind = "value"
+shot = "person-given"
+element = { id = "given" }
+equals = "Kari Marie Johansdatter"
+because = "every key typed 10 ms apart lands in a Person's Given name, in order"

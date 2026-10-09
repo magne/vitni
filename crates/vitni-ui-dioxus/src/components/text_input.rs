@@ -4,15 +4,19 @@
 //! [`keep_typing_local`] is wired exactly once (fixing "global keys fire inside text controls"); the
 //! `input-guard` xtask lint forbids raw form elements anywhere else.
 //!
-//! **Controlled, and not optionally so: the call site owns the value and forwards edits through
-//! `oninput`.** Omitting `value` does not merely leave the field uncontrolled — it makes every
-//! re-render *erase what the operator has typed*. `value` is a **volatile** attribute in
-//! `dioxus-html`, so `dioxus-core` re-writes it to the DOM on every diff whether it changed or not,
-//! and a `None` value is written as a *removal* whose interpreter shim runs `node.value = ""`. A field
-//! whose parent re-renders while it has focus therefore loses its text, silently: the signal still
-//! holds the old string, so the next keystroke's `event.value()` is that one character alone and
-//! overwrites it. That is how the provenance reason field committed only the last character typed —
-//! the whole-record save path's one operator-supplied "why".
+//! **Controlled: the call site owns the value and forwards edits through `oninput`** — but the value
+//! is *not* re-written to the DOM on every render. Dioxus's own `value` attribute is **volatile**, so
+//! `dioxus-core` re-writes it on every diff, and in the webview every keystroke is a round trip
+//! (`oninput` → signal → re-render → write-back). A key that reached the field before the write-back
+//! of an *older* value was overwritten by it: keys 10 ms apart lost characters (#382). So the field's
+//! value is written through a plain `"value"` attribute that only the first render sets, and every
+//! later change goes through [`push_value`] — and only when it is not an *echo*: the value the field
+//! itself last reported through `oninput`, which the DOM already holds (or has typed past). A change
+//! that did not come from the field — another record loaded into a mounted form, a draft reverted, a
+//! caller that normalises what was typed — differs from the echo and is pushed.
+//!
+//! Pass `value` wherever the call site owns the text. An omitted one is a field nothing ever writes
+//! to: it starts empty and keeps whatever is typed.
 //!
 //! Search widgets that must handle `Arrow`/`Enter`/`Escape` first pass an `onkeydown_extra` handler —
 //! those are non-character keys, so it composes with the guard (which only swallows unmodified typing).
@@ -20,9 +24,25 @@
 //! through the `extends = GlobalAttributes` spread; the few input/textarea-specific attributes the
 //! call sites need (`name`, `placeholder`, `min`, `max`, `rows`) are typed props.
 
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use dioxus::prelude::*;
 
 use crate::shell::focus_trap::keep_typing_local;
+
+/// The next [`TextInput`]'s `data-text-input` marker, which [`push_value`] finds the field by.
+static NEXT_MARKER: AtomicU64 = AtomicU64::new(0);
+
+/// Writes `value` into the mounted field marked `marker` — a change the field did not type itself.
+/// A no-op under SSR, which has no document.
+fn push_value(marker: u64, value: &str) {
+    let value = serde_json::Value::from(value);
+    let script = format!(
+        "const field = document.querySelector('[data-text-input=\"{marker}\"]'); \
+         if (field && field.value !== {value}) field.value = {value};"
+    );
+    document::eval(&script);
+}
 
 /// The native `type` of a [`TextInput`] rendered as an `<input>` (ignored when `multiline`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -53,8 +73,8 @@ impl TextInputKind {
 /// The behavior core for every text/number/date field and textarea. Wires the typing guard once.
 #[component]
 pub fn TextInput(
-    /// The controlled value. Accepts a `String` or an `Option<String>`; `None` omits the attribute,
-    /// which **blanks the live field on every re-render** — see the module header before doing it.
+    /// The controlled value. Accepts a `String` or an `Option<String>`; `None` leaves the field
+    /// uncontrolled — see the module header.
     #[props(default, into)]
     value: Option<String>,
     /// Fired on each input event (omit for a display-only field).
@@ -114,6 +134,15 @@ pub fn TextInput(
         class.push_str(" invalid");
     }
     let aria_invalid = if invalid { "true" } else { "false" };
+    let marker = use_hook(|| NEXT_MARKER.fetch_add(1, Ordering::Relaxed));
+    let initial = use_hook(|| value.clone());
+    let mut echo = use_hook(|| CopyValue::new(value.clone()));
+    use_effect(use_reactive!(|value| {
+        if *echo.peek() != value {
+            push_value(marker, value.as_deref().unwrap_or_default());
+            echo.set(value);
+        }
+    }));
     let on_key = move |event: KeyboardEvent| {
         if let Some(extra) = &onkeydown_extra {
             extra.call(event.clone());
@@ -121,6 +150,7 @@ pub fn TextInput(
         keep_typing_local(&event);
     };
     let on_input = move |event: FormEvent| {
+        echo.set(Some(event.value()));
         if let Some(oninput) = &oninput {
             oninput.call(event);
         }
@@ -153,7 +183,8 @@ pub fn TextInput(
                 rows,
                 disabled,
                 aria_invalid,
-                value,
+                "value": initial.clone(),
+                "data-text-input": marker,
                 oninput: on_input,
                 onkeydown: on_key,
                 onblur: on_blur,
@@ -174,7 +205,8 @@ pub fn TextInput(
             max,
             disabled,
             aria_invalid,
-            value,
+            "value": initial,
+            "data-text-input": marker,
             oninput: on_input,
             onkeydown: on_key,
             onblur: on_blur,

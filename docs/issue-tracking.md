@@ -177,7 +177,7 @@ rather than kept as history — the archive is the record.
 
 | Milestone | Contents |
 | --- | --- |
-| **`0.9 — UI stabilization`** | Bugfix and correctness before shipping. **Expected to grow substantially** — the list below is a floor, not a scope: most of what belongs here has not been found yet, because it takes real GUI use to surface. The 2026-08-12 walkthrough proved that twice over: the milestone had reached zero open issues, and one pass through the GUI refilled it with 15. One open: fast typing losing characters in record text fields (#382). |
+| **`0.9 — UI stabilization`** | Bugfix and correctness before shipping. **Expected to grow substantially** — the list below is a floor, not a scope: most of what belongs here has not been found yet, because it takes real GUI use to surface. The 2026-08-12 walkthrough proved that twice over: the milestone had reached zero open issues, and one pass through the GUI refilled it with 15. None open. |
 | **`0.10 — Record matching`** | Import that never duplicates and never guesses: record origins and import runs, the matching engine, identity decisions, staged import with side-by-side review, and versioned workspace backup (ADRs 0037–0041). Groomed in full in §4, in dependency order. |
 | **`1.0`** | Release mechanics only (#210, #211, #214, #215): generate real release keys, verify `release.yml` end-to-end on the first real tag, add the missing `[profile.release]`, and settle the cross-platform decision. The `.deb` default plugin path and the duplicated plugin-dir resolver (#212, #213) are closed. Also the deletion of the pre-1.0 backup upgraders, which freezes backup format v1 (#392, ADR 0041 §4). |
 
@@ -194,7 +194,7 @@ arithmetic.
 The remaining pre-1.0 gates, itemized from `issues.md` as they stand. Each is small enough to groom,
 which is the point of filing only what is being worked on.
 
-### `0.9 — UI stabilization` (1 open)
+### `0.9 — UI stabilization` (0 open)
 
 Ordered by severity, not area. **This milestone is deliberately open-ended, and the 2026-08-12
 walkthrough is the proof.** Every issue in the previous round closed, leaving the milestone empty — and
@@ -202,16 +202,12 @@ one pass through the real GUI, looking at nothing but what a user sees, refilled
 those are defects no SSR test could have caught, because they are about what reaches the DOM, the
 stylesheet or the webview rather than what the view logic decided. Treat the count as a floor again.
 
-**Open now (2026-10-09).** #382 is what is left of the 2026-08-12 round.
-
-| Item | Why it gates a release |
-| --- | --- |
-| [Fast typing can lose characters in record text fields](https://github.com/magne/vitni/issues/382) | Typed text silently differs from what was entered; unconfirmed outside Xvfb |
+**Open now (2026-10-09).** Nothing — the 2026-08-12 round is closed.
 
 **Closed since 2026-10-04:** the two mockup/sheet drifts (#501, #502), the `gui-pass` blank first shot
 (#503) and its pixel-addressed steps (#533), the merge/conflict mockup (#534), the History values split
 from it (#545), the palette stranding focus on `<body>` when it closed (#541, filed from `gui-pass`), and
-#424 below. #533 and #534 came from the 2026-10-08 grooming pass; #533 was tooling,
+#424 and #382 below. #533 and #534 came from the 2026-10-08 grooming pass; #533 was tooling,
 here on the vehicle rule like #322, because each layout move re-calibrated scenarios that test
 something else.
 
@@ -220,6 +216,7 @@ The 2026-08-12 round, closed in full:
 | Item | Why it gated a release |
 | --- | --- |
 | [A save run whose target leaves the strip hangs](https://github.com/magne/vitni/issues/302) | Save all can wedge the quit/close path with no way out and no message |
+| [Fast typing can lose characters in record text fields](https://github.com/magne/vitni/issues/382) | Typed text silently differed from what was entered: keys 10 ms apart lost characters |
 | [Attaching a note or media on seven record kinds discards the attach form's provenance](https://github.com/magne/vitni/issues/424) | The reason, surety and citations a user enters are silently lost from History, so the audit trail records less than the user asserted |
 | [The shared record tabs have no common layout contract](https://github.com/magne/vitni/issues/303) | Explanations below buttons, gone entirely when empty, and an add bar with no CSS rule at all — on all 13 screens |
 | [Attached records have four different presentations](https://github.com/magne/vitni/issues/304) | An attached note can be neither read nor opened from the record that references it |

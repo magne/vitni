@@ -61,8 +61,8 @@ pub fn ProvenanceBlock(
     allow_dna_evidence: bool,
 ) -> Element {
     let mut draft = draft;
-    // Read back for the controlled rationale input below: the block re-renders on every keystroke (it
-    // reads `draft()` here for the confidence index), and an unbound `value` would blank the live field.
+    // Read back for the controlled rationale input below, so the field shows the draft's reason — one
+    // restored from a parked edit buffer included.
     let rationale = draft().rationale;
     let confidence_index = draft()
         .confidence

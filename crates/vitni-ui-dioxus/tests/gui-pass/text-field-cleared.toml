@@ -1,0 +1,62 @@
+# #382: a text field is written to the DOM once, when it mounts, and after that only when its value
+# changes from somewhere other than its own typing (`components/text_input.rs`). The fast-typing fix
+# stopped re-writing the value on every render, so this proves the other half: a change made *outside*
+# the field, while it stays mounted, still reaches it. The top bar's ✕ clears the global search query
+# without touching the field itself — the field keeps focus (the button swallows its own mousedown), so
+# nothing remounts it either. Typing again afterwards proves the cleared field takes new keys.
+description = "A value changed outside a mounted text field reaches it: the global search's ✕ clears it (#382)"
+
+[[step]]
+do = "click"
+at = { id = "global-search" }
+label = "top bar: global search"
+
+[[step]]
+do = "text"
+text = "Kristiansand"
+delay_ms = 10
+label = "type fast: Kristiansand"
+
+[[step]]
+do = "shot"
+name = "typed"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Clear search" }
+label = "top bar: ✕ Clear search"
+
+[[step]]
+do = "shot"
+name = "cleared"
+
+[[step]]
+do = "text"
+text = "Oslo"
+delay_ms = 10
+label = "type fast: Oslo"
+
+[[step]]
+do = "shot"
+name = "retyped"
+
+[[assert]]
+kind = "value"
+shot = "typed"
+element = { id = "global-search" }
+equals = "Kristiansand"
+because = "every key typed into the global search lands"
+
+[[assert]]
+kind = "value"
+shot = "cleared"
+element = { id = "global-search" }
+equals = ""
+because = "✕ clears the query, and the mounted field must show it cleared"
+
+[[assert]]
+kind = "value"
+shot = "retyped"
+element = { id = "global-search" }
+equals = "Oslo"
+because = "the cleared field takes new keys, with nothing of the old query left"
