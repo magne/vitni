@@ -980,5 +980,7 @@ fn history_entry(loc: &Localizer, undo_text: &str, entry: &HistoryEntryVm) -> Hi
         count: entry.count.clone(),
         evidence: entry.evidence.clone(),
         changes,
+        value: entry.value.clone(),
+        replaced: entry.replaced.clone(),
     }
 }

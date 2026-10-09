@@ -127,6 +127,8 @@ fn history_rows() -> Vec<HistoryEntryVm> {
         count: None,
         evidence: None,
         children: Vec::new(),
+        value: None,
+        replaced: None,
     }]
 }
 

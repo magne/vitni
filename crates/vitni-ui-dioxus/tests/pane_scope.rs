@@ -151,6 +151,8 @@ fn undoable_entry() -> Vec<vitni_ui::HistoryEntryVm> {
         count: None,
         evidence: None,
         children: Vec::new(),
+        value: None,
+        replaced: None,
     }]
 }
 

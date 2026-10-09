@@ -199,6 +199,16 @@ history-operator-ai = KI-modell
 history-operator-unknown = ukjent operatør
 history-undo = Angre: { $what }
 history-undo-short = Angre
+# Verdien en Historikk-rad nevner ved siden av frasen (#545): hva en korreksjon erstattet, en lenket post
+# som etikett og id, rollen den ble lenket i, en DNA-matchs totaler og fjernede begrensninger.
+history-replaced = var { $value }
+history-value-record = { $label } ({ $id })
+history-value-role = { $record } ({ $role })
+history-value-dna = { $cm } cM over { $segments ->
+    [one] 1 segment
+   *[other] { $segments } segmenter
+}
+history-value-no-restrictions = ingen
 # Utvideren på en importkjørings Historikk-rad som viser endringene den samler (ADR 0049 §3).
 history-import-run-changes-toggle = Hva den endret
 
