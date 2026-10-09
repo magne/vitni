@@ -194,7 +194,7 @@ arithmetic.
 The remaining pre-1.0 gates, itemized from `issues.md` as they stand. Each is small enough to groom,
 which is the point of filing only what is being worked on.
 
-### `0.9 — UI stabilization` (3 open)
+### `0.9 — UI stabilization` (2 open)
 
 Ordered by severity, not area. **This milestone is deliberately open-ended, and the 2026-08-12
 walkthrough is the proof.** Every issue in the previous round closed, leaving the milestone empty — and
@@ -203,19 +203,17 @@ those are defects no SSR test could have caught, because they are about what rea
 stylesheet or the webview rather than what the view logic decided. Treat the count as a floor again.
 
 **Open now (2026-10-09).** #382 is what is left of the 2026-08-12 round. #500 is the one shipped
-screen that contradicts its mockup, filed on 2026-10-04 from a bullet already in `issues.md`. #541 was
-filed on 2026-10-08 from `gui-pass`, whose `overlay-dismiss` scenario clicks the top bar after each
-palette close to work around it (#533).
+screen that contradicts its mockup, filed on 2026-10-04 from a bullet already in `issues.md`.
 
 | Item | Why it gates a release |
 | --- | --- |
 | [A date row's four controls stack instead of sitting on one line](https://github.com/magne/vitni/issues/500) | Every date field on all 13 record screens draws a 5-row block where the mockup draws one row |
-| [Closing the command palette strands focus on `<body>`, so the next shell chord is dropped](https://github.com/magne/vitni/issues/541) | After the palette closes, `⌘K`, `?` and the `g`-prefix do nothing until the user clicks back into the app |
 | [Fast typing can lose characters in record text fields](https://github.com/magne/vitni/issues/382) | Typed text silently differs from what was entered; unconfirmed outside Xvfb |
 
 **Closed since 2026-10-04:** the two mockup/sheet drifts (#501, #502), the `gui-pass` blank first shot
 (#503) and its pixel-addressed steps (#533), the merge/conflict mockup (#534), the History values split
-from it (#545), and #424 below. #533 and #534 came from the 2026-10-08 grooming pass; #533 was tooling,
+from it (#545), the palette stranding focus on `<body>` when it closed (#541, filed from `gui-pass`), and
+#424 below. #533 and #534 came from the 2026-10-08 grooming pass; #533 was tooling,
 here on the vehicle rule like #322, because each layout move re-calibrated scenarios that test
 something else.
 

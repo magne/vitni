@@ -30,19 +30,17 @@ label = "palette: Esc"
 do = "shot"
 name = "palette-after-esc"
 
-# Closing the palette leaves focus on `<body>`, outside the `.app` that holds the shell's key
-# dispatcher, so a reopen chord sent now would be dropped (docs/issues.md, "Closing the command
-# palette strands focus"). Click the empty top bar, as the harness's own focus click
-# does, so the reopen reaches it — and the scrim target below proves the palette did reopen.
-[[step]]
-do = "click"
-at = { role = "banner", offset = [668, 33] }
-label = "top bar: put keyboard focus back in the app"
-
+# No click in between: closing the palette must hand focus back inside `.app`, whose dispatcher
+# takes the reopen chord (#541). The `palette-reopened` focus assertion and the scrim target below
+# both fail if it was dropped.
 [[step]]
 do = "key"
 chord = "ctrl+k"
 label = "palette: reopen"
+
+[[step]]
+do = "shot"
+name = "palette-reopened"
 
 [[step]]
 do = "click"
@@ -52,11 +50,6 @@ label = "palette: click the scrim"
 [[step]]
 do = "shot"
 name = "palette-after-click-away"
-
-[[step]]
-do = "click"
-at = { role = "banner", offset = [668, 33] }
-label = "top bar: focus back in the app — the scrim click left it on <body> too"
 
 [[step]]
 do = "shot"
@@ -89,6 +82,12 @@ because = "⌘K must open the command palette"
 kind = "match"
 shots = ["before-palette", "palette-after-esc"]
 because = "Esc must dismiss the command palette"
+
+[[assert]]
+kind = "focus"
+shot = "palette-reopened"
+element = { role = "combobox" }
+because = "Esc must return focus inside the app, so ⌘K reopens the palette and focus enters its input"
 
 [[assert]]
 kind = "match"

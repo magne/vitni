@@ -2,9 +2,9 @@
 //!
 //! Two shapes, because the right containment depends on how much there is to move between.
 //!
-//! The command palette and the help sheet each have a single primary focusable control, so focus
-//! enters declaratively via `autofocus` on that control and is contained by [`trap_tab`]:
-//! `Tab`/`Shift+Tab` are swallowed outright, which is correct when there is nowhere else to go.
+//! The command palette and the help sheet each have a single primary focusable control, so focus is
+//! contained by [`trap_tab`]: `Tab`/`Shift+Tab` are swallowed outright, which is correct when there is
+//! nowhere else to go. Both mount [`DialogFocus`] to move focus in and restore it on close.
 //!
 //! A dialog with several controls — the close/quit confirm's Cancel / Discard / Save, or any record
 //! side panel's form fields — cannot swallow

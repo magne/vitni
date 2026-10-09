@@ -276,16 +276,6 @@ Residuals from the shortcuts work (ADR 0030); see
 - **No keyboard topic in the in-app Help browser.** `vitni-ui::help.rs`'s `HelpSection::Reference`
   is documented as "Lookup material (shortcuts, glossaries)" and `Run::Kbd` is unused — no authored doc
   covers shortcuts; the `?` overlay is the only in-app reference today.
-- **Closing the command palette strands focus on `<body>`, so the next shell chord is dropped.** The
-  palette takes focus with `autofocus` on its input and mounts no `DialogFocus`, so nothing restores
-  the previously focused element when it closes (the help sheet and side panels do mount it). Once the
-  palette unmounts, focus is on `<body>`, outside the `.app` whose `onkeydown` is the shell dispatcher,
-  so `⌘K`, `?` and the `g`-prefix do nothing until the user clicks back into the app. `gui-pass` shows
-  it: in `overlay-dismiss`, `⌘K`, `Esc`, `⌘K` opens no second palette (the probe reports `active:
-  body`), and closing it with a scrim click strands focus the same way, so the scenario clicks the top
-  bar after each close. It went unnoticed because the scenario's
-  old pixel click on the scrim passed whether or not the palette had reopened; the scrim is now a
-  target, which fails when the palette is absent. — #541
 
 ### Pedigree & charts
 

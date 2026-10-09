@@ -17,7 +17,7 @@ use vitni_ui::{
 use crate::app::AppCtx;
 use crate::components::TextInput;
 use crate::services::load_palette_rows;
-use crate::shell::focus_trap::{dismiss_on_escape, trap_tab};
+use crate::shell::focus_trap::{DialogFocus, dismiss_on_escape, trap_tab};
 use crate::shell::nav_state::{NavState, Overlay, data_version_ticket};
 use crate::shell::{ChromeCtx, data_loc};
 
@@ -112,13 +112,20 @@ pub fn CommandPalette() -> Element {
                 role: "dialog",
                 aria_modal: "true",
                 aria_label: "{title}",
+                tabindex: "-1",
+                "data-focus-trap": "true",
                 onclick: move |event| event.stop_propagation(),
                 onkeydown: move |event| trap_tab(&event),
+                // Moves focus into the input and, once the palette closes by any route, back to the
+                // control that had it — without this, focus fell to `<body>`, outside `.app`, and the
+                // shell dispatcher dropped the next chord (#541). The input carries no `autofocus`:
+                // it would take focus first, and `DialogFocus` would then record the input itself as
+                // the control to restore.
+                DialogFocus {}
                 h1 { class: "sr-only", "{title}" }
                 div { class: "p-input",
                     TextInput {
                         class: "",
-                        autofocus: true,
                         role: "combobox",
                         aria_label: "{combobox_label}",
                         aria_autocomplete: "list",
