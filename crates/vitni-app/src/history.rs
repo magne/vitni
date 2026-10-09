@@ -53,7 +53,6 @@ use crate::workspace::Workspace;
 
 mod values;
 
-pub(crate) use values::record_label;
 pub use values::{ChangeValue, RecordRole, RecordValue};
 
 /// What kind of actor made a change — the DTO twin of [`AgentKind`], without its payload fields.
@@ -2330,6 +2329,97 @@ mod tests {
         assert_eq!(
             (record.kind.as_str(), record.label.as_deref()),
             ("tag", Some("Direct ancestor"))
+        );
+    }
+
+    #[tokio::test]
+    async fn an_unnamed_place_is_named_by_its_id_alone() {
+        let (workspace, human, _dir) = setup().await;
+        let place = crate::place::create_place(
+            &workspace,
+            &human,
+            crate::place::NewPlace {
+                human_id: None,
+                place_type: vitni_core::enums::PlaceType::City,
+                name: None,
+            },
+            Provenance::default(),
+            &[],
+        )
+        .await
+        .expect("place");
+        let event = crate::event::create_event(
+            &workspace,
+            &human,
+            crate::event::NewEvent {
+                human_id: None,
+                event_type: vitni_core::enums::EventType::Birth,
+            },
+            Provenance::default(),
+            &[],
+        )
+        .await
+        .expect("event");
+        crate::event::link_place(&workspace, &human, &event, &place, MutationMeta::default())
+            .await
+            .expect("link");
+
+        let log = super::change_log_for_event(&workspace, &event).await.expect("log");
+        let Some(ChangeValue::Record { record: linked, .. }) = &log[0].value else {
+            panic!("the place link names its place: {:?}", log[0]);
+        };
+        assert_eq!(
+            (linked.human_id.as_deref(), linked.label.as_deref()),
+            (Some(place.as_str()), None),
+            "an unnamed place's title is its id, so it has no label to repeat beside it"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_run_rows_folded_entries_are_labelled_too() {
+        let (workspace, human, _dir) = setup().await;
+        let tag = crate::tag::create_tag(
+            &workspace,
+            &human,
+            "Direct ancestor".to_owned(),
+            Provenance::default(),
+            &[],
+        )
+        .await
+        .expect("tag");
+        let mut child = synthetic_entry("c", Some(1), false);
+        child.value = Some(ChangeValue::Record {
+            record: super::RecordValue {
+                kind: "tag".to_owned(),
+                id: tag.clone(),
+                human_id: None,
+                label: None,
+            },
+            role: None,
+        });
+        let mut gone = synthetic_entry("g", Some(1), false);
+        gone.value = Some(ChangeValue::Record {
+            record: super::RecordValue {
+                kind: "place".to_owned(),
+                id: Uuid::from_u128(99).to_string(),
+                human_id: None,
+                label: None,
+            },
+            role: None,
+        });
+        let rows = group_runs(&[child, gone]);
+
+        let rows = super::values::label_records(&workspace, rows).await.expect("labels");
+        let Some(ActivityDetail::ImportRun { children, .. }) = &rows[0].detail else {
+            panic!("one run row: {rows:#?}");
+        };
+        let Some(ChangeValue::Record { record, .. }) = &children[0].value else {
+            panic!("the tag child keeps its value: {:?}", children[0]);
+        };
+        assert_eq!(record.label.as_deref(), Some("Direct ancestor"));
+        assert_eq!(
+            children[1].value, None,
+            "a record that no longer resolves drops the value"
         );
     }
 }

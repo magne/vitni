@@ -1799,6 +1799,7 @@ impl Localizer {
             ChangeValue::DnaGenomeBuild(build) => self.dna_genome_build_label(*build),
             ChangeValue::Confidence(confidence) => self.confidence_label(ConfidenceLevel::from(*confidence)),
             ChangeValue::Restrictions(restrictions) => self.restrictions_value(restrictions),
+            ChangeValue::Coordinates(point) => format!("{}, {}", point.latitude, point.longitude),
             ChangeValue::Number(number) => number.to_string(),
             ChangeValue::EvidenceAxes(analysis) => [
                 self.evidence_source_label(analysis.source),

@@ -18,6 +18,7 @@ use vitni_core::enums::{
 };
 use vitni_core::event::EventEventBody;
 use vitni_core::family::FamilyEventBody;
+use vitni_core::geo::GeoCoordinates;
 use vitni_core::media::MediaEventBody;
 use vitni_core::note::NoteEventBody;
 use vitni_core::person::event::PersonEventBody;
@@ -33,7 +34,7 @@ use vitni_db::StoredEvent;
 use crate::error::AppError;
 use crate::workspace::Workspace;
 
-use super::ChangeLogEntry;
+use super::{ActivityDetail, ChangeLogEntry};
 
 /// What one change set: the value it asserted, in a shape the frontend formats with its own labels.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -62,6 +63,8 @@ pub enum ChangeValue {
     Confidence(Confidence),
     /// A record's privacy restrictions; empty when they were cleared.
     Restrictions(Vec<Restriction>),
+    /// A place's point.
+    Coordinates(GeoCoordinates),
     /// A whole number (a tag's priority).
     Number(i64),
     /// A citation's evidence analysis.
@@ -109,22 +112,38 @@ pub enum RecordRole {
 /// The value `event` asserted, or `None` for a change that carries none (a creation, a merge, a
 /// correction) or one too large for a line (a geometry, a segment).
 pub(super) fn extract_value(event: &StoredEvent) -> Option<ChangeValue> {
-    let payload = &event.payload;
     match event.aggregate_type.as_str() {
-        "person" => person_value(serde_json::from_str(payload).ok()?),
-        "family" => family_value(serde_json::from_str(payload).ok()?),
-        "event" => event_value(serde_json::from_str(payload).ok()?),
-        "place" => place_value(serde_json::from_str(payload).ok()?),
-        "source" => source_value(serde_json::from_str(payload).ok()?),
-        "citation" => citation_value(serde_json::from_str(payload).ok()?),
-        "repository" => repository_value(serde_json::from_str(payload).ok()?),
-        "media" => media_value(serde_json::from_str(payload).ok()?),
-        "note" => note_value(serde_json::from_str(payload).ok()?),
-        "tag" => tag_value(serde_json::from_str(payload).ok()?),
-        "dna_test" => dna_test_value(serde_json::from_str(payload).ok()?),
-        "dna_match" => dna_match_value(serde_json::from_str(payload).ok()?),
-        "research_note" => research_note_value(serde_json::from_str(payload).ok()?),
+        "person" => person_value(decode(event)?),
+        "family" => family_value(decode(event)?),
+        "event" => event_value(decode(event)?),
+        "place" => place_value(decode(event)?),
+        "source" => source_value(decode(event)?),
+        "citation" => citation_value(decode(event)?),
+        "repository" => repository_value(decode(event)?),
+        "media" => media_value(decode(event)?),
+        "note" => note_value(decode(event)?),
+        "tag" => tag_value(decode(event)?),
+        "dna_test" => dna_test_value(decode(event)?),
+        "dna_match" => dna_match_value(decode(event)?),
+        "research_note" => research_note_value(decode(event)?),
         _ => None,
+    }
+}
+
+/// `event`'s payload as its aggregate's event body. Every historical event stays decodable (ADR 0002),
+/// so a failure is a bug: logged, and the entry shown without a value rather than failing the log.
+fn decode<T: serde::de::DeserializeOwned>(event: &StoredEvent) -> Option<T> {
+    match serde_json::from_str(&event.payload) {
+        Ok(body) => Some(body),
+        Err(error) => {
+            tracing::warn!(
+                aggregate_type = %event.aggregate_type,
+                event_type = %event.event_type,
+                %error,
+                "change-log value: event payload did not decode"
+            );
+            None
+        }
     }
 }
 
@@ -132,12 +151,11 @@ fn person_value(body: PersonEventBody) -> Option<ChangeValue> {
     match body {
         PersonEventBody::NameAsserted { name, .. } => text(crate::person::render_name(&name)),
         PersonEventBody::SexAsserted { sex, .. } => Some(ChangeValue::Sex(sex)),
-        PersonEventBody::FactAsserted { fact, .. } => match (fact.value, fact.date, fact.place_id) {
-            (Some(value), _, _) => text(value),
-            (None, Some(date), _) => Some(ChangeValue::Date(date)),
-            (None, None, Some(place)) => Some(record("place", &place)),
-            (None, None, None) => None,
-        },
+        PersonEventBody::FactAsserted { fact, .. } => fact
+            .value
+            .and_then(text)
+            .or_else(|| fact.date.map(ChangeValue::Date))
+            .or_else(|| fact.place_id.map(|place| record("place", &place))),
         PersonEventBody::ParticipationAsserted { event_id, role, .. } => {
             Some(record_as("event", &event_id, RecordRole::Participant(role)))
         }
@@ -219,11 +237,7 @@ fn place_value(body: PlaceEventBody) -> Option<ChangeValue> {
         }
         PlaceEventBody::NameAsserted { name, .. } => text(name.text),
         PlaceEventBody::EnclosedByAsserted { enclosed_by, .. } => Some(record("place", &enclosed_by.place_id)),
-        PlaceEventBody::CoordinatesAsserted { coordinates, .. } => text(format!(
-            "{:.4}, {:.4}",
-            coordinates.latitude.to_degrees(),
-            coordinates.longitude.to_degrees()
-        )),
+        PlaceEventBody::CoordinatesAsserted { coordinates, .. } => Some(ChangeValue::Coordinates(coordinates)),
         PlaceEventBody::CodeSet { code, .. } => text(code),
         PlaceEventBody::CitationAdded { citation_id, .. } => Some(record("citation", &citation_id)),
         PlaceEventBody::MediaAttached { media, .. } => Some(record("media", &media.media_id)),
@@ -519,8 +533,9 @@ fn target_of(event: &StoredEvent) -> Option<String> {
     value.get("target")?.as_str().map(str::to_owned)
 }
 
-/// Labels every record `entries` link to, reading each record once. A record that no longer resolves
-/// drops the value rather than show a bare id.
+/// Labels every record `entries` link to — their values, what they replaced, and the entries an
+/// import-run row folds — reading each record once and every person's name in one pass. A record that
+/// no longer resolves drops the value rather than show a bare id.
 ///
 /// # Errors
 ///
@@ -529,78 +544,136 @@ pub(super) async fn label_records(
     workspace: &Workspace,
     mut entries: Vec<ChangeLogEntry>,
 ) -> Result<Vec<ChangeLogEntry>, AppError> {
-    let mut resolved: HashMap<(String, String), Option<RecordValue>> = HashMap::new();
+    let mut keys = Vec::new();
+    for entry in &entries {
+        collect_records(entry, &mut keys);
+    }
+    if keys.is_empty() {
+        return Ok(entries);
+    }
+    let resolved = resolve_all(workspace, keys).await?;
     for entry in &mut entries {
-        for slot in [&mut entry.value, &mut entry.replaced] {
-            let Some(ChangeValue::Record { record, .. }) = slot.as_mut() else {
-                continue;
-            };
-            let key = (record.kind.clone(), record.id.clone());
-            let labelled = if let Some(labelled) = resolved.get(&key) {
-                labelled.clone()
-            } else {
-                let labelled = resolve(workspace, record).await?;
-                resolved.insert(key, labelled.clone());
-                labelled
-            };
-            match labelled {
-                Some(labelled) => *record = labelled,
-                None => *slot = None,
-            }
-        }
+        apply_labels(entry, &resolved);
     }
     Ok(entries)
 }
 
-/// `record` with its user-facing id and label, or `None` when it no longer resolves.
-async fn resolve(workspace: &Workspace, record: &RecordValue) -> Result<Option<RecordValue>, AppError> {
-    let store = workspace.store();
-    if record.kind == "tag" {
-        let name = store
-            .find_tag(&record.id)
-            .await?
-            .and_then(|tag| tag.name().map(str::to_owned));
-        return Ok(name.map(|name| RecordValue {
-            label: Some(name),
-            ..record.clone()
-        }));
+type RecordKey = (String, String);
+
+/// The `(kind, id)` of every record `entry` links to, its folded entries' included.
+fn collect_records(entry: &ChangeLogEntry, keys: &mut Vec<RecordKey>) {
+    for value in [&entry.value, &entry.replaced].into_iter().flatten() {
+        if let ChangeValue::Record { record, .. } = value {
+            keys.push((record.kind.clone(), record.id.clone()));
+        }
     }
-    let Some(human_id) = store.human_id_of(&record.kind, &record.id).await? else {
-        return Ok(None);
-    };
-    let label = record_label(workspace, &record.kind, &human_id).await?;
-    Ok(Some(RecordValue {
-        human_id: Some(human_id),
-        label,
-        ..record.clone()
-    }))
+    if let Some(ActivityDetail::ImportRun { children, .. }) = &entry.detail {
+        for child in children {
+            collect_records(child, keys);
+        }
+    }
 }
 
-/// A stored record's display label — a person's name, a place's title, a source's title, a
-/// repository's name — or `None` for a kind shown by its id alone, or a record with no label.
+/// Swaps each linked record in `entry` (and its folded entries) for its labelled form, or drops the
+/// value when the record did not resolve.
+fn apply_labels(entry: &mut ChangeLogEntry, resolved: &HashMap<RecordKey, RecordValue>) {
+    for slot in [&mut entry.value, &mut entry.replaced] {
+        let Some(ChangeValue::Record { record, .. }) = slot.as_mut() else {
+            continue;
+        };
+        match resolved.get(&(record.kind.clone(), record.id.clone())) {
+            Some(labelled) => *record = labelled.clone(),
+            None => *slot = None,
+        }
+    }
+    if let Some(ActivityDetail::ImportRun { children, .. }) = &mut entry.detail {
+        for child in children {
+            apply_labels(child, resolved);
+        }
+    }
+}
+
+/// Each record's user-facing id and label, read from its stored view: a tag's name, a person's display
+/// name (one pass for all of them), a place's first name, a source's title, a repository's name. Other
+/// kinds are shown by their id. Records that no longer resolve are left out.
 ///
 /// # Errors
 ///
 /// [`AppError`] on a store read failure.
-pub(crate) async fn record_label(
-    workspace: &Workspace,
-    kind: &str,
-    human_id: &str,
-) -> Result<Option<String>, AppError> {
+async fn resolve_all(workspace: &Workspace, keys: Vec<RecordKey>) -> Result<HashMap<RecordKey, RecordValue>, AppError> {
+    let store = workspace.store();
+    let mut resolved = HashMap::new();
+    let mut persons = Vec::new();
+    for (kind, id) in keys {
+        if resolved.contains_key(&(kind.clone(), id.clone())) {
+            continue;
+        }
+        let record = if kind == "tag" {
+            store
+                .find_tag(&id)
+                .await?
+                .and_then(|tag| tag.name().map(str::to_owned))
+                .map(|name| RecordValue {
+                    kind: kind.clone(),
+                    id: id.clone(),
+                    human_id: None,
+                    label: Some(name),
+                })
+        } else if let Some(human_id) = store.human_id_of(&kind, &id).await? {
+            let label = view_label(workspace, &kind, &human_id).await?;
+            if kind == "person" {
+                persons.push(human_id.clone());
+            }
+            Some(RecordValue {
+                kind: kind.clone(),
+                id: id.clone(),
+                human_id: Some(human_id),
+                label,
+            })
+        } else {
+            None
+        };
+        if let Some(record) = record {
+            resolved.insert((kind, id), record);
+        }
+    }
+    if !persons.is_empty() {
+        let names = crate::person::person_names(workspace, &persons).await?;
+        for record in resolved.values_mut() {
+            if record.kind == "person" {
+                record.label = record
+                    .human_id
+                    .as_ref()
+                    .and_then(|human_id| names.get(human_id))
+                    .cloned();
+            }
+        }
+    }
+    Ok(resolved)
+}
+
+/// A place's, source's or repository's label from its own stored view, never a whole-workspace scan;
+/// `None` for every other kind, and for a record with no label of its own.
+///
+/// # Errors
+///
+/// [`AppError`] on a store read failure.
+async fn view_label(workspace: &Workspace, kind: &str, human_id: &str) -> Result<Option<String>, AppError> {
+    let store = workspace.store();
     let label = match kind {
-        "person" => crate::show_person(workspace, human_id)
+        "place" => store
+            .find_place(human_id)
             .await?
-            .and_then(|person| person.display_name),
-        "place" => crate::show_place(workspace, human_id)
+            .and_then(|place| place.names().first().map(|name| name.text.clone())),
+        "source" => store
+            .find_source(human_id)
             .await?
-            .map(|place| place.generated_title),
-        "source" => crate::show_source(workspace, human_id)
+            .and_then(|source| source.title().map(str::to_owned)),
+        "repository" => store
+            .find_repository(human_id)
             .await?
-            .and_then(|source| source.title),
-        "repository" => crate::show_repository(workspace, human_id)
-            .await?
-            .and_then(|repository| repository.name),
+            .and_then(|repository| repository.name().map(str::to_owned)),
         _ => None,
     };
-    Ok(label.filter(|label| !label.is_empty()))
+    Ok(label.filter(|label| !label.trim().is_empty() && label != human_id))
 }
