@@ -1511,8 +1511,8 @@ async fn attachables(ws: &Workspace, session: &Session) -> Attachables {
     Attachables { note, media, draft }
 }
 
-/// Asserts `log` holds an `event_type` entry carrying the filled draft's rationale, confidence and
-/// citation.
+/// Asserts `log` holds an `event_type` entry carrying the filled draft's rationale, confidence,
+/// citation and evidence analysis.
 fn assert_attach_carries_draft(log: &[ChangeLogEntry], event_type: &str) {
     let entry = log
         .iter()
@@ -1529,6 +1529,15 @@ fn assert_attach_carries_draft(log: &[ChangeLogEntry], event_type: &str) {
         "{event_type} carries the draft's confidence"
     );
     assert_eq!(entry.citations.len(), 1, "{event_type} carries the draft's citation");
+    assert_eq!(
+        entry.evidence_analysis,
+        Some(vitni_app::EvidenceAnalysis {
+            source: SourceQuality::Original,
+            information: InformationKind::Primary,
+            evidence: EvidenceKind::Direct,
+        }),
+        "{event_type} carries the draft's evidence analysis"
+    );
 }
 
 #[tokio::test]

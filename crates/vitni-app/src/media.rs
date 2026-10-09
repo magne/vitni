@@ -424,7 +424,7 @@ fn parse_tag_id(id: &str) -> Result<TagId, AppError> {
         .map_err(|_| AppError::TagNotFound(id.to_owned()))
 }
 
-/// Attaches a note (by its `human_id`) to a media object — the importer-facing wrapper.
+/// Attaches a note (by its `human_id`) to a media object — the frontend/importer-facing wrapper.
 ///
 /// # Errors
 ///

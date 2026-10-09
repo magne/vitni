@@ -784,7 +784,7 @@ fn summarize(view: &RepositoryView, lookups: &RepositoryLookups) -> RepositorySu
     }
 }
 
-/// Attaches a note (by its `human_id`) to a repository — the importer-facing wrapper.
+/// Attaches a note (by its `human_id`) to a repository — the frontend/importer-facing wrapper.
 ///
 /// # Errors
 ///

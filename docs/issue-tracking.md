@@ -201,10 +201,10 @@ one pass through the real GUI, looking at nothing but what a user sees, refilled
 those are defects no SSR test could have caught, because they are about what reaches the DOM, the
 stylesheet or the webview rather than what the view logic decided. Treat the count as a floor again.
 
-**Open now (2026-10-04).** #382 is what is left of that round; #424 closed on 2026-10-09. The other four were filed on
-2026-10-04 from bullets already in `issues.md`: one shipped screen that contradicts its mockup, two
-mockup/sheet drifts against the rule that the mockups describe shipped behaviour, and the `gui-pass`
-flakes that make every scenario's first assertion unreliable.
+**Open now (2026-10-04).** #382 is what is left of that round; #424 closed on 2026-10-09. The other
+four were filed on 2026-10-04 from bullets already in `issues.md`: one shipped screen that contradicts
+its mockup, two mockup/sheet drifts against the rule that the mockups describe shipped behaviour, and
+the `gui-pass` flakes that make every scenario's first assertion unreliable.
 
 | Item | Why it gates a release |
 | --- | --- |

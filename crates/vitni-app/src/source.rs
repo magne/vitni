@@ -1029,8 +1029,8 @@ fn modal_evidence(citations: &[SourceCitationRef]) -> Option<EvidenceAnalysis> {
     })
 }
 
-/// Attaches a media object (by its `human_id`) to a source — the importer-facing wrapper that
-/// resolves the media `human_id` to its id, so a bulk importer never handles UUIDs.
+/// Attaches a media object (by its `human_id`) to a source — the frontend/importer-facing wrapper
+/// that resolves the media `human_id` to its id, so a caller never handles UUIDs.
 ///
 /// # Errors
 ///
@@ -1060,7 +1060,7 @@ pub async fn import_attach_source_media(
     .await
 }
 
-/// Attaches a note (by its `human_id`) to a source — the importer-facing wrapper.
+/// Attaches a note (by its `human_id`) to a source — the frontend/importer-facing wrapper.
 ///
 /// # Errors
 ///

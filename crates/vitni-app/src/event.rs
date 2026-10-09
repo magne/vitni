@@ -568,8 +568,8 @@ pub struct ImportedMediaRef {
     pub input: MediaRefInput,
 }
 
-/// Attaches a media object (by its `human_id`) to an event — the importer-facing wrapper that
-/// resolves the media `human_id` to its id, so a bulk importer never handles UUIDs.
+/// Attaches a media object (by its `human_id`) to an event — the frontend/importer-facing wrapper
+/// that resolves the media `human_id` to its id, so a caller never handles UUIDs.
 ///
 /// # Errors
 ///
@@ -591,7 +591,7 @@ pub async fn import_attach_event_media(
     attach_event_media(workspace, session, event_human_id, media_id, media.input, meta).await
 }
 
-/// Attaches a note (by its `human_id`) to an event — the importer-facing wrapper.
+/// Attaches a note (by its `human_id`) to an event — the frontend/importer-facing wrapper.
 ///
 /// # Errors
 ///
