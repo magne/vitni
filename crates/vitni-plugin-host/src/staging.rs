@@ -8,10 +8,10 @@
 //! what each entity became.
 
 use vitni_app::{
-    CommitControl, CommitOutcome, EntityFields, EntityRef, ImportPlan, ImportReview, LinkKind, MatchReply, NewFact,
-    PairAnswer, PlanError, PlanReply, PlanStep, RecordGraph, ReviewReply, RunToEnd, StagedCitation, StagedEntity,
-    StagedEvent, StagedFamily, StagedLink, StagedMedia, StagedNote, StagedPerson, StagedPlace, StagedRepository,
-    StagedSource, StagedTag, Timestamp,
+    CommitControl, CommitOutcome, EntityFields, EntityRef, FileDate, ImportPlan, ImportReview, LinkKind, MatchReply,
+    NewFact, PairAnswer, PlanError, PlanReply, PlanStep, RecordGraph, ReviewReply, RunToEnd, StagedCitation,
+    StagedEntity, StagedEvent, StagedFamily, StagedLink, StagedMedia, StagedNote, StagedPerson, StagedPlace,
+    StagedRepository, StagedSource, StagedTag, Timestamp,
 };
 use vitni_core::geo::GeoCoordinates;
 use vitni_core::matching::MatchableKind;
@@ -31,23 +31,23 @@ use crate::{ProgressControl, ProgressStep, ProgressUpdate};
 /// How many writes pass between two progress reports of a bulk commit.
 const REPORT_EVERY: u32 = 10;
 
-/// Reads the export date a guest declared: the instant when it parses, else the date as declared.
+/// Reads the export date a guest declared.
 ///
 /// A date that cannot be read degrades to no date — the conservative, additive-only default (ADR 0029
 /// §3): a malformed date is the guest's format-parsing problem, not a capability violation. It is
-/// logged and kept verbatim, so the run can say why nothing was replaced.
-fn read_file_date(declared: Option<String>) -> (Option<Timestamp>, Option<String>) {
+/// logged and kept as declared, so the run can say why nothing was replaced.
+fn read_file_date(declared: Option<String>) -> FileDate {
     let Some(declared) = declared else {
-        return (None, None);
+        return FileDate::Undeclared;
     };
     if let Some(asserted_at) = Timestamp::parse_rfc3339(&declared) {
-        return (Some(asserted_at), None);
+        return FileDate::Read(asserted_at);
     }
     tracing::warn!(
         %declared,
         "the file's export date cannot be read, so the import replaces no single value (ADR 0029 §3)"
     );
-    (None, Some(declared))
+    FileDate::Unreadable(declared)
 }
 
 impl staging::Host for HostState {
@@ -105,10 +105,9 @@ impl HostState {
         }
         tracing::debug!(?dataset_hint, ?source_label, "import declared");
         self.dataset_hint = dataset_hint.map(str::to_owned);
-        (self.file_asserted_at, self.unreadable_file_date) = read_file_date(file_asserted_at);
+        self.file_date = read_file_date(file_asserted_at);
         if let Some(run) = &self.run {
-            run.pending()
-                .set_file_date(self.file_asserted_at, self.unreadable_file_date.clone());
+            run.pending().set_file_date(self.file_date.clone());
         }
         Ok(())
     }
@@ -119,7 +118,7 @@ impl HostState {
     /// there, writing nothing. With no frontend to ask, every possible match is left for later.
     async fn commit_now(&mut self, graphs: Vec<RecordGraph>) -> Result<staging::SubmitOutcome, types::CapabilityError> {
         let template = self.provenance();
-        let mut review = ImportReview::plan(&self.workspace, &self.session, graphs, self.file_asserted_at)
+        let mut review = ImportReview::plan(&self.workspace, &self.session, graphs, self.file_date.asserted_at())
             .await
             .map_err(|error| plan_capability_error(&error))?;
         while let Some(question) = review
@@ -203,7 +202,7 @@ impl HostState {
             return Ok(());
         }
         let template = self.provenance();
-        let mut review = ImportReview::plan(&self.workspace, &self.session, graphs, self.file_asserted_at)
+        let mut review = ImportReview::plan(&self.workspace, &self.session, graphs, self.file_date.asserted_at())
             .await
             .map_err(plan_plugin_error)?;
         let mut reviewer = self.reviewer.take().unwrap_or_else(|| Box::new(DeferMatches));

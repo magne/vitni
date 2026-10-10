@@ -190,7 +190,7 @@ pub use note::{
     set_restrictions as set_note_restrictions, show_note, tag_note, undo_note_distinction_and_merge,
 };
 pub use note_change_set::{NoteChangeSet, commit_note_change_set};
-pub use origin_gate::{DryRun, DryWrite, PendingRun};
+pub use origin_gate::{DryRun, DryWrite, FileDate, PendingRun};
 pub use pedigree::{
     AncestorNode, AncestorSlot, DescendantChart, DescendantNode, Kinship, PedigreeChart,
     PersonRef as PedigreePersonRef, RelationshipResult, ancestors, descendants, relationship,

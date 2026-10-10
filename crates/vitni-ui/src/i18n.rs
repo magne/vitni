@@ -1940,8 +1940,8 @@ impl Localizer {
         )
     }
 
-    /// Why an import run replaced no value: its file declared an export date, `date` (verbatim), that
-    /// cannot be read, so the run only added to records (ADR 0029 §3).
+    /// Why an import run replaced no value: its file declared an export date, `date` (as the importer
+    /// declared it), that cannot be read, so the run only added to records (ADR 0029 §3).
     #[must_use]
     pub fn import_run_date_unread(&self, source: &str, date: &str) -> String {
         fl!(

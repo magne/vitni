@@ -18,10 +18,10 @@ use std::sync::Arc;
 use crate::run::{ActiveRun, ImportRunSpec, RunDataset, RunTemplate};
 use vitni_app::{
     Address, Age, AgeBound, AiConfig, AssociationRole, Attribute, Calendar, Confidence, DateInput, DateModifier,
-    DatePoint, DateQuality, ExternalId, FactType, GenealogicalDate, GenealogicalDateBody, MediaRefInput,
+    DatePoint, DateQuality, ExternalId, FactType, FileDate, GenealogicalDate, GenealogicalDateBody, MediaRefInput,
     MediaRefSummary, MutationMeta, NameType, NewCitation, NewEvent, NewMedia, NewNote, NewParticipation, NewPerson,
     NewPlace, NewSource, PersonName, PersonNameParts, Provenance, RecordGraph, Rect, RepositoryLinkRef, Session,
-    Timestamp, Workspace, build_genealogical_date,
+    Workspace, build_genealogical_date,
 };
 use vitni_app::{AppError, ChosenDataset, DatasetChoice, choose_dataset, dataset_required, propose_dataset};
 use vitni_core::enums::{
@@ -66,11 +66,10 @@ pub struct HostState {
     source: Option<File>,
     /// The opened export sink, set by `export-sink.open`.
     sink: Option<File>,
-    /// The document's own export date (ADR 0029 §2), declared by `staging.begin-run`. `None` until
-    /// then, or if the guest never declares one (today's additive-only behavior, §3).
-    pub(crate) file_asserted_at: Option<Timestamp>,
-    /// The export date `staging.begin-run` declared, verbatim, when it could not be read (§3).
-    pub(crate) unreadable_file_date: Option<String>,
+    /// The document's own export date (ADR 0029 §2), declared by `staging.begin-run`. Undeclared
+    /// until then, or if the guest never declares one; without a readable date an import is
+    /// additive-only (§3).
+    pub(crate) file_date: FileDate,
     /// The document header's fingerprint (ADR 0037 §3), declared by `staging.begin-run`.
     pub(crate) dataset_hint: Option<String>,
     /// The import run this invocation writes (ADR 0037 §5); `None` outside an import, where writes
@@ -127,8 +126,7 @@ impl HostState {
             io,
             source: None,
             sink: None,
-            file_asserted_at: None,
-            unreadable_file_date: None,
+            file_date: FileDate::Undeclared,
             dataset_hint: None,
             run: None,
             staging: Staging::Held,
@@ -141,11 +139,7 @@ impl HostState {
     /// Makes this invocation an import that writes the run `template` describes into `dataset` (ADR
     /// 0037 §5), carrying what the document declared so far.
     pub(crate) fn open_run(&mut self, template: RunTemplate, dataset: ChosenDataset) {
-        let declared = (
-            self.dataset_hint.clone(),
-            self.file_asserted_at,
-            self.unreadable_file_date.clone(),
-        );
+        let declared = (self.dataset_hint.clone(), self.file_date.clone());
         let run = ActiveRun::new(template, dataset, declared);
         self.session = self.session.clone().with_import_run(Arc::clone(run.pending()));
         self.run = Some(run);
@@ -388,7 +382,7 @@ impl commands::Host for HostState {
             &self.session,
             &person,
             to_sex(sex),
-            self.file_asserted_at,
+            self.file_date.asserted_at(),
             self.provenance(),
         )
         .await

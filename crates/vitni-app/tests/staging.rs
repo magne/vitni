@@ -1789,7 +1789,10 @@ async fn same_for_the_group_on_a_pair_outside_any_group_decides_nothing() {
 /// An importer's session writing a fresh run of `dataset` from a file exported at `exported`.
 fn dated_importer(dataset: DatasetId, exported: Timestamp) -> Session {
     let session = importer(dataset);
-    session.import_run().expect("run").set_file_date(Some(exported), None);
+    session
+        .import_run()
+        .expect("run")
+        .set_file_date(vitni_app::FileDate::Read(exported));
     session
 }
 

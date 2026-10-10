@@ -117,9 +117,9 @@ pub enum ImportRunEventBody {
         source_path: Option<String>,
         /// The document's own export date, if it carries one.
         file_asserted_at: Option<Timestamp>,
-        /// The export date the document declared, verbatim, when it could not be read: the run then
-        /// changed no single-valued field (ADR 0029 §3). Absent when the date was read or none was
-        /// declared, and from runs recorded before runs kept it.
+        /// The export date the importer declared for the document, as it declared it, when it could
+        /// not be read: the run then changed no single-valued field (ADR 0029 §3). Absent when the
+        /// date was read or none was declared, and from runs recorded before runs kept it.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         unreadable_file_date: Option<String>,
         /// The document header's fingerprint, if the importer declared one (ADR 0037 §3). Absent

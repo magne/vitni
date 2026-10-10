@@ -111,8 +111,8 @@ pub struct RunRef {
     /// The export date the run's file declared (RFC 3339), which is what let it supersede a value
     /// recorded no later (ADR 0029 §1); `None` when the file carried none it could read.
     pub file_asserted_at: Option<String>,
-    /// The export date the run's file declared, verbatim, when it could not be read: the run then
-    /// replaced no single value (ADR 0029 §3).
+    /// The export date the importer declared for the run's file, as it declared it, when it could not
+    /// be read: the run then replaced no single value (ADR 0029 §3).
     pub unreadable_file_date: Option<String>,
 }
 

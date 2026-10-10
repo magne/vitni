@@ -400,15 +400,16 @@ fn date_point(value: &str) -> DatePoint {
 }
 
 /// Interprets a `<header>` element: its researcher's name, and its `<created date="…">` — the file's
-/// own export date (ADR 0029 §2). A time after the day (`2019-05-04T10:00:00`, which Gramps does not
-/// write but a hand-edited or third-party file may) is dropped, keeping the day. A missing or
-/// unparseable date yields `None` rather than a synthesized fallback (ADR 0029 §3): [`date_point`]
-/// never fails outright, so "unparseable" here means no year could be read.
+/// own export date (ADR 0029 §2). A time after the day (`2019-05-04T10:00:00`, also with a `t` or a
+/// space before it as RFC 3339 allows — Gramps writes none, but a hand-edited or third-party file may)
+/// is dropped, keeping the day. A missing or unparseable date yields `None` rather than a synthesized
+/// fallback (ADR 0029 §3): [`date_point`] never fails outright, so "unparseable" here means no year
+/// could be read.
 fn header(element: &Element) -> Header {
     let date = element
         .child("created")
         .and_then(|created| created.attr("date"))
-        .map(|date| date.split_once('T').map_or(date, |(day, _time)| day))
+        .map(|date| date.split_once(['T', 't', ' ']).map_or(date, |(day, _time)| day))
         .map(date_point)
         .filter(|point| point.year.is_some());
     let researcher = element

@@ -88,21 +88,17 @@ impl PendingRun {
         &self.operator
     }
 
-    /// Records the document's own export date (ADR 0029 §2) before its first write: `asserted_at` when
-    /// it could be read, else the date it declared, verbatim, as `unreadable` (§3).
-    pub fn set_file_date(&self, asserted_at: Option<Timestamp>, unreadable: Option<String>) {
+    /// Records the document's own export date (ADR 0029 §2, §3) before its first write.
+    pub fn set_file_date(&self, file_date: FileDate) {
         if let Ok(mut slot) = self.file_date.lock() {
-            *slot = FileDate {
-                asserted_at,
-                unreadable,
-            };
+            *slot = file_date;
         }
     }
 
     /// The document's export date, if it declared one that could be read.
     #[must_use]
     pub fn file_asserted_at(&self) -> Option<Timestamp> {
-        self.file_date.lock().ok().and_then(|slot| slot.asserted_at)
+        self.file_date.lock().ok().and_then(|slot| slot.asserted_at())
     }
 
     /// Whether any write went ahead, so the run was started and must be closed.
@@ -129,8 +125,8 @@ impl PendingRun {
         }
         let mut run = self.run.clone();
         if let Ok(slot) = self.file_date.lock() {
-            run.file_asserted_at = slot.asserted_at;
-            run.unreadable_file_date.clone_from(&slot.unreadable);
+            run.file_asserted_at = slot.asserted_at();
+            run.unreadable_file_date = slot.unreadable().map(str::to_owned);
         }
         let envelope = ImportRunCommandEnvelope {
             meta: self.operator.new_meta(Provenance::default(), Vec::new()),
@@ -153,12 +149,36 @@ impl PendingRun {
 }
 
 /// The export date a document declared (ADR 0029 §2, §3).
-#[derive(Debug, Default)]
-struct FileDate {
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum FileDate {
+    /// The document declared none.
+    #[default]
+    Undeclared,
+    /// The date, read.
+    Read(Timestamp),
+    /// The date as the importer declared it, which could not be read: the run replaces no
+    /// single-valued field.
+    Unreadable(String),
+}
+
+impl FileDate {
     /// The date, when it could be read.
-    asserted_at: Option<Timestamp>,
+    #[must_use]
+    pub fn asserted_at(&self) -> Option<Timestamp> {
+        match self {
+            Self::Read(asserted_at) => Some(*asserted_at),
+            Self::Undeclared | Self::Unreadable(_) => None,
+        }
+    }
+
     /// The date as declared, when it could not be read.
-    unreadable: Option<String>,
+    #[must_use]
+    pub fn unreadable(&self) -> Option<&str> {
+        match self {
+            Self::Unreadable(declared) => Some(declared),
+            Self::Undeclared | Self::Read(_) => None,
+        }
+    }
 }
 
 /// A dry run of an import's writes (ADR 0040 §2): the gate decides each write as it would, records the
@@ -616,7 +636,7 @@ mod tests {
                 dataset_hint: None,
             },
         ));
-        run.set_file_date(file_asserted_at, None);
+        run.set_file_date(file_asserted_at.map_or(super::FileDate::Undeclared, super::FileDate::Read));
         let session = Session::software("gedcom-import", "0.1.0").with_import_run(Arc::clone(&run));
         (session, run)
     }

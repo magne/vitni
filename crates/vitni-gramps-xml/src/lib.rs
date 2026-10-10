@@ -540,6 +540,19 @@ mod tests {
     }
 
     #[test]
+    fn a_header_export_date_with_a_space_before_its_time_keeps_its_day() {
+        let xml = br#"<?xml version="1.0" encoding="UTF-8"?>
+<database xmlns="http://gramps-project.org/xml/1.7.1/">
+<header>
+<created date="2019-05-04 10:00:00"/>
+</header>
+</database>
+"#;
+        let db = parse(xml).expect("parse");
+        assert_eq!(db.header.date.and_then(|date| date.day), Some(4));
+    }
+
+    #[test]
     fn parses_the_header_researcher_name() {
         let xml = br#"<?xml version="1.0" encoding="UTF-8"?>
 <database xmlns="http://gramps-project.org/xml/1.7.1/">
