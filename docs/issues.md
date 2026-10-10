@@ -386,6 +386,21 @@ in its own area: research notes (*Notes & research notes*). The one gap running 
   (`crates/vitni-plugin-host/tests/gedcom_round_trip.rs`). *Shape:* give the supersede path the record
   origin the gate's writes carry. *Exit:* that test's superseding re-import shows in its run's row with
   the reason.
+- **A re-import that writes nothing does not say its export date was unreadable** — #528 notes an
+  unreadable export date on the run's History row, but a run starts only on its first effective write
+  (ADR 0037 §5, `PendingRun::ensure_started`), so a re-import whose only changes are single-valued fields
+  — exactly what that date stops — leaves no run, and only the host's `warn!` (`read_file_date` in
+  `crates/vitni-plugin-host/src/staging.rs`) records it. *Shape:* return the declared `FileDate` with
+  `run_bulk_import`'s outcome, and say it on the bulk Done stage and in the CLI `import` output. *Exit:*
+  a re-import with `1 DATE 30 FEB 2100` and only a changed birth date shows the note in both. — #558
+- **A header export date the importer cannot turn into a day is set aside without notice** — both
+  importers send `begin-run` no date for a partial, text-only, range or non-Gregorian GEDCOM `HEAD.1 DATE`
+  or a partial Gramps `<created>` (`file_asserted_at_string` in `plugins/gedcom-import` and
+  `plugins/gramps-import`), so the run records nothing, unlike an impossible day (#528); and #528's note
+  quotes the importer's RFC 3339 form, not the header's text. *Shape:* `begin-run` also carries the
+  header date's own text (a breaking `staging` change, ADR 0011); the host records it whenever it yields
+  no instant. *Exit:* `1 DATE 2100`, `<created date="2019-05"/>` and `1 DATE 30 FEB 2100` each show the
+  header's text in the run's note. — #559
 
 ### Assisted import
 
