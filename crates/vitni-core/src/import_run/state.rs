@@ -53,6 +53,9 @@ pub struct ImportRunState {
     pub source_path: Option<String>,
     /// The document's own export date, if it carries one.
     pub file_asserted_at: Option<Timestamp>,
+    /// The export date the document declared, when it could not be read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unreadable_file_date: Option<String>,
     /// The document header's fingerprint, if the importer declared one.
     pub dataset_hint: Option<String>,
     /// What the run wrote, once it has ended.

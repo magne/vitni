@@ -191,6 +191,9 @@ history-import-run-resume-aria = Resume the import from { $source }
 # Why an import superseded a value (ADR 0049): the run's file declared an export date no earlier than
 # when the value it replaced was recorded (ADR 0029 §1). Shown on the supersession inside a run row.
 history-import-superseded-why = The value it replaced was recorded at or before the export of { $source } ({ $date }), so the file's value replaced it.
+# Why an import run replaced no value (ADR 0029 §3): its file declared an export date that cannot be read,
+# shown as the importer declared it (RFC 3339) as $date. Shown on the run row.
+history-import-run-date-unread = { $source } declares an export date that cannot be read ({ $date }), so this import only added to records and replaced no value.
 
 # Change-log operator line
 history-operator-human = { $name } · { $confidence }

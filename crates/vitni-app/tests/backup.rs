@@ -600,6 +600,7 @@ async fn a_backup_keeps_every_record_origin_and_import_run() {
         source_label: "tree.ged".to_owned(),
         source_path: None,
         file_asserted_at: None,
+        unreadable_file_date: None,
         dataset_hint: None,
     };
     let run = start_import_run(&source, &session(), run).await.expect("start");

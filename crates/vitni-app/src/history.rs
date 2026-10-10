@@ -111,6 +111,9 @@ pub struct RunRef {
     /// The export date the run's file declared (RFC 3339), which is what let it supersede a value
     /// recorded no later (ADR 0029 §1); `None` when the file carried none it could read.
     pub file_asserted_at: Option<String>,
+    /// The export date the importer declared for the run's file, as it declared it, when it could not
+    /// be read: the run then replaced no single value (ADR 0029 §3).
+    pub unreadable_file_date: Option<String>,
 }
 
 /// One entry in an aggregate's change log: a single event rendered for an audit timeline.
@@ -962,6 +965,7 @@ fn entry(event: &StoredEvent, header: &EnvelopeHeader, human_id: Option<String>,
             records: None,
             resume: None,
             file_asserted_at: None,
+            unreadable_file_date: None,
         }),
         value: values::extract_value(event),
         replaced: None,
@@ -1013,6 +1017,7 @@ async fn label_runs(store: &Store, mut entries: Vec<ChangeLogEntry>) -> Result<V
         run.records = view.counts().records;
         run.resume = resumable.get(&run.id).cloned();
         run.file_asserted_at = view.file_asserted_at().map(rfc3339);
+        run.unreadable_file_date = view.unreadable_file_date().map(str::to_owned);
     }
     Ok(entries)
 }
@@ -1641,6 +1646,7 @@ mod tests {
             records: Some(7),
             resume: None,
             file_asserted_at: None,
+            unreadable_file_date: None,
         }
     }
 
@@ -1878,6 +1884,7 @@ mod tests {
             source_label: "tree.ged".to_owned(),
             source_path: source_path.map(str::to_owned),
             file_asserted_at: None,
+            unreadable_file_date: None,
             dataset_hint: None,
         };
         let run = start_import_run(workspace, human, new_run).await.expect("start");

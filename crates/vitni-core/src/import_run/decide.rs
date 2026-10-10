@@ -69,6 +69,7 @@ fn started(run_id: ImportRunId, run: NewImportRun) -> ImportRunEventBody {
         source_label,
         source_path,
         file_asserted_at,
+        unreadable_file_date,
         dataset_hint,
     } = run;
     ImportRunEventBody::ImportRunStarted {
@@ -80,6 +81,7 @@ fn started(run_id: ImportRunId, run: NewImportRun) -> ImportRunEventBody {
         source_label,
         source_path,
         file_asserted_at,
+        unreadable_file_date,
         dataset_hint,
     }
 }
@@ -136,6 +138,7 @@ pub fn evolve(state: &mut ImportRunState, event: &ImportRunEvent) {
             source_label,
             source_path,
             file_asserted_at,
+            unreadable_file_date,
             dataset_hint,
         } => {
             state.status = ImportRunStatus::Running;
@@ -149,6 +152,7 @@ pub fn evolve(state: &mut ImportRunState, event: &ImportRunEvent) {
             state.source_label.clone_from(source_label);
             state.source_path.clone_from(source_path);
             state.file_asserted_at = *file_asserted_at;
+            state.unreadable_file_date.clone_from(unreadable_file_date);
             state.dataset_hint.clone_from(dataset_hint);
         }
         ImportRunEventBody::ItemResolved { .. } => {}
@@ -216,6 +220,7 @@ mod tests {
                 source_label: "tree.ged".to_owned(),
                 source_path: Some("/home/ada/tree.ged".to_owned()),
                 file_asserted_at: None,
+                unreadable_file_date: Some("2024-02-30T00:00:00Z".to_owned()),
                 dataset_hint: Some("GRAMPS|tree.ged".to_owned()),
             },
         }
@@ -254,6 +259,8 @@ mod tests {
         assert_eq!(state.source_label, "tree.ged");
         assert_eq!(state.source_path.as_deref(), Some("/home/ada/tree.ged"));
         assert_eq!(state.dataset_hint.as_deref(), Some("GRAMPS|tree.ged"));
+        assert_eq!(state.file_asserted_at, None);
+        assert_eq!(state.unreadable_file_date.as_deref(), Some("2024-02-30T00:00:00Z"));
         assert_eq!(state.operator.and_then(|agent| agent.display).as_deref(), Some("Ada"));
     }
 
@@ -283,6 +290,23 @@ mod tests {
             panic!("not a start: {:?}", event.body);
         };
         assert_eq!(source_path, None);
+    }
+
+    #[test]
+    fn a_run_started_before_unreadable_dates_were_kept_decodes_without_one() {
+        let mut event = decide(&ImportRunState::default(), start(), &meta())
+            .expect("start")
+            .remove(0);
+        let mut json = serde_json::to_value(&event.body).expect("encode");
+        json.as_object_mut().expect("object").remove("unreadable_file_date");
+        event.body = serde_json::from_value(json).expect("an event without the field decodes");
+        let ImportRunEventBody::ImportRunStarted {
+            unreadable_file_date, ..
+        } = event.body
+        else {
+            panic!("not a start: {:?}", event.body);
+        };
+        assert_eq!(unreadable_file_date, None);
     }
 
     #[test]

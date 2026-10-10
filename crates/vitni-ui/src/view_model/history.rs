@@ -53,7 +53,11 @@ impl HistoryEntryVm {
             when: friendly_timestamp(&entry.occurred_at),
             what: loc.change_summary(entry),
             who: loc.operator_line(entry),
-            why: entry.rationale.clone().or_else(|| superseded_why(entry, loc)),
+            why: entry
+                .rationale
+                .clone()
+                .or_else(|| superseded_why(entry, loc))
+                .or_else(|| date_unread_why(entry, loc)),
             value: entry.value.as_ref().map(|value| loc.change_value(value)),
             replaced: entry.replaced.as_ref().map(|value| loc.change_replaced(value)),
             evidence,
@@ -76,6 +80,16 @@ fn superseded_why(entry: &ChangeLogEntry, loc: &Localizer) -> Option<String> {
     // A file's export date often carries no time of day, so the time the timestamp holds is not shown.
     let day = exported.get(..10).unwrap_or(exported);
     Some(loc.import_superseded_why(&run.source_label, day))
+}
+
+/// The note on an import-run row whose file declared an export date that cannot be read: the run only
+/// added to records (ADR 0029 §3). `None` for any other entry.
+fn date_unread_why(entry: &ChangeLogEntry, loc: &Localizer) -> Option<String> {
+    let Some(ActivityDetail::ImportRun { run, .. }) = &entry.detail else {
+        return None;
+    };
+    let declared = run.unreadable_file_date.as_deref()?;
+    Some(loc.import_run_date_unread(&run.source_label, declared))
 }
 
 /// The muted text beside a run row: *interrupted* for a run that can be resumed, else the records it

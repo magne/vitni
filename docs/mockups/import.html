@@ -375,7 +375,9 @@
       <div class="section-note">A re-import replaces a single value — a date, a title, a place's coordinates —
         only when the file says it was exported no earlier than when the value it replaces was recorded,
         whoever recorded it (ADR 0029 §1). An older file, or one with no export date the importer can read,
-        leaves the value as it is. Nothing asks: the replacement is an ordinary <b>supersession</b>, kept in
+        leaves the value as it is. A file that declares a date which cannot be read — an impossible day such
+        as <span class="mono">30 FEB 2100</span> — says so on its run's row, quoting the date as the importer read it, so a
+        re-import that changed nothing is not a mystery (#528). Nothing asks: the replacement is an ordinary <b>supersession</b>, kept in
         the record's <b>History</b> like any correction and undone the same way. The run's row opens with
         <b>What it changed</b> to the changes it made to this record, and the supersession says why, worded
         from the run's file and export date in the UI's language (ADR 0049). A re-import that replaces a
@@ -416,6 +418,21 @@
             <div class="tl-when">2026-06-10 11:02</div>
             <div class="tl-what">Imported from tree.ged<span class="muted tl-count">3 changes</span></div>
             <div class="tl-who">gedcom-import (software agent)</div>
+            <div class="row-actions" style="margin-top:4px">
+              <button class="btn sm ghost" type="button" aria-expanded="false">▸ What it changed</button>
+              <button class="btn sm ghost" type="button" aria-label="Undo: Imported from tree.ged">↩ Undo</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="specimen">
+        <div class="label">History of I0001 · Anders Strand, after a <span class="mono">tree.ged</span> whose export date cannot be read was imported again</div>
+        <div class="timeline">
+          <div class="tl-item">
+            <div class="tl-when">2026-06-24 16:40</div>
+            <div class="tl-what">Imported from tree.ged<span class="muted tl-count">1 change</span></div>
+            <div class="tl-who">gedcom-import (software agent)</div>
+            <div class="tl-why">tree.ged declares an export date that cannot be read (2100-02-30T00:00:00Z), so this import only added to records and replaced no value.</div>
             <div class="row-actions" style="margin-top:4px">
               <button class="btn sm ghost" type="button" aria-expanded="false">▸ What it changed</button>
               <button class="btn sm ghost" type="button" aria-label="Undo: Imported from tree.ged">↩ Undo</button>

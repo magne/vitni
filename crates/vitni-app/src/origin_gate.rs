@@ -48,15 +48,15 @@ pub struct PendingRun {
     operator: Session,
     id: ImportRunId,
     run: NewImportRun,
-    file_asserted_at: Mutex<Option<Timestamp>>,
+    file_date: Mutex<FileDate>,
     started: AtomicBool,
     commands: AtomicU32,
 }
 
 impl PendingRun {
     /// A run over `run`, operated by the invoking human's `operator` session. The run's own
-    /// `file_asserted_at` is ignored in favour of the one the importer later declares
-    /// ([`Self::set_file_asserted_at`]).
+    /// `file_asserted_at` and `unreadable_file_date` are ignored in favour of what the importer later
+    /// declares ([`Self::set_file_date`]).
     #[must_use]
     pub fn new(operator: Session, run: NewImportRun) -> Self {
         let id = operator.new_import_run_id();
@@ -64,7 +64,7 @@ impl PendingRun {
             operator,
             id,
             run,
-            file_asserted_at: Mutex::new(None),
+            file_date: Mutex::new(FileDate::default()),
             started: AtomicBool::new(false),
             commands: AtomicU32::new(0),
         }
@@ -88,17 +88,17 @@ impl PendingRun {
         &self.operator
     }
 
-    /// Records the document's own export date (ADR 0029 §2), before its first write.
-    pub fn set_file_asserted_at(&self, file_asserted_at: Option<Timestamp>) {
-        if let Ok(mut slot) = self.file_asserted_at.lock() {
-            *slot = file_asserted_at;
+    /// Records the document's own export date (ADR 0029 §2, §3) before its first write.
+    pub fn set_file_date(&self, file_date: FileDate) {
+        if let Ok(mut slot) = self.file_date.lock() {
+            *slot = file_date;
         }
     }
 
-    /// The document's export date, if it declared one.
+    /// The document's export date, if it declared one that could be read.
     #[must_use]
     pub fn file_asserted_at(&self) -> Option<Timestamp> {
-        self.file_asserted_at.lock().ok().and_then(|slot| *slot)
+        self.file_date.lock().ok().and_then(|slot| slot.asserted_at())
     }
 
     /// Whether any write went ahead, so the run was started and must be closed.
@@ -124,7 +124,10 @@ impl PendingRun {
             return Ok(());
         }
         let mut run = self.run.clone();
-        run.file_asserted_at = self.file_asserted_at();
+        if let Ok(slot) = self.file_date.lock() {
+            run.file_asserted_at = slot.asserted_at();
+            run.unreadable_file_date = slot.unreadable().map(str::to_owned);
+        }
         let envelope = ImportRunCommandEnvelope {
             meta: self.operator.new_meta(Provenance::default(), Vec::new()),
             command: ImportRunCommand::StartImportRun { run_id: self.id, run },
@@ -142,6 +145,39 @@ impl PendingRun {
         self.ensure_started(store).await?;
         self.commands.fetch_add(1, Ordering::SeqCst);
         Ok(())
+    }
+}
+
+/// The export date a document declared (ADR 0029 §2, §3).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum FileDate {
+    /// The document declared none.
+    #[default]
+    Undeclared,
+    /// The date, read.
+    Read(Timestamp),
+    /// The date as the importer declared it, which could not be read: the run replaces no
+    /// single-valued field.
+    Unreadable(String),
+}
+
+impl FileDate {
+    /// The date, when it could be read.
+    #[must_use]
+    pub fn asserted_at(&self) -> Option<Timestamp> {
+        match self {
+            Self::Read(asserted_at) => Some(*asserted_at),
+            Self::Undeclared | Self::Unreadable(_) => None,
+        }
+    }
+
+    /// The date as declared, when it could not be read.
+    #[must_use]
+    pub fn unreadable(&self) -> Option<&str> {
+        match self {
+            Self::Unreadable(declared) => Some(declared),
+            Self::Undeclared | Self::Read(_) => None,
+        }
     }
 }
 
@@ -596,10 +632,11 @@ mod tests {
                 source_label: "tree.ged".to_owned(),
                 source_path: None,
                 file_asserted_at: None,
+                unreadable_file_date: None,
                 dataset_hint: None,
             },
         ));
-        run.set_file_asserted_at(file_asserted_at);
+        run.set_file_date(file_asserted_at.map_or(super::FileDate::Undeclared, super::FileDate::Read));
         let session = Session::software("gedcom-import", "0.1.0").with_import_run(Arc::clone(&run));
         (session, run)
     }
