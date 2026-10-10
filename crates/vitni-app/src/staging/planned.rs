@@ -65,6 +65,8 @@ pub enum PlannedField {
     Enclosure,
     /// Where a place lies.
     Coordinates,
+    /// A place's code.
+    Code,
     /// A source's title.
     Title,
     /// A source's author.
@@ -120,6 +122,7 @@ impl PlannedField {
             (_, "PlaceTypeSet" | "NoteTypeSet") => Self::Type,
             (_, "EnclosedByAsserted") => Self::Enclosure,
             (_, "CoordinatesAsserted") => Self::Coordinates,
+            (_, "CodeSet") => Self::Code,
             (_, "TitleSet") => Self::Title,
             (_, "AuthorSet") => Self::Author,
             (_, "PubInfoSet") => Self::Publication,
@@ -201,6 +204,7 @@ mod tests {
             ("note.NoteTypeSet", PlannedField::Type),
             ("place.EnclosedByAsserted", PlannedField::Enclosure),
             ("place.CoordinatesAsserted", PlannedField::Coordinates),
+            ("place.CodeSet", PlannedField::Code),
             ("source.TitleSet", PlannedField::Title),
             ("source.AuthorSet", PlannedField::Author),
             ("source.PubInfoSet", PlannedField::Publication),

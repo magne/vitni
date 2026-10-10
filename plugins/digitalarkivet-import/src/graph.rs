@@ -261,6 +261,7 @@ fn place_graph(key: &str, name: &str, place_type: Option<PlaceType>) -> Graph {
             name: name.to_owned(),
             place_type,
             coordinates: None,
+            code: None,
             restrictions: Vec::new(),
         }),
     );

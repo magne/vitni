@@ -63,6 +63,7 @@ import-plan-field-place = sted
 import-plan-field-type = type
 import-plan-field-enclosure = beliggenhet
 import-plan-field-coordinates = koordinater
+import-plan-field-code = kode
 import-plan-field-title = tittel
 import-plan-field-author = forfatter
 import-plan-field-publication = utgivelse

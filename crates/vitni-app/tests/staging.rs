@@ -190,6 +190,7 @@ fn place(record: &str, name: &str) -> RecordGraph {
                 name: name.to_owned(),
                 place_type: None,
                 coordinates: None,
+                code: None,
                 restrictions: BTreeSet::default(),
             }),
         }],
@@ -1987,4 +1988,102 @@ async fn a_place_decided_same_keeps_the_point_it_has() {
         place_summary(&workspace, &stored).await.coordinates_point,
         Some(point(58.028, 7.46))
     );
+}
+
+fn coded_place(record: &str, name: &str, code: &str) -> RecordGraph {
+    let mut graph = place(record, name);
+    if let EntityFields::Place(fields) = &mut graph.entities[0].fields {
+        fields.code = Some(code.to_owned());
+    }
+    graph
+}
+
+#[tokio::test]
+async fn an_imported_place_carries_its_code() {
+    let (workspace, _dir) = workspace().await;
+    import(
+        &workspace,
+        &importer(dataset(1)),
+        vec![coded_place("plac:Norge", "Norge", "NO")],
+    )
+    .await;
+
+    let place = place_summary(&workspace, &only_place(&workspace).await).await;
+    assert_eq!(place.code.as_deref(), Some("NO"));
+}
+
+#[tokio::test]
+async fn a_reimport_from_a_newer_file_replaces_the_code() {
+    let (workspace, _dir) = workspace().await;
+    import(
+        &workspace,
+        &importer(dataset(1)),
+        vec![coded_place("plac:Norge", "Norge", "NO")],
+    )
+    .await;
+
+    let exported = at_year(2100);
+    let session = dated_importer(dataset(1), exported);
+    let graphs = vec![coded_place("plac:Norge", "Norge", "NOR")];
+    let (plan, _) = dated_import(&workspace, &session, graphs, Some(exported)).await;
+
+    let Disposition::Update { fields, .. } = disposition(&plan, 0, 0) else {
+        panic!("expected an update: {:?}", disposition(&plan, 0, 0));
+    };
+    assert_eq!(fields, &["place.CodeSet".to_owned()]);
+    let place = place_summary(&workspace, &only_place(&workspace).await).await;
+    assert_eq!(place.code.as_deref(), Some("NOR"));
+}
+
+#[tokio::test]
+async fn a_reimport_from_an_older_or_undated_file_keeps_the_code() {
+    let (workspace, _dir) = workspace().await;
+    import(
+        &workspace,
+        &importer(dataset(1)),
+        vec![coded_place("plac:Norge", "Norge", "NO")],
+    )
+    .await;
+    let before = events(&workspace).await;
+
+    for exported in [Some(at_year(2000)), None] {
+        let session = match exported {
+            Some(exported) => dated_importer(dataset(1), exported),
+            None => importer(dataset(1)),
+        };
+        let graphs = vec![coded_place("plac:Norge", "Norge", "NOR")];
+        let (plan, _) = dated_import(&workspace, &session, graphs, exported).await;
+
+        let Disposition::Unchanged { .. } = disposition(&plan, 0, 0) else {
+            panic!("{exported:?}: expected unchanged: {:?}", disposition(&plan, 0, 0));
+        };
+    }
+    let place = place_summary(&workspace, &only_place(&workspace).await).await;
+    assert_eq!(place.code.as_deref(), Some("NO"));
+    assert_eq!(events(&workspace).await, before, "nothing was written");
+}
+
+#[tokio::test]
+async fn a_place_decided_same_gains_the_code_it_lacks() {
+    let (workspace, _dir) = workspace().await;
+    import(&workspace, &importer(dataset(2)), vec![place("plac:Norge", "Norge")]).await;
+    let stored = only_place(&workspace).await;
+    decide_same(&workspace, vec![coded_place("plac:Norge", "Norge", "NO")]).await;
+
+    assert_eq!(place_summary(&workspace, &stored).await.code.as_deref(), Some("NO"));
+}
+
+#[tokio::test]
+async fn a_place_decided_same_keeps_the_code_it_has() {
+    let (workspace, _dir) = workspace().await;
+    import(
+        &workspace,
+        &importer(dataset(2)),
+        vec![coded_place("plac:Norge", "Norge", "NO")],
+    )
+    .await;
+    let stored = only_place(&workspace).await;
+    decide_same(&workspace, vec![coded_place("plac:Norge", "Norge", "NOR")]).await;
+
+    assert_eq!(place_summary(&workspace, &stored).await.code.as_deref(), Some("NO"));
 }

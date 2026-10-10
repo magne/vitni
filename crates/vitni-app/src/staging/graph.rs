@@ -129,7 +129,7 @@ pub struct StagedEvent {
     pub restrictions: BTreeSet<Restriction>,
 }
 
-/// A place: its name, type, point and restrictions. The place enclosing it is a link.
+/// A place: its name, type, point, code and restrictions. The place enclosing it is a link.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StagedPlace {
     /// The place's name.
@@ -138,6 +138,8 @@ pub struct StagedPlace {
     pub place_type: Option<PlaceType>,
     /// Where the place lies, when the record gives a point.
     pub coordinates: Option<GeoCoordinates>,
+    /// The place's code, when the record gives one.
+    pub code: Option<String>,
     /// Privacy restrictions.
     pub restrictions: BTreeSet<Restriction>,
 }
