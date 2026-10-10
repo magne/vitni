@@ -69,6 +69,8 @@ pub struct HostState {
     /// The document's own export date (ADR 0029 §2), declared by `staging.begin-run`. `None` until
     /// then, or if the guest never declares one (today's additive-only behavior, §3).
     pub(crate) file_asserted_at: Option<Timestamp>,
+    /// The export date `staging.begin-run` declared, verbatim, when it could not be read (§3).
+    pub(crate) unreadable_file_date: Option<String>,
     /// The document header's fingerprint (ADR 0037 §3), declared by `staging.begin-run`.
     pub(crate) dataset_hint: Option<String>,
     /// The import run this invocation writes (ADR 0037 §5); `None` outside an import, where writes
@@ -126,6 +128,7 @@ impl HostState {
             source: None,
             sink: None,
             file_asserted_at: None,
+            unreadable_file_date: None,
             dataset_hint: None,
             run: None,
             staging: Staging::Held,
@@ -138,7 +141,11 @@ impl HostState {
     /// Makes this invocation an import that writes the run `template` describes into `dataset` (ADR
     /// 0037 §5), carrying what the document declared so far.
     pub(crate) fn open_run(&mut self, template: RunTemplate, dataset: ChosenDataset) {
-        let declared = (self.dataset_hint.clone(), self.file_asserted_at);
+        let declared = (
+            self.dataset_hint.clone(),
+            self.file_asserted_at,
+            self.unreadable_file_date.clone(),
+        );
         let run = ActiveRun::new(template, dataset, declared);
         self.session = self.session.clone().with_import_run(Arc::clone(run.pending()));
         self.run = Some(run);

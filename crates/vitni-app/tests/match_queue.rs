@@ -57,6 +57,7 @@ fn importer(dataset: u128, label: &str) -> Session {
             source_label: label.to_owned(),
             source_path: None,
             file_asserted_at: None,
+            unreadable_file_date: None,
             dataset_hint: None,
         },
     ));

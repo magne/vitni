@@ -244,6 +244,7 @@ async fn a_recorded_resolution_resolves_the_item_in_later_runs(store: &Store) {
             source_label: "tree.ged".to_owned(),
             source_path: None,
             file_asserted_at: None,
+            unreadable_file_date: None,
             dataset_hint: None,
         },
     };

@@ -137,11 +137,11 @@ pub(crate) struct ActiveRun {
 
 impl ActiveRun {
     /// A run over `dataset`, described by `template`, whose document declared `declared` (its header's
-    /// fingerprint and export date).
+    /// fingerprint, its export date, and the date it declared that could not be read).
     pub(crate) fn new(
         template: RunTemplate,
         dataset: ChosenDataset,
-        (dataset_hint, file_asserted_at): (Option<String>, Option<Timestamp>),
+        (dataset_hint, file_asserted_at, unreadable_file_date): (Option<String>, Option<Timestamp>, Option<String>),
     ) -> Self {
         let RunTemplate {
             operator,
@@ -158,10 +158,11 @@ impl ActiveRun {
             source_label,
             source_path,
             file_asserted_at: None,
+            unreadable_file_date: None,
             dataset_hint,
         };
         let pending = Arc::new(PendingRun::new(operator, run));
-        pending.set_file_asserted_at(file_asserted_at);
+        pending.set_file_date(file_asserted_at, unreadable_file_date);
         Self {
             pending,
             counts: ImportCounts::default(),
@@ -324,7 +325,7 @@ mod tests {
     async fn a_run_that_wrote_nothing_is_not_recorded() {
         let dir = tempfile::tempdir().expect("tempdir");
         let workspace = workspace(dir.path()).await;
-        let run = ActiveRun::new(spec().into_parts().1, chosen(), (None, None));
+        let run = ActiveRun::new(spec().into_parts().1, chosen(), (None, None, None));
         close(&workspace, run, &Ending::Bulk(&Ok(3))).await.expect("closed");
         let checked = list_import_runs(&workspace).await.expect("runs");
         assert!(checked.is_empty(), "{checked:?}");
@@ -334,7 +335,7 @@ mod tests {
     async fn a_run_that_only_resolved_items_is_recorded_with_them() {
         let dir = tempfile::tempdir().expect("tempdir");
         let workspace = workspace(dir.path()).await;
-        let mut run = ActiveRun::new(spec().into_parts().1, chosen(), (None, None));
+        let mut run = ActiveRun::new(spec().into_parts().1, chosen(), (None, None, None));
         run.absorb(&CommitOutcome {
             resolved: vec![ResolvedItem {
                 record: "I1".to_owned(),

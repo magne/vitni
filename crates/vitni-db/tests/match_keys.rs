@@ -105,6 +105,7 @@ async fn an_unmatched_kind_is_never_dirty(store: &Store) {
             source_label: "tree.ged".to_owned(),
             source_path: None,
             file_asserted_at: None,
+            unreadable_file_date: None,
             dataset_hint: None,
         },
     };

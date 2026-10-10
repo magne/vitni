@@ -60,6 +60,7 @@ fn run_ref(records: Option<u32>) -> RunRef {
         records,
         resume: None,
         file_asserted_at: None,
+        unreadable_file_date: None,
     }
 }
 
@@ -1711,6 +1712,7 @@ fn a_history_entry_shows_the_assessment_behind_an_identity_decision() {
 fn superseding_run(file_asserted_at: Option<&str>) -> Vec<ChangeLogEntry> {
     let run = RunRef {
         file_asserted_at: file_asserted_at.map(ToOwned::to_owned),
+        unreadable_file_date: None,
         ..run_ref(Some(3))
     };
     let mut replacement = imported("I0001", "r", true);

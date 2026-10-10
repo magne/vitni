@@ -48,15 +48,15 @@ pub struct PendingRun {
     operator: Session,
     id: ImportRunId,
     run: NewImportRun,
-    file_asserted_at: Mutex<Option<Timestamp>>,
+    file_date: Mutex<FileDate>,
     started: AtomicBool,
     commands: AtomicU32,
 }
 
 impl PendingRun {
     /// A run over `run`, operated by the invoking human's `operator` session. The run's own
-    /// `file_asserted_at` is ignored in favour of the one the importer later declares
-    /// ([`Self::set_file_asserted_at`]).
+    /// `file_asserted_at` and `unreadable_file_date` are ignored in favour of what the importer later
+    /// declares ([`Self::set_file_date`]).
     #[must_use]
     pub fn new(operator: Session, run: NewImportRun) -> Self {
         let id = operator.new_import_run_id();
@@ -64,7 +64,7 @@ impl PendingRun {
             operator,
             id,
             run,
-            file_asserted_at: Mutex::new(None),
+            file_date: Mutex::new(FileDate::default()),
             started: AtomicBool::new(false),
             commands: AtomicU32::new(0),
         }
@@ -88,17 +88,21 @@ impl PendingRun {
         &self.operator
     }
 
-    /// Records the document's own export date (ADR 0029 §2), before its first write.
-    pub fn set_file_asserted_at(&self, file_asserted_at: Option<Timestamp>) {
-        if let Ok(mut slot) = self.file_asserted_at.lock() {
-            *slot = file_asserted_at;
+    /// Records the document's own export date (ADR 0029 §2) before its first write: `asserted_at` when
+    /// it could be read, else the date it declared, verbatim, as `unreadable` (§3).
+    pub fn set_file_date(&self, asserted_at: Option<Timestamp>, unreadable: Option<String>) {
+        if let Ok(mut slot) = self.file_date.lock() {
+            *slot = FileDate {
+                asserted_at,
+                unreadable,
+            };
         }
     }
 
-    /// The document's export date, if it declared one.
+    /// The document's export date, if it declared one that could be read.
     #[must_use]
     pub fn file_asserted_at(&self) -> Option<Timestamp> {
-        self.file_asserted_at.lock().ok().and_then(|slot| *slot)
+        self.file_date.lock().ok().and_then(|slot| slot.asserted_at)
     }
 
     /// Whether any write went ahead, so the run was started and must be closed.
@@ -124,7 +128,10 @@ impl PendingRun {
             return Ok(());
         }
         let mut run = self.run.clone();
-        run.file_asserted_at = self.file_asserted_at();
+        if let Ok(slot) = self.file_date.lock() {
+            run.file_asserted_at = slot.asserted_at;
+            run.unreadable_file_date.clone_from(&slot.unreadable);
+        }
         let envelope = ImportRunCommandEnvelope {
             meta: self.operator.new_meta(Provenance::default(), Vec::new()),
             command: ImportRunCommand::StartImportRun { run_id: self.id, run },
@@ -143,6 +150,15 @@ impl PendingRun {
         self.commands.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }
+}
+
+/// The export date a document declared (ADR 0029 §2, §3).
+#[derive(Debug, Default)]
+struct FileDate {
+    /// The date, when it could be read.
+    asserted_at: Option<Timestamp>,
+    /// The date as declared, when it could not be read.
+    unreadable: Option<String>,
 }
 
 /// A dry run of an import's writes (ADR 0040 §2): the gate decides each write as it would, records the
@@ -596,10 +612,11 @@ mod tests {
                 source_label: "tree.ged".to_owned(),
                 source_path: None,
                 file_asserted_at: None,
+                unreadable_file_date: None,
                 dataset_hint: None,
             },
         ));
-        run.set_file_asserted_at(file_asserted_at);
+        run.set_file_date(file_asserted_at, None);
         let session = Session::software("gedcom-import", "0.1.0").with_import_run(Arc::clone(&run));
         (session, run)
     }

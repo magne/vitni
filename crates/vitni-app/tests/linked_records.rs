@@ -76,6 +76,7 @@ async fn run(ws: &Workspace) -> ImportRunId {
         source_label: "1910 census".to_owned(),
         source_path: None,
         file_asserted_at: None,
+        unreadable_file_date: None,
         dataset_hint: None,
     };
     start_import_run(ws, &session(), run).await.expect("start run")

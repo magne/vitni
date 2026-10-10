@@ -92,6 +92,13 @@ impl ImportRunView {
         self.state.file_asserted_at
     }
 
+    /// The export date the document declared, when it could not be read, so the run changed no
+    /// single-valued field (ADR 0029 §3).
+    #[must_use]
+    pub fn unreadable_file_date(&self) -> Option<&str> {
+        self.state.unreadable_file_date.as_deref()
+    }
+
     /// The document header's fingerprint, if the importer declared one (ADR 0037 §3).
     #[must_use]
     pub fn dataset_hint(&self) -> Option<&str> {

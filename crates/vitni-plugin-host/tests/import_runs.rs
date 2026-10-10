@@ -599,6 +599,62 @@ async fn a_changed_date_supersedes_the_imported_one_only_when_the_file_is_newer(
     );
 }
 
+#[tokio::test]
+async fn a_re_import_with_an_impossible_export_date_replaces_nothing_and_its_run_says_so() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let dataset = DatasetId::lineage("gedcom", Uuid::from_u128(5));
+    let first = dated("1 JAN 2000", "5 APR 1970");
+    let workspace = import(
+        workspace(dir.path()).await,
+        "gedcom-import",
+        &dataset,
+        dir.path(),
+        "tree.ged",
+        &first,
+    )
+    .await;
+    let imported = birth_date(&workspace).await;
+
+    // 30 FEB is no day, so the export date cannot be read: the re-import adds the occupation but
+    // leaves the birth date alone (ADR 0029 §3).
+    let impossible = dated("30 FEB 2100", "6 APR 1970").replace("1 SEX M\n", "1 SEX M\n1 OCCU Farmer\n");
+    let workspace = import(
+        workspace,
+        "gedcom-import",
+        &dataset,
+        dir.path(),
+        "tree.ged",
+        &impossible,
+    )
+    .await;
+    assert_eq!(
+        birth_date(&workspace).await,
+        imported,
+        "the undated file replaced no value"
+    );
+    let superseded = log(&workspace)
+        .await
+        .into_iter()
+        .filter(|(_, event_type, _)| event_type == "AssertionSuperseded")
+        .count();
+    assert_eq!(superseded, 0, "nothing was superseded");
+
+    let rows = vitni_app::group_runs(
+        &vitni_app::change_log_for_person(&workspace, "I0001")
+            .await
+            .expect("log"),
+    );
+    let Some(vitni_app::ActivityDetail::ImportRun { run, .. }) = &rows[0].detail else {
+        panic!("the newest History row is the re-import: {:#?}", rows[0]);
+    };
+    assert_eq!(run.file_asserted_at, None);
+    assert_eq!(
+        run.unreadable_file_date.as_deref(),
+        Some("2100-02-30T00:00:00Z"),
+        "the run keeps the date it could not read"
+    );
+}
+
 /// Cancels a bulk import at the commit's first progress report past its start.
 fn cancel_mid_commit(update: &ProgressUpdate) -> ProgressControl {
     if update.step == ProgressStep::Writing && update.processed > 0 {

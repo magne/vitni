@@ -64,6 +64,7 @@ fn importer(dataset: DatasetId) -> Session {
             source_label: "tree.ged".to_owned(),
             source_path: None,
             file_asserted_at: None,
+            unreadable_file_date: None,
             dataset_hint: None,
         },
     ));
@@ -1788,7 +1789,7 @@ async fn same_for_the_group_on_a_pair_outside_any_group_decides_nothing() {
 /// An importer's session writing a fresh run of `dataset` from a file exported at `exported`.
 fn dated_importer(dataset: DatasetId, exported: Timestamp) -> Session {
     let session = importer(dataset);
-    session.import_run().expect("run").set_file_asserted_at(Some(exported));
+    session.import_run().expect("run").set_file_date(Some(exported), None);
     session
 }
 

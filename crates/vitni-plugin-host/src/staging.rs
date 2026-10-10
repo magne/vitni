@@ -31,6 +31,25 @@ use crate::{ProgressControl, ProgressStep, ProgressUpdate};
 /// How many writes pass between two progress reports of a bulk commit.
 const REPORT_EVERY: u32 = 10;
 
+/// Reads the export date a guest declared: the instant when it parses, else the date as declared.
+///
+/// A date that cannot be read degrades to no date — the conservative, additive-only default (ADR 0029
+/// §3): a malformed date is the guest's format-parsing problem, not a capability violation. It is
+/// logged and kept verbatim, so the run can say why nothing was replaced.
+fn read_file_date(declared: Option<String>) -> (Option<Timestamp>, Option<String>) {
+    let Some(declared) = declared else {
+        return (None, None);
+    };
+    if let Some(asserted_at) = Timestamp::parse_rfc3339(&declared) {
+        return (Some(asserted_at), None);
+    }
+    tracing::warn!(
+        %declared,
+        "the file's export date cannot be read, so the import replaces no single value (ADR 0029 §3)"
+    );
+    (None, Some(declared))
+}
+
 impl staging::Host for HostState {
     fn begin_run(
         &mut self,
@@ -86,12 +105,10 @@ impl HostState {
         }
         tracing::debug!(?dataset_hint, ?source_label, "import declared");
         self.dataset_hint = dataset_hint.map(str::to_owned);
-        // A missing or unparseable date degrades to `None` — the conservative, additive-only default
-        // (ADR 0029 §3): a malformed date is the guest's format-parsing problem, not a capability
-        // violation.
-        self.file_asserted_at = file_asserted_at.and_then(|value| Timestamp::parse_rfc3339(&value));
+        (self.file_asserted_at, self.unreadable_file_date) = read_file_date(file_asserted_at);
         if let Some(run) = &self.run {
-            run.pending().set_file_asserted_at(self.file_asserted_at);
+            run.pending()
+                .set_file_date(self.file_asserted_at, self.unreadable_file_date.clone());
         }
         Ok(())
     }
