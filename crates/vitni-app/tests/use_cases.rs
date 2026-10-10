@@ -3467,6 +3467,46 @@ async fn import_assert_sex_supersedes_the_live_value_when_the_file_is_newer() {
 }
 
 #[tokio::test]
+async fn import_assert_sex_supersedes_the_live_value_when_the_file_is_exactly_as_recent() {
+    use vitni_app::{Timestamp, import_assert_sex, show_person};
+    use vitni_core::enums::Sex;
+
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let human_id = create_person(&ws, &session, new_person("Ada", "Lovelace"), Provenance::default(), &[])
+        .await
+        .expect("person");
+    vitni_app::assert_sex(&ws, &session, &human_id, Sex::Female, MutationMeta::default())
+        .await
+        .expect("assert sex");
+    let log = change_log_for_person(&ws, &human_id).await.expect("log");
+    let asserted = log
+        .iter()
+        .find(|entry| entry.event_type == "SexAsserted")
+        .expect("the live sex assertion");
+    let live_at = Timestamp::parse_rfc3339(&asserted.occurred_at).expect("an RFC 3339 instant");
+
+    // ADR 0029 §1: a file exported at the very instant of the live value is at least as recent.
+    import_assert_sex(
+        &ws,
+        &session,
+        &human_id,
+        Sex::Male,
+        Some(live_at),
+        Provenance::default(),
+    )
+    .await
+    .expect("import assert sex");
+
+    let summary = show_person(&ws, &human_id).await.expect("show").expect("found");
+    assert_eq!(
+        summary.sex,
+        Some(Sex::Male),
+        "an equally recent file supersedes the live value"
+    );
+}
+
+#[tokio::test]
 async fn an_attached_note_carries_its_type_and_text() {
     // Issue #316: a citation's transcribed evidence text lives in an attached `NoteType::Transcript`
     // note, so the attach ref has to carry the note's type and body — the owner's Notes tab renders
