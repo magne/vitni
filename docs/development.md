@@ -159,6 +159,11 @@ because a scripted click run writes real events. Parallel workers each get their
 workspace (`target/gui-pass/workers/<n>/`), restored from the same seed. Shots land in
 `target/gui-pass/shots/<scenario>/` and the GUI's own log in `gui.log` beside them.
 
+The seed must not depend on the wall clock. Its two media records share a checksum, and the `matches-*`
+scenarios rely on the pair the engine proposes from them. So the image is generated once, without
+ImageMagick's PNG date chunks, and copied. A reused seed whose two images differ is rejected and needs
+`--reset` (#525).
+
 **A step names the element it acts on, not a window pixel.** `at`, `from` and an assertion's `region`
 are targets — an element picked by `id`, `data-hook` or ARIA `role`, narrowed by visible `text`, an
 enclosing `within` and, as a last resort, an `index`, with an optional `offset` (and, for a region, a

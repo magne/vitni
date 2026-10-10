@@ -202,7 +202,8 @@ pub struct Fixture {
     pub seed: fn(&Fixture, &Path, &Path) -> Result<()>,
     /// Media-library paths (below the workspace's media root) a *reused* seed must already contain.
     /// A fixture directory left over from before one of them was added is stale, and saying so beats
-    /// failing a scenario in a way that reads like the defect it is meant to catch.
+    /// failing a scenario in a way that reads like the defect it is meant to catch. They are one image
+    /// under several names, so their records share a checksum; a seed whose copies differ is stale too.
     pub required_media: &'static [&'static str],
     /// Files (below the workspace directory) a *reused* seed must already contain, for the same reason.
     pub required_files: &'static [&'static str],
@@ -896,9 +897,10 @@ fn seed_fixture(fixture: &Fixture, out: &Path, home: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Rejects a reused seed that predates one of the fixture's [`Fixture::required_media`] images: a
-/// workspace seeded before one was added would fail `media-preview` with a missing Media row rather
-/// than a blank preview, which reads like the defect the scenario is meant to catch.
+/// Rejects a reused seed that predates one of the fixture's [`Fixture::required_files`] or
+/// [`Fixture::required_media`], or whose media images differ (see [`verify_media`]): a workspace seeded
+/// before one was added would fail `media-preview` with a missing Media row rather than a blank preview,
+/// which reads like the defect the scenario is meant to catch.
 fn verify_seed(fixture: &Fixture, out: &Path) -> Result<()> {
     for rel in fixture.required_files {
         let seeded = out.join(SEED_DIR).join(rel);
@@ -910,14 +912,35 @@ fn verify_seed(fixture: &Fixture, out: &Path) -> Result<()> {
             );
         }
     }
+    verify_media(fixture, &out.join(SEED_DIR).join(MEDIA_DIR))
+}
+
+/// Rejects a seed below `media_root` that lacks one of the fixture's [`Fixture::required_media`] images,
+/// or whose images are not one file: each media record carries its file's checksum, and the `matches-*`
+/// scenarios need the two to share it (#525).
+fn verify_media(fixture: &Fixture, media_root: &Path) -> Result<()> {
+    let mut first: Option<(&str, Vec<u8>)> = None;
     for rel in fixture.required_media {
-        let seeded = out.join(SEED_DIR).join(MEDIA_DIR).join(rel);
+        let seeded = media_root.join(rel);
         if !seeded.is_file() {
             bail!(
                 "{}: the fixture predates a seeded media image ({} is missing) — re-run with `--reset`",
                 fixture.name,
                 seeded.display()
             );
+        }
+        let bytes = fs::read(&seeded).with_context(|| format!("reading {}", seeded.display()))?;
+        match &first {
+            None => first = Some((rel, bytes)),
+            Some((first_rel, first_bytes)) => {
+                if *first_bytes != bytes {
+                    bail!(
+                        "{}: the seeded media images {first_rel} and {rel} differ, so they share no checksum \
+                         and the Matches tool proposes no media pair — re-run with `--reset`",
+                        fixture.name
+                    );
+                }
+            }
         }
     }
     Ok(())
@@ -1002,38 +1025,61 @@ fn large_gedcom(persons: usize) -> String {
 /// than committed: a deterministic gradient with a filled circle, textured enough that a `painted`
 /// assertion over the preview frame measures the image and not its background. The committed icon
 /// rasters (`assets/icon/`) will not do — the largest is 256 px of near-flat plate, so a `painted`
-/// calibration over the preview frame would measure the plate rather than the preview. Both are the
-/// same image, so one `painted` calibration covers both rows.
+/// calibration over the preview frame would measure the plate rather than the preview.
+///
+/// Both are **one file**: generated once, without `ImageMagick`'s date chunks, and copied, so both
+/// records carry one checksum and the match engine proposes them as a pair, which the `matches-*`
+/// scenarios read. Two `convert` runs stamp each PNG with its second of creation, so their checksums
+/// differed whenever the runs straddled a second (#525); [`verify_media`] rejects such a seed. It also
+/// lets one `painted` calibration cover both rows.
 ///
 /// The records deliberately carry **no MIME**: `vitni media` has no `set-mime`, so this is the
 /// state every record the CLI creates is in, and #301's two live causes (no inferred MIME, and the
 /// stored `media/` prefix added twice) both fire on it.
 fn seed_media(fixture: &Fixture, home: &Path, workspace: &Path) -> Result<()> {
-    for rel in [SEED_MEDIA_REL, SEED_MEDIA_NORDIC_REL] {
-        let target = workspace.join(MEDIA_DIR).join(rel);
-        let parent = target
-            .parent()
-            .with_context(|| format!("{} has no parent directory", target.display()))?;
-        fs::create_dir_all(parent).with_context(|| format!("creating {}", parent.display()))?;
-        let side = SEED_MEDIA_SIZE;
-        let centre = side / 2;
-        let status = Command::new("convert")
-            .args(["-size", &format!("{side}x{side}"), "gradient:#1f6feb-#f0b72f"])
-            .args([
-                "-fill",
-                "#d2352c",
-                "-draw",
-                &format!("circle {centre},{centre} {centre},20"),
-            ])
-            .arg(&target)
-            .status()
-            .with_context(|| format!("generating {}", target.display()))?;
-        if !status.success() {
-            bail!("convert failed with {status} generating {}", target.display());
+    let media = workspace.join(MEDIA_DIR);
+    let image = media.join(SEED_MEDIA_REL);
+    create_parent(&image)?;
+    generate_seed_image(&image)?;
+    for rel in fixture.required_media {
+        let target = media.join(rel);
+        if target != image {
+            create_parent(&target)?;
+            fs::copy(&image, &target)
+                .with_context(|| format!("copying {} to {}", image.display(), target.display()))?;
         }
         let stored = workspace_media_path(rel);
         cli(fixture, home, &["media", "create", "--path", &stored])?;
         println!("gui-pass: seeded media {stored}");
+    }
+    Ok(())
+}
+
+fn create_parent(path: &Path) -> Result<()> {
+    let parent = path
+        .parent()
+        .with_context(|| format!("{} has no parent directory", path.display()))?;
+    fs::create_dir_all(parent).with_context(|| format!("creating {}", parent.display()))
+}
+
+/// Draws the seeded image at `target`: the same bytes on every run, as it leaves out the PNG date chunks.
+fn generate_seed_image(target: &Path) -> Result<()> {
+    let side = SEED_MEDIA_SIZE;
+    let centre = side / 2;
+    let status = Command::new("convert")
+        .args(["-size", &format!("{side}x{side}"), "gradient:#1f6feb-#f0b72f"])
+        .args([
+            "-fill",
+            "#d2352c",
+            "-draw",
+            &format!("circle {centre},{centre} {centre},20"),
+        ])
+        .args(["-define", "png:exclude-chunks=date,time"])
+        .arg(target)
+        .status()
+        .with_context(|| format!("generating {}", target.display()))?;
+    if !status.success() {
+        bail!("convert failed with {status} generating {}", target.display());
     }
     Ok(())
 }
@@ -1979,7 +2025,8 @@ mod tests {
     use super::{
         Assertion, GUI_PASS, MIN_STANDARD_DEVIATION, SETTLE_QUIET, Script, Step, Taken, WINDOW, available_cores,
         check_one, default_jobs, describe_region, differing_pixels, focus_click, keysyms, painted_failed, parse_args,
-        read_region, run_queue, settled, unique_names, until_painted, window_size, worker_config, worker_display,
+        read_region, run_queue, settled, unique_names, until_painted, verify_media, window_size, worker_config,
+        worker_display,
     };
     use crate::gui_pass::target::{Element, Snapshot};
     use std::path::{Path, PathBuf};
@@ -1992,6 +2039,44 @@ mod tests {
 
     fn script(toml: &str) -> Script {
         toml::from_str(toml).expect("the scenario parses")
+    }
+
+    fn seeded_media(images: [&[u8]; 2]) -> tempfile::TempDir {
+        let root = tempfile::tempdir().expect("a temporary media root");
+        for (rel, bytes) in GUI_PASS.required_media.iter().zip(images) {
+            let path = root.path().join(rel);
+            std::fs::create_dir_all(path.parent().expect("a parent directory")).expect("the directory is created");
+            std::fs::write(&path, bytes).expect("the image is written");
+        }
+        root
+    }
+
+    #[test]
+    fn a_seed_whose_media_are_one_image_is_accepted() {
+        let root = seeded_media([b"one image", b"one image"]);
+        verify_media(&GUI_PASS, root.path()).expect("one image under two names is a current seed");
+    }
+
+    #[test]
+    fn a_seed_whose_media_differ_is_rejected() {
+        let root = seeded_media([b"stamped 15:58:11", b"stamped 15:58:12"]);
+        let error = verify_media(&GUI_PASS, root.path())
+            .expect_err("two different images cannot share a checksum")
+            .to_string();
+        for rel in GUI_PASS.required_media {
+            assert!(error.contains(rel), "{error:?} names {rel}");
+        }
+        assert!(error.contains("--reset"), "{error:?} says how to fix it");
+    }
+
+    #[test]
+    fn a_seed_missing_a_media_image_is_rejected() {
+        let root = seeded_media([b"one image", b"one image"]);
+        std::fs::remove_file(root.path().join(GUI_PASS.required_media[1])).expect("the image is removed");
+        let error = verify_media(&GUI_PASS, root.path())
+            .expect_err("a missing image is a stale seed")
+            .to_string();
+        assert!(error.contains("missing"), "{error:?}");
     }
 
     #[test]
