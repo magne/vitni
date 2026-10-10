@@ -1751,6 +1751,39 @@ fn a_run_with_no_export_date_gives_its_supersession_no_reason() {
     assert_eq!(rows[0].children[1].why, None);
 }
 
+/// One entry a run wrote, from a file whose export date was `unreadable_file_date`.
+fn undated_run(unreadable_file_date: Option<&str>) -> Vec<ChangeLogEntry> {
+    let mut entry = imported("I0001", "a", true);
+    entry.event_type = "FactAsserted".to_owned();
+    entry.run = Some(RunRef {
+        unreadable_file_date: unreadable_file_date.map(ToOwned::to_owned),
+        ..run_ref(Some(3))
+    });
+    vec![entry]
+}
+
+#[test]
+fn a_run_whose_export_date_could_not_be_read_says_it_replaced_nothing() {
+    let loc = Localizer::for_test("en");
+    let rows = collapse_history(&undated_run(Some("2100-02-30T00:00:00Z")), &loc);
+
+    assert_eq!(
+        rows[0].why.as_deref(),
+        Some(
+            "tree.ged declares an export date that cannot be read (2100-02-30T00:00:00Z), so this import only added to records and replaced no value."
+        )
+    );
+    assert_eq!(rows[0].children[0].why, None, "the note sits on the run row, once");
+}
+
+#[test]
+fn a_run_with_a_readable_or_no_export_date_gives_no_note() {
+    let loc = Localizer::for_test("en");
+    let rows = collapse_history(&undated_run(None), &loc);
+
+    assert_eq!(rows[0].why, None);
+}
+
 /// A History entry of `event_type` that asserted `value`.
 fn valued(event_type: &str, value: vitni_app::ChangeValue) -> ChangeLogEntry {
     let mut entry = log_entry("person", Some("I0001"), OperatorKind::Human, "magne");

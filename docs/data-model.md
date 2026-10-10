@@ -690,7 +690,10 @@ around evidence and provenance.
    as a canonical path (an assisted session reads none), so an abandoned run can be **resumed**: its
    plugin re-run over that file into its dataset, which resolves what it wrote as unchanged and writes
    the rest. Only the newest run of a dataset is resumable, and only when its importer did not reject the
-file or exhaust its budget, which a re-run would repeat (ADR 0040 §5).
+file or exhaust its budget, which a re-run would repeat (ADR 0040 §5). `ImportRunStarted.file_asserted_at`
+   is the document's export date (ADR 0029 §2); a date the document declares but that cannot be read
+   (an impossible day such as `30 FEB`) is kept verbatim as `unreadable_file_date` instead, so History
+   can say why the run replaced no value (ADR 0029 §3).
 
 5. **Re-import resolves by origin (ADR 0037 §4).** The `record_origins` projection index (both
    engines, rebuilt by replay) holds one row per imported event: its origin, the aggregate it landed

@@ -386,12 +386,6 @@ in its own area: research notes (*Notes & research notes*). The one gap running 
   (`crates/vitni-plugin-host/tests/gedcom_round_trip.rs`). *Shape:* give the supersede path the record
   origin the gate's writes carry. *Exit:* that test's superseding re-import shows in its run's row with
   the reason.
-- **An unreadable file export date is ignored without notice** — ADR 0029 §3 makes an unparseable date
-  additive-only, but nothing says it applied, so a re-import of a newer file updates nothing unseen.
-  `begin_run` in `crates/vitni-plugin-host/src/staging.rs` drops a date that fails
-  `Timestamp::parse_rfc3339` (an impossible day such as Gramps `2024-02-30`) with no log, and Gramps
-  `date_point` loses the day of a `<created>` with a time part. *Shape:* `warn!` and note on the run that
-  the file's date was not used. *Exit:* a re-import with an impossible date that surfaces the note. — #528
 
 ### Assisted import
 
