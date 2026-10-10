@@ -69,6 +69,9 @@ impl Held {
         if view.coordinates().is_some() {
             held.filled.insert("coordinates");
         }
+        if view.code().is_some() {
+            held.filled.insert("code");
+        }
         held
     }
 
@@ -390,6 +393,9 @@ impl Writer<'_> {
         if let Some(coordinates) = fields.coordinates.filter(|_| held.filled.insert("coordinates")) {
             place::assert_place_coordinates(ws, session, human_id, coordinates, meta()).await?;
         }
+        if let Some(code) = held.fill("code", fields.code.as_ref()) {
+            place::set_place_code(ws, session, human_id, code, meta()).await?;
+        }
         if let Some(restrictions) = held.widen(&fields.restrictions) {
             place::set_restrictions(ws, session, human_id, restrictions, meta()).await?;
         }
@@ -515,6 +521,9 @@ impl Writer<'_> {
                 }
                 if let Some(coordinates) = fields.coordinates {
                     place::assert_place_coordinates(ws, session, human_id, coordinates, meta()).await?;
+                }
+                if let Some(code) = &fields.code {
+                    place::set_place_code(ws, session, human_id, code.clone(), meta()).await?;
                 }
                 if !fields.restrictions.is_empty() {
                     place::set_restrictions(ws, session, human_id, fields.restrictions.clone(), meta()).await?;

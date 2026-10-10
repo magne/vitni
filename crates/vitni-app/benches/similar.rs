@@ -613,6 +613,7 @@ fn record() -> RecordGraph {
         name: "Norge".to_owned(),
         place_type: None,
         coordinates: None,
+        code: None,
         restrictions: BTreeSet::default(),
     };
     RecordGraph {

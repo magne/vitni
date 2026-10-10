@@ -15,11 +15,11 @@ wit_bindgen::generate!({
     world: "bulk-export",
     path: "../../crates/vitni-plugin-host/wit",
     with: {
-        "vitni:host-api/types@0.30.0": vitni_plugin_api::types,
-        "vitni:host-api/log@0.30.0": vitni_plugin_api::log,
-        "vitni:host-api/query@0.30.0": vitni_plugin_api::query,
-        "vitni:host-api/progress@0.30.0": vitni_plugin_api::progress,
-        "vitni:host-api/export-sink@0.30.0": vitni_plugin_api::export_sink,
+        "vitni:host-api/types@0.31.0": vitni_plugin_api::types,
+        "vitni:host-api/log@0.31.0": vitni_plugin_api::log,
+        "vitni:host-api/query@0.31.0": vitni_plugin_api::query,
+        "vitni:host-api/progress@0.31.0": vitni_plugin_api::progress,
+        "vitni:host-api/export-sink@0.31.0": vitni_plugin_api::export_sink,
     },
 });
 
@@ -347,8 +347,9 @@ fn place(dto: types::PlaceDto) -> Place {
         gramps_id: None,
         name: dto.name,
         place_type: dto.place_type.map(place_type_label),
+        // The host-api `PlaceDto` carries neither a code nor geometry (ADR 0024) yet — a follow-up.
+        code: None,
         enclosed_by: dto.enclosed_by,
-        // The host-api `PlaceDto` does not carry geometry (ADR 0024) yet — a follow-up.
         longitude: None,
         latitude: None,
     }

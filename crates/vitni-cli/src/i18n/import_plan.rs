@@ -107,6 +107,7 @@ impl Localizer {
             PlannedField::Type => fl!(self.loader, "import-plan-field-type"),
             PlannedField::Enclosure => fl!(self.loader, "import-plan-field-enclosure"),
             PlannedField::Coordinates => fl!(self.loader, "import-plan-field-coordinates"),
+            PlannedField::Code => fl!(self.loader, "import-plan-field-code"),
             PlannedField::Title => fl!(self.loader, "import-plan-field-title"),
             PlannedField::Author => fl!(self.loader, "import-plan-field-author"),
             PlannedField::Publication => fl!(self.loader, "import-plan-field-publication"),

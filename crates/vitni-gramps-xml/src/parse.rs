@@ -239,6 +239,7 @@ fn place(element: &Element) -> Place {
             .and_then(|p| p.attr("value"))
             .map(ToOwned::to_owned),
         place_type: element.attr("type").map(ToOwned::to_owned),
+        code: child_text(element, "code"),
         enclosed_by: hlinks(element, "placeref"),
         longitude: coord.and_then(|c| c.attr("long")).map(ToOwned::to_owned),
         latitude: coord.and_then(|c| c.attr("lat")).map(ToOwned::to_owned),

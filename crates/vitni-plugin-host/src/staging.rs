@@ -361,6 +361,7 @@ fn to_entity(entity: staging::StagedEntity) -> StagedEntity {
         }),
         staging::EntityFields::Place(place) => EntityFields::Place(StagedPlace {
             coordinates: place.coordinates.and_then(|point| to_coordinates(&place.name, point)),
+            code: place.code.and_then(|code| to_code(&place.name, code)),
             name: place.name,
             place_type: place.place_type.map(to_place_type),
             restrictions: to_restrictions(place.restrictions),
@@ -414,6 +415,16 @@ fn to_coordinates(name: &str, point: types::Coordinates) -> Option<GeoCoordinate
         );
     }
     coordinates
+}
+
+/// The code a guest staged for the place `name`, or `None`, with a warning, when it is blank: a place's
+/// code cannot be empty, so this guards against a guest that stages one.
+fn to_code(name: &str, code: String) -> Option<String> {
+    if code.trim().is_empty() {
+        tracing::warn!(place = name, "dropping a staged place's blank code");
+        return None;
+    }
+    Some(code)
 }
 
 fn to_fact(fact: types::Fact) -> NewFact {
@@ -526,5 +537,21 @@ fn to_link(link: staging::StagedLink) -> StagedLink {
     StagedLink {
         item: link.item,
         link: kind,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::to_code;
+
+    #[test]
+    fn a_staged_code_is_kept() {
+        assert_eq!(to_code("Norge", "NO".to_owned()), Some("NO".to_owned()));
+    }
+
+    #[test]
+    fn a_blank_staged_code_is_dropped() {
+        assert_eq!(to_code("Norge", String::new()), None);
+        assert_eq!(to_code("Norge", "  ".to_owned()), None);
     }
 }

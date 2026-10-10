@@ -1198,7 +1198,8 @@ For import/export fidelity. "—" means no direct equivalent.
     - **Model gaps a real-world file carries** (none modelled yet): multiple `NAME` records per
       person; INDI↔FAM `FAMS`/`FAMC` back-refs;
       the export of `PLAC.MAP` / Gramps place coordinates (imported onto the place since host-api
-      0.30.0, and reconciled on re-import like any single-valued field); submitter (`SUBM`) and `HEAD` metadata; media
+      0.30.0, and reconciled on re-import like any single-valued field) and of the Gramps place `<code>`
+      (likewise, since host-api 0.31.0); submitter (`SUBM`) and `HEAD` metadata; media
       `FORM`/type/`CAPT`; citation `CALN`; Gramps `<tagref>` on the person/family record (tags are
       created but not yet attached to their owner on import); the adoption-to-family link
       (`ADOP.FAMC`); the verbatim `Address.original_text` fallback for an unsplittable `ADDR`.

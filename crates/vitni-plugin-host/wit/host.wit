@@ -217,7 +217,11 @@
 // `coordinates: option<coordinates>`, which GEDCOM `PLAC.MAP` and Gramps `<coord>` state, so a
 // re-import reconciles a moved point by the file's export date (ADR 0029). A breaking change to
 // `staging`.
-package vitni:host-api@0.30.0;
+//
+// Version 0.31.0 carries a place's code into an import (#537): `staged-place` gains
+// `code: option<string>`, which Gramps `<placeobj><code>` states, so a re-import reconciles a changed
+// code by the file's export date (ADR 0029). A breaking change to `staging`.
+package vitni:host-api@0.31.0;
 
 interface types {
     // The kind of a name (data-model §7 / GEDCOM `NAME.TYPE`), mirroring `vitni_core::name::NameType`.
@@ -1096,6 +1100,7 @@ interface staging {
         name: string,
         place-type: option<place-type>,
         coordinates: option<coordinates>,
+        code: option<string>,
         restrictions: list<restriction>,
     }
 

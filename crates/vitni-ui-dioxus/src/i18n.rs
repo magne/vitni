@@ -2360,6 +2360,7 @@ impl Chrome {
             PlannedField::Type => fl!(self.loader, "bulk-import-plan-field-type"),
             PlannedField::Enclosure => fl!(self.loader, "bulk-import-plan-field-enclosure"),
             PlannedField::Coordinates => fl!(self.loader, "bulk-import-plan-field-coordinates"),
+            PlannedField::Code => fl!(self.loader, "bulk-import-plan-field-code"),
             PlannedField::Title => fl!(self.loader, "bulk-import-plan-field-title"),
             PlannedField::Author => fl!(self.loader, "bulk-import-plan-field-author"),
             PlannedField::Publication => fl!(self.loader, "bulk-import-plan-field-publication"),

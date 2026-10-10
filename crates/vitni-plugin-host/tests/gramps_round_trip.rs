@@ -13,8 +13,8 @@ use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 use vitni_app::{
     AgentKind, AiConfig, AppDefaults, ChosenDataset, DatasetId, NoteType, OperatorConfig, ParticipantRole,
-    PersonSummary, Session, Workspace, WorkspaceDefaults, list_citations, list_events, list_families, list_media,
-    list_notes, list_persons, list_places, list_sources, list_tags,
+    PersonSummary, PlaceSummary, Session, Workspace, WorkspaceDefaults, list_citations, list_events, list_families,
+    list_media, list_notes, list_persons, list_places, list_sources, list_tags,
 };
 use vitni_core::ids::AgentId;
 use vitni_core::provenance::Agent;
@@ -553,9 +553,9 @@ async fn reimport_reconciles_sex_only_when_the_header_created_date_is_at_least_a
     );
 }
 
-/// A Gramps document whose one person was born at a place with the point `lat`/`long`, exported on
-/// `created`.
-fn located_doc(created: &str, lat: &str, long: &str) -> String {
+/// A Gramps document whose one person was born at the place whose `<placeobj>` children are `place`,
+/// exported on `created`.
+fn place_doc(created: &str, place: &str) -> String {
     format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <database xmlns="http://gramps-project.org/xml/1.7.1/">
@@ -571,15 +571,28 @@ fn located_doc(created: &str, lat: &str, long: &str) -> String {
 <event handle="_e1" id="E0001"><type>Birth</type><place hlink="_pl1"/></event>
 </events>
 <places>
-<placeobj handle="_pl1" id="P0001" type="City"><pname value="Mandal"/><coord long="{long}" lat="{lat}"/></placeobj>
+<placeobj handle="_pl1" id="P0001" type="City">{place}</placeobj>
 </places>
 </database>
 "#
     )
 }
 
-/// Imports `doc` into the fixed run dataset and returns the workspace with its one place's point.
-async fn import_point(workspace: Workspace, io_dir: &Path, doc: &str) -> (Workspace, Option<(f64, f64)>) {
+/// A [`place_doc`] whose place has the point `lat`/`long`.
+fn located_doc(created: &str, lat: &str, long: &str) -> String {
+    place_doc(
+        created,
+        &format!(r#"<pname value="Mandal"/><coord long="{long}" lat="{lat}"/>"#),
+    )
+}
+
+/// A [`place_doc`] whose place has the code `code`.
+fn coded_doc(created: &str, code: &str) -> String {
+    place_doc(created, &format!(r#"<code>{code}</code><pname value="Mandal"/>"#))
+}
+
+/// Imports `doc` into the fixed run dataset and returns the workspace with its one place.
+async fn import_place(workspace: Workspace, io_dir: &Path, doc: &str) -> (Workspace, PlaceSummary) {
     let source = write_file(io_dir, "in.gramps", doc.as_bytes());
     let (_, workspace) = common::host()
         .run_bulk_import(
@@ -590,9 +603,15 @@ async fn import_point(workspace: Workspace, io_dir: &Path, doc: &str) -> (Worksp
         )
         .await
         .expect("import");
-    let places = list_places(&workspace).await.expect("places");
+    let mut places = list_places(&workspace).await.expect("places");
     assert_eq!(places.len(), 1, "every import resolves to the one place: {places:?}");
-    let point = places[0]
+    (workspace, places.remove(0))
+}
+
+/// Imports `doc` into the fixed run dataset and returns the workspace with its one place's point.
+async fn import_point(workspace: Workspace, io_dir: &Path, doc: &str) -> (Workspace, Option<(f64, f64)>) {
+    let (workspace, place) = import_place(workspace, io_dir, doc).await;
+    let point = place
         .coordinates_point
         .map(|point| (point.latitude.to_degrees(), point.longitude.to_degrees()));
     (workspace, point)
@@ -623,6 +642,30 @@ async fn a_places_coord_is_imported_and_reconciled_by_the_header_created_date() 
     let doc = located_doc("2100-01-01", "58.03", "7.455");
     let (_, point) = import_point(workspace, io_dir.path(), &doc).await;
     assert_eq!(point, Some((58.03, 7.455)), "a newer file moves the point");
+}
+
+#[tokio::test]
+async fn a_places_code_is_imported_and_reconciled_by_the_header_created_date() {
+    let io_dir = tempfile::tempdir().expect("io dir");
+    let (root, _dir) = init_workspace();
+    let workspace = open_workspace(&root).await;
+
+    let (workspace, place) = import_place(workspace, io_dir.path(), &coded_doc("2000-01-01", "4515")).await;
+    assert_eq!(
+        place.code.as_deref(),
+        Some("4515"),
+        "the first import carries the place's <code>"
+    );
+
+    let (workspace, place) = import_place(workspace, io_dir.path(), &coded_doc("2000-01-02", "4516")).await;
+    assert_eq!(
+        place.code.as_deref(),
+        Some("4515"),
+        "a file older than the live code leaves it"
+    );
+
+    let (_, place) = import_place(workspace, io_dir.path(), &coded_doc("2100-01-01", "4516")).await;
+    assert_eq!(place.code.as_deref(), Some("4516"), "a newer file replaces the code");
 }
 
 #[tokio::test]

@@ -290,6 +290,8 @@ pub struct Place {
     pub name: Option<String>,
     /// The place type (the `type` attribute), kept verbatim.
     pub place_type: Option<String>,
+    /// The place's code (`<code>`) — a postal, ISO or other short identifier.
+    pub code: Option<String>,
     /// Handles of enclosing places (`<placeref>`), the hierarchy chain.
     pub enclosed_by: Vec<String>,
     /// The point longitude (`<coord long>` — ADR 0024 §4), verbatim signed decimal degrees. Gramps'
