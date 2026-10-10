@@ -392,11 +392,6 @@ in its own area: research notes (*Notes & research notes*). The one gap running 
   `Timestamp::parse_rfc3339` (an impossible day such as Gramps `2024-02-30`) with no log, and Gramps
   `date_point` loses the day of a `<created>` with a time part. *Shape:* `warn!` and note on the run that
   the file's date was not used. *Exit:* a re-import with an impossible date that surfaces the note. — #528
-- **No test covers an export date equal to the live value's time** — ADR 0029 §1's "at least as recent"
-  boundary is `>` in `import_assert_sex` (`crates/vitni-app/src/import.rs`) and `<=` in
-  `origin_gate.rs`; every test uses dates well before or after, so flipping either stays green.
-  *Shape:* read the live assertion's `occurred_at` back and re-import with that exact instant. *Exit:* a
-  test per comparison that fails when the boundary flips. — #529
 
 ### Assisted import
 

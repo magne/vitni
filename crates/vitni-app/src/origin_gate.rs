@@ -809,6 +809,33 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_changed_single_value_supersedes_when_the_file_is_exactly_as_recent() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let workspace = workspace(dir.path()).await;
+        let (session, run) = importer(None);
+        let event = event(&workspace, &session, &run).await;
+        describe(&workspace, &session, &run, &event, "at home").await;
+        let rows = workspace
+            .store()
+            .origin_rows(dataset().as_str(), "I1", Some("event:BIRT:0"), "event.DescriptionSet")
+            .await
+            .expect("rows");
+        let live_at = rows.first().expect("the live description's row").occurred_at;
+
+        // ADR 0029 §1: a file exported at the very instant of the live value is at least as recent.
+        let (session, run) = importer(Some(live_at));
+        describe(&workspace, &session, &run, &event, "at church").await;
+        assert_eq!(description(&workspace, &event).await.as_deref(), Some("at church"));
+        let rows = workspace
+            .store()
+            .origin_rows(dataset().as_str(), "I1", Some("event:BIRT:0"), "event.DescriptionSet")
+            .await
+            .expect("rows");
+        let live: Vec<bool> = rows.iter().map(|row| row.live).collect();
+        assert_eq!(live, [false, true], "the earlier value was superseded");
+    }
+
+    #[tokio::test]
     async fn a_changed_single_value_is_left_alone_when_the_file_is_older_or_undated() {
         let dir = tempfile::tempdir().expect("tempdir");
         let workspace = workspace(dir.path()).await;
