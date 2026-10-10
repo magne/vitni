@@ -520,6 +520,26 @@ mod tests {
     }
 
     #[test]
+    fn a_header_export_date_with_a_time_keeps_its_day() {
+        let xml = br#"<?xml version="1.0" encoding="UTF-8"?>
+<database xmlns="http://gramps-project.org/xml/1.7.1/">
+<header>
+<created date="2019-05-04T10:00:00"/>
+</header>
+</database>
+"#;
+        let db = parse(xml).expect("parse");
+        assert_eq!(
+            db.header.date,
+            Some(DatePoint {
+                year: Some(2019),
+                month: Some(5),
+                day: Some(4),
+            })
+        );
+    }
+
+    #[test]
     fn parses_the_header_researcher_name() {
         let xml = br#"<?xml version="1.0" encoding="UTF-8"?>
 <database xmlns="http://gramps-project.org/xml/1.7.1/">

@@ -39,10 +39,10 @@ pub struct Database {
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Header {
     /// The file's own asserted-as-of date (`<header><created date="…">`, a plain `YYYY`/`YYYY-MM`/
-    /// `YYYY-MM-DD` string — Gramps carries no calendar/modifier grammar here, unlike an event date),
-    /// when present and parseable — the input a re-import reconciliation rule gates on (ADR 0029
-    /// §2). A missing or unparseable date is `None` (the conservative, additive-only default — ADR
-    /// 0029 §3), never a synthesized fallback.
+    /// `YYYY-MM-DD` string, any time after the day dropped — Gramps carries no calendar/modifier
+    /// grammar here, unlike an event date), when present and parseable — the input a re-import
+    /// reconciliation rule gates on (ADR 0029 §2). A missing or unparseable date is `None` (the
+    /// conservative, additive-only default — ADR 0029 §3), never a synthesized fallback.
     pub date: Option<DatePoint>,
     /// The researcher's name (`<header><researcher><resname>`).
     pub researcher: Option<String>,
