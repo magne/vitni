@@ -143,6 +143,7 @@ mod tests {
                 gramps_id: Some("P0001".to_owned()),
                 name: Some("Bergen".to_owned()),
                 place_type: None,
+                code: Some("BGO".to_owned()),
                 enclosed_by: Vec::new(),
                 longitude: Some("5.322054".to_owned()),
                 latitude: Some("60.391262".to_owned()),
@@ -275,6 +276,49 @@ mod tests {
             !String::from_utf8_lossy(&bytes).contains("coord"),
             "no <coord> element when no coordinates are recorded"
         );
+    }
+
+    #[test]
+    fn parses_a_hand_written_place_code() {
+        let xml = br#"<?xml version="1.0" encoding="UTF-8"?>
+<database xmlns="http://gramps-project.org/xml/1.7.1/">
+<places>
+<placeobj handle="_pl1" id="P0001" type="Country">
+<code>NO</code>
+<pname value="Norge"/>
+<coord long="10.0" lat="62.0"/>
+</placeobj>
+<placeobj handle="_pl2" id="P0002">
+<pname value="Mandal"/>
+</placeobj>
+</places>
+</database>
+"#;
+        let db = parse(xml).expect("parse");
+        assert_eq!(db.places[0].code.as_deref(), Some("NO"));
+        assert_eq!(db.places[1].code, None, "no <code>, no code");
+    }
+
+    #[test]
+    fn a_place_code_is_emitted_before_its_name() {
+        let db = Database {
+            places: vec![Place {
+                handle: "_pl1".to_owned(),
+                name: Some("Norge".to_owned()),
+                code: Some("NO".to_owned()),
+                longitude: Some("10.0".to_owned()),
+                latitude: Some("62.0".to_owned()),
+                ..Place::default()
+            }],
+            ..Database::default()
+        };
+        let xml = String::from_utf8(emit(&db)).expect("utf-8");
+        let (code, name, coord) = (xml.find("<code>NO</code>"), xml.find("<pname"), xml.find("<coord"));
+        assert!(
+            code.is_some() && code < name && name < coord,
+            "the DTD orders code, pname, coord: {xml}"
+        );
+        assert_eq!(parse(xml.as_bytes()).expect("reparse"), db, "<code> round-trips");
     }
 
     #[test]

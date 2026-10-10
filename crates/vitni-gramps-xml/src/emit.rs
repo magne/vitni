@@ -203,6 +203,9 @@ fn emit_place(out: &mut String, place: &Place) {
         attrs.push(("type".to_owned(), place_type.clone()));
     }
     out.push_str(&open_owned("placeobj", &attrs));
+    if let Some(code) = &place.code {
+        out.push_str(&text_element("code", code));
+    }
     if let Some(name) = &place.name {
         out.push_str(&empty("pname", &[("value", name)]));
     }

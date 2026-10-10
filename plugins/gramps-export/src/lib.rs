@@ -347,8 +347,9 @@ fn place(dto: types::PlaceDto) -> Place {
         gramps_id: None,
         name: dto.name,
         place_type: dto.place_type.map(place_type_label),
+        // The host-api `PlaceDto` carries neither a code nor geometry (ADR 0024) yet — a follow-up.
+        code: None,
         enclosed_by: dto.enclosed_by,
-        // The host-api `PlaceDto` does not carry geometry (ADR 0024) yet — a follow-up.
         longitude: None,
         latitude: None,
     }
