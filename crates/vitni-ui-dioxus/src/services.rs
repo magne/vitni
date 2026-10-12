@@ -287,6 +287,13 @@ pub async fn load_counts(services: Services) -> Option<WorkspaceCounts> {
     workspace_counts(&workspace).await.ok()
 }
 
+/// How many events the workspace holds that this version cannot read, as its open found them (ADR
+/// 0051), for the shell banner; `None` if the workspace cannot be opened.
+pub async fn load_unreadable_count(services: Services) -> Option<usize> {
+    let workspace = services.open().await.ok()?;
+    Some(workspace.unreadable_events().len())
+}
+
 /// Resolves the current display name of the record `(category, human_id)` for a record link, or
 /// `None` when it has no name, does not exist, or the workspace cannot be opened (the link then
 /// falls back to the human id). Best-effort: infrastructure errors are logged, not surfaced.

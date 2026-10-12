@@ -1,5 +1,5 @@
-//! The shell root: assembles the rail, top bar, tabstrip, work area, status bar, and overlays, and
-//! installs the central keyboard dispatcher.
+//! The shell root: assembles the rail, top bar, banner, tabstrip, work area, status bar, and overlays,
+//! and installs the central keyboard dispatcher.
 
 use dioxus::prelude::*;
 use vitni_ui::{Category, Destination, Tool};
@@ -10,7 +10,8 @@ use crate::screens::{
     DashboardScreen, ExportScreen, GeographyScreen, HelpScreen, ImportScreen, MatchesScreen, PedigreeScreen,
     PluginPanelScreen, PreferencesScreen, RecordDetail,
 };
-use crate::services::load_counts;
+use crate::services::{load_counts, load_unreadable_count};
+use crate::shell::banner::ShellBanner;
 use crate::shell::close_confirm::CloseConfirmDialog;
 use crate::shell::explorer::Explorer;
 use crate::shell::focus_trap::FocusHistory;
@@ -72,8 +73,9 @@ pub fn Shell() -> Element {
         Some(AppCtx::Ready(state)) => Some(state.services().clone()),
         _ => None,
     };
+    let counts_services = services.clone();
     let counts = use_resource(move || {
-        let services = services.clone();
+        let services = counts_services.clone();
         let _ = nav.data_version.read();
         async move {
             match services {
@@ -83,6 +85,19 @@ pub fn Shell() -> Element {
         }
     });
     use_context_provider(|| CountsCtx(counts));
+    // The banner's unreadable events (ADR 0051), re-read on the same bumps: a rebuild or restore that
+    // changes them bumps `data_version`, and the reopen reports them afresh.
+    let unreadable = use_resource(move || {
+        let services = services.clone();
+        let _ = nav.data_version.read();
+        async move {
+            match services {
+                Some(services) => load_unreadable_count(services).await,
+                None => None,
+            }
+        }
+    });
+    let unreadable = unreadable.read().flatten().unwrap_or(0);
     let theme = nav.theme.read().attr();
     let notices = ShellNotices {
         nothing_to_undo: chrome.0.kbd_nothing_to_undo(),
@@ -146,6 +161,7 @@ pub fn Shell() -> Element {
             }
             div { class: "shell",
                 Topbar {}
+                ShellBanner { unreadable }
                 if is_entity {
                     RecordTabstrip {}
                 }

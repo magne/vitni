@@ -113,6 +113,12 @@ kbd-nothing-to-save = Ingenting å lagre
 save-run-incomplete = Noen poster er fortsatt ulagret — programmet forble åpent.
 notice-dismiss = Lukk
 
+# The shell banner while the workspace holds events this version cannot read (ADR 0051)
+unreadable-events-banner = { $count ->
+        [one] Én hendelse i dette arbeidsområdet kunne ikke leses, så posten viser bare det som kom før den.
+       *[other] { $count } hendelser i dette arbeidsområdet kunne ikke leses, så postene viser bare det som kom før dem.
+    } Hvis arbeidsområdet sist ble brukt med en nyere versjon av vitni, oppdater vitni; ellers gjenopprett en tidligere sikkerhetskopi.
+
 help-title = Hurtigtaster
 help-col-global = Globalt
 help-col-goto = Gå til

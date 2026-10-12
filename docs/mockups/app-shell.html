@@ -332,6 +332,24 @@
       <div class="toast error">⚠ Could not save · <span class="src-link">Dismiss</span></div>
     </div>
 
+    <!-- Feedback — the shell banner (#535, ADR 0051): a workspace condition, not an outcome -->
+    <h2 style="border:0;margin:var(--sp-6) 0 12px;font-size:21px">Feedback — the shell banner</h2>
+    <p class="muted">A toast reports what just happened; the <b>shell banner</b> reports a condition of
+      the workspace that holds until it is resolved. It is a row of its own in the
+      <span class="mono">.shell</span> grid, between the top bar and the tabstrip, so it pushes the work
+      area down rather than covering it, and the row collapses to nothing when there is no banner. Today
+      it has one use: the workspace holds events this version of vitni <b>cannot read</b> — a corrupt
+      payload, or one a newer version wrote. The workspace still opens; each affected record shows the
+      events before the unreadable one, and the banner says how many there are and what to do. It is
+      <span class="mono">role="alert"</span>, has <b>no Dismiss</b> and no timer, and is re-read
+      whenever the workspace data changes (a rebuild included), so it goes away once an updated vitni
+      reads the events or an earlier backup replaces them. Behind an open side panel it is
+      <span class="mono">inert</span> with the rest of the chrome. The CLI prints the same warning on
+      stderr, followed by each event by aggregate, id and sequence.</p>
+    <div class="specimen" style="padding:0">
+      <div class="shell-banner" role="alert"><span class="shell-banner-icon" aria-hidden="true">⚠</span>One event in this workspace could not be read, so its record shows only what came before it. If the workspace was last used with a newer version of vitni, update vitni; otherwise restore an earlier backup.</div>
+    </div>
+
   </div>
 </div>
 

@@ -1,5 +1,5 @@
-//! The application shell (ADR 0008 §5): the navigation rail, top bar, record tabstrip, work area,
-//! status bar, and the keyboard layer (central dispatcher, `g`-prefix nav, `⌘K` palette, `?` help).
+//! The application shell (ADR 0008 §5): the navigation rail, top bar, banner, record tabstrip, work
+//! area, status bar, and the keyboard layer (central dispatcher, `g`-prefix nav, `⌘K` palette, `?` help).
 //!
 //! Shell regions share one [`NavState`](nav_state::NavState) via context and read localized chrome
 //! through [`ChromeCtx`] (provided by the root [`App`](crate::app::App), or by tests directly), so
@@ -15,6 +15,7 @@ use vitni_ui::Localizer;
 
 use crate::i18n::Chrome;
 
+pub mod banner;
 pub mod close_confirm;
 pub mod explorer;
 pub mod focus_trap;

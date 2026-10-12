@@ -507,6 +507,12 @@ impl Chrome {
         fl!(self.loader, "notice-dismiss")
     }
 
+    /// The shell banner while the workspace holds `count` events this version cannot read (ADR 0051).
+    #[must_use]
+    pub fn unreadable_events_banner(&self, count: usize) -> String {
+        fl!(self.loader, "unreadable-events-banner", count = count)
+    }
+
     /// The keyboard-shortcuts help-sheet title.
     #[must_use]
     pub fn help_title(&self) -> String {
