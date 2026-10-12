@@ -1120,3 +1120,73 @@ fn the_queue_is_filtered_by_kind_and_band() {
         .assert()
         .failure();
 }
+
+/// Runs `statement` against the `gen` workspace's database with no command running, returning the
+/// first column of its first row, if any.
+fn sql(dir: &Path, statement: &str) -> Option<String> {
+    let url = format!("sqlite://{}", dir.join("ws").join("vitni.sqlite3").display());
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    runtime.block_on(async {
+        let pool = sqlx::SqlitePool::connect(&url).await.unwrap();
+        let value = sqlx::query_scalar(statement).fetch_optional(&pool).await.unwrap();
+        pool.close().await;
+        value
+    })
+}
+
+#[test]
+fn a_workspace_with_an_unreadable_event_opens_warns_and_names_it() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    for given in ["Ada", "Bob"] {
+        vitni(dir.path())
+            .args(["person", "create", "--given", given])
+            .assert()
+            .success();
+    }
+    let ada = sql(dir.path(), "SELECT view_id FROM person_view WHERE human_id = 'I0001'").unwrap();
+    sql(
+        dir.path(),
+        &format!(
+            "UPDATE events SET payload = '{{\"type\":\"NoSuchEvent\"}}' \
+             WHERE aggregate_id = '{ada}' AND sequence = 2 RETURNING aggregate_id"
+        ),
+    );
+    let named = format!("  person event {ada} #2 (");
+    let warning = "warning: one event in this workspace could not be read";
+
+    let rebuilt = vitni(dir.path()).arg("rebuild").assert().success();
+    let stderr = String::from_utf8(rebuilt.get_output().stderr.clone()).unwrap();
+    assert_eq!(stderr.matches(warning).count(), 1, "warned once: {stderr}");
+    assert!(stderr.contains(&named), "names the event: {stderr}");
+    assert!(
+        stderr.contains("update vitni; otherwise restore an earlier backup"),
+        "{stderr}"
+    );
+
+    vitni(dir.path())
+        .args(["person", "list"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(warning).and(predicate::str::contains(named.as_str())))
+        .stdout(
+            predicate::str::contains("I0001")
+                .and(predicate::str::contains("I0002"))
+                .and(predicate::str::contains("Bob")),
+        );
+
+    let backup = dir.path().join("gen.vitni-backup");
+    vitni(dir.path())
+        .args(["backup", "create"])
+        .arg(&backup)
+        .assert()
+        .success();
+    vitni(dir.path())
+        .args(["backup", "restore"])
+        .arg(&backup)
+        .args(["--new", "copy"])
+        .arg(dir.path().join("copy"))
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(format!("person event {ada} #2 (")));
+}
