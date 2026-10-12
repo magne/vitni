@@ -1,6 +1,6 @@
 ## Tag output
 tag-list-empty = Ingen merkelapper ennå.
-tag-summary = { $id }  { $name }  farge: { $color }  prioritet: { $priority }
+tag-summary = { $id }  { $name }  farge: { $color }  prioritet: { $priority }{ $restrictions }
 
 ## AppError
 err-tag-not-found = ingen merkelapp med id "{ $id }"

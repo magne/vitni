@@ -1,6 +1,6 @@
 ## Media output
 media-list-empty = No media yet.
-media-summary = { $id }  path: { $path }  checksum: { $checksum }  attributes: { $attributes }
+media-summary = { $id }  path: { $path }  checksum: { $checksum }  attributes: { $attributes }{ $restrictions }
 
 ## AppError
 err-media-not-found = no media with human_id "{ $id }"

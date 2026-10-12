@@ -1,6 +1,6 @@
 ## Source output
 source-list-empty = No sources yet.
-source-summary = { $id }  { $title }  author: { $author }  repos: { $repositories }  attrs: { $attributes }
+source-summary = { $id }  { $title }  author: { $author }  repos: { $repositories }  attrs: { $attributes }{ $restrictions }
 
 ## AppError
 err-source-not-found = no source with human_id "{ $id }"

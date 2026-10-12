@@ -1,6 +1,6 @@
 ## Citation output
 citation-list-empty = No citations yet.
-citation-summary = { $id }  source: { $source }  page: { $page }  date: { $date }  confidence: { $confidence }
+citation-summary = { $id }  source: { $source }  page: { $page }  date: { $date }  confidence: { $confidence }{ $restrictions }
 
 ## AppError
 err-citation-not-found = no citation with human_id "{ $id }"

@@ -1,6 +1,6 @@
 ## ResearchNote output (ADR 0028)
 research-note-list-empty = No research notes yet.
-research-note-summary = { $id }  subject: { $subject }  { $title }
+research-note-summary = { $id }  subject: { $subject }  { $title }{ $restrictions }
 
 ## Subject labels (kind + internal id; resolving to the subject's own human id is a follow-up)
 research-note-subject-person = person { $id }

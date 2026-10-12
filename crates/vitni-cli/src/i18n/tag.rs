@@ -28,7 +28,8 @@ impl Localizer {
             id = summary.id.clone(),
             name = name,
             color = color,
-            priority = priority
+            priority = priority,
+            restrictions = self.restrictions_tag(&summary.restrictions)
         )
     }
 

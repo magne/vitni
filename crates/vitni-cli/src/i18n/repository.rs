@@ -25,7 +25,8 @@ impl Localizer {
             name = name,
             repository_type = repository_type,
             addresses = summary.addresses.len().to_string(),
-            urls = summary.urls.len().to_string()
+            urls = summary.urls.len().to_string(),
+            restrictions = self.restrictions_tag(&summary.restrictions)
         )
     }
 

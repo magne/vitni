@@ -1,6 +1,6 @@
 ## DNA-test output
 dna-test-list-empty = No DNA tests yet.
-dna-test-summary = { $id }  person: { $person }  provider: { $provider }  type: { $test_type }  haplogroups: { $haplogroups }
+dna-test-summary = { $id }  person: { $person }  provider: { $provider }  type: { $test_type }  haplogroups: { $haplogroups }{ $restrictions }
 
 ## DNA-provider labels
 dna-provider-ancestry = AncestryDNA

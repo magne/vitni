@@ -3,10 +3,12 @@
 //! Each domain enum carries a `Custom(String)` escape the CLI does not expose yet; these mirrors
 //! cover the closed variants and convert into the domain type via `From`.
 
-use clap::ValueEnum;
+use std::collections::BTreeSet;
+
+use clap::{Args, ValueEnum};
 use vitni_app::{
     ChildParentRelationship, ChromosomeSide, Confidence, DnaGenomeBuild, DnaProvider, DnaTestType, EventType,
-    EvidenceKind, InformationKind, NoteType, ParticipantRole, PlaceType, RepositoryType, SourceMediaType,
+    EvidenceKind, InformationKind, NoteType, ParticipantRole, PlaceType, RepositoryType, Restriction, SourceMediaType,
     SourceQuality, SuccessionKind,
 };
 use vitni_core::enums::EvidenceLevel;
@@ -508,4 +510,57 @@ pub enum SubjectKindArg {
     Event,
     /// A Place, by its `human_id`.
     Place,
+}
+
+/// CLI mirror of [`Restriction`] — a record's privacy restriction (GEDCOM v7 `RESN`, data-model §6).
+#[derive(Clone, Copy, ValueEnum)]
+pub enum RestrictionArg {
+    /// Hide from general view.
+    Confidential,
+    /// Protected from edits.
+    Locked,
+    /// Living-person privacy.
+    Privacy,
+}
+
+impl From<RestrictionArg> for Restriction {
+    fn from(value: RestrictionArg) -> Self {
+        match value {
+            RestrictionArg::Confidential => Self::Confidential,
+            RestrictionArg::Locked => Self::Locked,
+            RestrictionArg::Privacy => Self::Privacy,
+        }
+    }
+}
+
+/// The full restriction set a `set-restrictions` verb writes: the listed restrictions, or none with
+/// `--clear`. It replaces the record's current set rather than adding to it.
+#[derive(Args)]
+pub struct RestrictionsArgs {
+    /// A restriction to set; repeat the flag or separate with commas (`privacy,locked`).
+    #[arg(
+        long = "restriction",
+        value_enum,
+        value_delimiter = ',',
+        required_unless_present = "clear"
+    )]
+    restrictions: Vec<RestrictionArg>,
+    /// Remove every restriction from the record.
+    #[arg(long, conflicts_with = "restrictions")]
+    clear: bool,
+}
+
+impl RestrictionsArgs {
+    /// The restriction set to write — empty after `--clear`.
+    #[must_use]
+    pub fn into_set(self) -> BTreeSet<Restriction> {
+        let mut set = BTreeSet::new();
+        if self.clear {
+            return set;
+        }
+        for restriction in self.restrictions {
+            set.insert(restriction.into());
+        }
+        set
+    }
 }

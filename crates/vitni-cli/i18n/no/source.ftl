@@ -1,6 +1,6 @@
 ## Source output
 source-list-empty = Ingen kilder ennå.
-source-summary = { $id }  { $title }  forfatter: { $author }  arkiv: { $repositories }  attr: { $attributes }
+source-summary = { $id }  { $title }  forfatter: { $author }  arkiv: { $repositories }  attr: { $attributes }{ $restrictions }
 
 ## AppError
 err-source-not-found = ingen kilde med human_id "{ $id }"

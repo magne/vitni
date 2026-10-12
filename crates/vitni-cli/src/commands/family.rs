@@ -3,10 +3,10 @@
 use clap::Subcommand;
 use vitni_app::{
     AppError, ChildParentRelationship, MatchableKind, MutationMeta, Provenance, Session, Workspace, add_child,
-    add_partner, create_family, list_families, remove_child, remove_partner, show_family,
+    add_partner, create_family, list_families, remove_child, remove_partner, set_family_restrictions, show_family,
 };
 
-use crate::args::RelationshipArg;
+use crate::args::{RelationshipArg, RestrictionsArgs};
 use crate::commands::similar::hint_similar;
 use crate::i18n::Localizer;
 
@@ -45,6 +45,13 @@ pub enum FamilyCmd {
         family_id: String,
         /// The child's person human id (e.g. `I0002`).
         person_id: String,
+    },
+    /// Set (or clear) a family's privacy restrictions, replacing its current set.
+    SetRestrictions {
+        /// The family's human id (e.g. `F0001`).
+        human_id: String,
+        #[command(flatten)]
+        restrictions: RestrictionsArgs,
     },
     /// Show one family.
     Show {
@@ -112,9 +119,32 @@ pub async fn run(
             println!("{}", localizer.updated(&family_id));
             Ok(())
         }
+        FamilyCmd::SetRestrictions { human_id, restrictions } => {
+            restrict(workspace, session, &human_id, restrictions, localizer).await
+        }
         FamilyCmd::Show { human_id } => show(workspace, &human_id, localizer).await,
         FamilyCmd::List => list(workspace, localizer).await,
     }
+}
+
+/// Replaces a family's privacy restrictions and reports the update.
+async fn restrict(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    restrictions: RestrictionsArgs,
+    localizer: &Localizer,
+) -> Result<(), AppError> {
+    set_family_restrictions(
+        workspace,
+        session,
+        human_id,
+        restrictions.into_set(),
+        MutationMeta::default(),
+    )
+    .await?;
+    println!("{}", localizer.updated(human_id));
+    Ok(())
 }
 
 /// Renders one family, or errors if absent.

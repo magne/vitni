@@ -23,7 +23,8 @@ impl Localizer {
             "note-summary",
             id = summary.human_id.clone(),
             note_type = note_type,
-            text = text
+            text = text,
+            restrictions = self.restrictions_tag(&summary.restrictions)
         )
     }
 

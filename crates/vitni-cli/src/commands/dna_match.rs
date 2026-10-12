@@ -5,11 +5,11 @@ use uuid::Uuid;
 use vitni_app::{
     AppError, Centimorgans, DnaSegment, MutationMeta, NewDnaMatch, PercentShared, Provenance, Session, SharedAncestor,
     Workspace, add_dna_match_segment, assert_dna_match_shared_ancestor, attach_dna_match_note, list_dna_matches,
-    observe_dna_match, set_dna_match_status, show_dna_match, tag_dna_match,
+    observe_dna_match, set_dna_match_restrictions, set_dna_match_status, show_dna_match, tag_dna_match,
 };
 use vitni_core::ids::{NoteId, PersonId};
 
-use crate::args::{ChromosomeSideArg, DnaProviderArg};
+use crate::args::{ChromosomeSideArg, DnaProviderArg, RestrictionsArgs};
 use crate::i18n::Localizer;
 
 /// `DnaMatch` subcommands.
@@ -112,6 +112,13 @@ pub enum DnaMatchCmd {
         /// The tag aggregate id (UUID).
         #[arg(long)]
         tag: Uuid,
+    },
+    /// Set (or clear) a match's privacy restrictions, replacing its current set.
+    SetRestrictions {
+        /// The match's human id (e.g. `X0001`).
+        human_id: String,
+        #[command(flatten)]
+        restrictions: RestrictionsArgs,
     },
     /// Show one DNA match.
     Show {
@@ -218,9 +225,32 @@ pub async fn run(
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
+        DnaMatchCmd::SetRestrictions { human_id, restrictions } => {
+            restrict(workspace, session, &human_id, restrictions, localizer).await
+        }
         DnaMatchCmd::Show { human_id } => show(workspace, &human_id, localizer).await,
         DnaMatchCmd::List => list(workspace, localizer).await,
     }
+}
+
+/// Replaces a match's privacy restrictions and reports the update.
+async fn restrict(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    restrictions: RestrictionsArgs,
+    localizer: &Localizer,
+) -> Result<(), AppError> {
+    set_dna_match_restrictions(
+        workspace,
+        session,
+        human_id,
+        restrictions.into_set(),
+        MutationMeta::default(),
+    )
+    .await?;
+    println!("{}", localizer.updated(human_id));
+    Ok(())
 }
 
 /// Renders one DNA match, or errors if absent.

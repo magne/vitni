@@ -1,6 +1,6 @@
 ## Note output
 note-list-empty = Ingen notater ennå.
-note-summary = { $id }  type: { $note_type }  { $text }
+note-summary = { $id }  type: { $note_type }  { $text }{ $restrictions }
 
 ## Note-type labels
 note-type-general = generelt

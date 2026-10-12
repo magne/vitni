@@ -33,7 +33,8 @@ impl Localizer {
             source = source,
             page = page,
             date = date,
-            confidence = confidence
+            confidence = confidence,
+            restrictions = self.restrictions_tag(&summary.restrictions)
         )
     }
 

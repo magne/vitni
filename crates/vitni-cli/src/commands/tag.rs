@@ -6,9 +6,10 @@
 use clap::Subcommand;
 use vitni_app::{
     AppError, MatchableKind, Provenance, Session, Workspace, create_tag, list_tags, rename_tag, set_tag_color,
-    set_tag_priority, show_tag,
+    set_tag_priority, set_tag_restrictions, show_tag,
 };
 
+use crate::args::RestrictionsArgs;
 use crate::commands::similar::hint_similar;
 use crate::i18n::Localizer;
 
@@ -44,6 +45,13 @@ pub enum TagCmd {
         /// The priority (lower sorts first).
         #[arg(long)]
         priority: i32,
+    },
+    /// Set (or clear) a tag's privacy restrictions, replacing its current set.
+    SetRestrictions {
+        /// The tag's id (a UUID).
+        id: String,
+        #[command(flatten)]
+        restrictions: RestrictionsArgs,
     },
     /// Show one tag.
     Show {
@@ -83,9 +91,33 @@ pub async fn run(
             println!("{}", localizer.updated(&id));
             Ok(())
         }
+        TagCmd::SetRestrictions { id, restrictions } => {
+            restrict(workspace, session, &id, restrictions, localizer).await
+        }
         TagCmd::Show { id } => show(workspace, &id, localizer).await,
         TagCmd::List => list(workspace, localizer).await,
     }
+}
+
+/// Replaces a tag's privacy restrictions and reports the update.
+async fn restrict(
+    workspace: &Workspace,
+    session: &Session,
+    id: &str,
+    restrictions: RestrictionsArgs,
+    localizer: &Localizer,
+) -> Result<(), AppError> {
+    set_tag_restrictions(
+        workspace,
+        session,
+        id,
+        restrictions.into_set(),
+        Provenance::default(),
+        &[],
+    )
+    .await?;
+    println!("{}", localizer.updated(id));
+    Ok(())
 }
 
 /// Renders one tag, or errors if absent.

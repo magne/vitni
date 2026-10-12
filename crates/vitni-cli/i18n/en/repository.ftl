@@ -1,6 +1,6 @@
 ## Repository output
 repository-list-empty = No repositories yet.
-repository-summary = { $id }  { $name }  type: { $repository_type }  addresses: { $addresses }  urls: { $urls }
+repository-summary = { $id }  { $name }  type: { $repository_type }  addresses: { $addresses }  urls: { $urls }{ $restrictions }
 
 ## Repository-type labels
 repository-type-library = library

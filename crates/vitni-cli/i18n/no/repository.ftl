@@ -1,6 +1,6 @@
 ## Repository output
 repository-list-empty = Ingen oppbevaringssteder ennå.
-repository-summary = { $id }  { $name }  type: { $repository_type }  adresser: { $addresses }  nettadresser: { $urls }
+repository-summary = { $id }  { $name }  type: { $repository_type }  adresser: { $addresses }  nettadresser: { $urls }{ $restrictions }
 
 ## Repository-type labels
 repository-type-library = bibliotek

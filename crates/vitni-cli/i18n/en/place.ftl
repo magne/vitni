@@ -1,6 +1,6 @@
 ## Place output
 place-list-empty = No places yet.
-place-summary = { $id }  { $name }  type: { $place_type }  code: { $code }  coords: { $coords }
+place-summary = { $id }  { $name }  type: { $place_type }  code: { $code }  coords: { $coords }{ $restrictions }
 
 ## Place-type labels
 place-type-country = country

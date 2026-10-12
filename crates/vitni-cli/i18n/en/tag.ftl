@@ -1,6 +1,6 @@
 ## Tag output
 tag-list-empty = No tags yet.
-tag-summary = { $id }  { $name }  color: { $color }  priority: { $priority }
+tag-summary = { $id }  { $name }  color: { $color }  priority: { $priority }{ $restrictions }
 
 ## AppError
 err-tag-not-found = no tag with id "{ $id }"

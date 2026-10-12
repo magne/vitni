@@ -27,7 +27,8 @@ impl Localizer {
             "research-note-summary",
             id = summary.human_id.clone(),
             subject = subject,
-            title = title
+            title = title,
+            restrictions = self.restrictions_tag(&summary.restrictions)
         )
     }
 

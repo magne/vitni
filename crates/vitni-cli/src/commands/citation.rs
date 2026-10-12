@@ -4,11 +4,11 @@ use clap::Subcommand;
 use vitni_app::{
     AppError, DateParts, EvidenceAnalysis, MatchableKind, MediaRefInput, MutationMeta, NewCitation, Provenance,
     Session, Workspace, add_citation_attribute, assert_citation_date, attach_citation_media, attach_citation_note,
-    create_citation, list_citations, set_citation_confidence, set_citation_evidence_analysis, set_page, show_citation,
-    tag_citation,
+    create_citation, list_citations, set_citation_confidence, set_citation_evidence_analysis,
+    set_citation_restrictions, set_page, show_citation, tag_citation,
 };
 
-use crate::args::{ConfidenceArg, EvidenceKindArg, InformationKindArg, SourceQualityArg};
+use crate::args::{ConfidenceArg, EvidenceKindArg, InformationKindArg, RestrictionsArgs, SourceQualityArg};
 use crate::commands::similar::hint_similar;
 use crate::i18n::Localizer;
 
@@ -114,6 +114,13 @@ pub enum CitationCmd {
         #[arg(long)]
         tag: String,
     },
+    /// Set (or clear) a citation's privacy restrictions, replacing its current set.
+    SetRestrictions {
+        /// The citation's human id (e.g. `C0001`).
+        human_id: String,
+        #[command(flatten)]
+        restrictions: RestrictionsArgs,
+    },
     /// Show one citation.
     Show {
         /// The citation's human id (e.g. `C0001`).
@@ -218,9 +225,32 @@ pub async fn run(
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
+        CitationCmd::SetRestrictions { human_id, restrictions } => {
+            restrict(workspace, session, &human_id, restrictions, localizer).await
+        }
         CitationCmd::Show { human_id } => show(workspace, &human_id, localizer).await,
         CitationCmd::List => list(workspace, localizer).await,
     }
+}
+
+/// Replaces a citation's privacy restrictions and reports the update.
+async fn restrict(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    restrictions: RestrictionsArgs,
+    localizer: &Localizer,
+) -> Result<(), AppError> {
+    set_citation_restrictions(
+        workspace,
+        session,
+        human_id,
+        restrictions.into_set(),
+        MutationMeta::default(),
+    )
+    .await?;
+    println!("{}", localizer.updated(human_id));
+    Ok(())
 }
 
 /// Renders one citation, or errors if absent.

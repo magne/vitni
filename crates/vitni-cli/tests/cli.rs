@@ -1190,3 +1190,203 @@ fn a_workspace_with_an_unreadable_event_opens_warns_and_names_it() {
         .failure()
         .stderr(predicate::str::contains(format!("person event {ada} #2 (")));
 }
+
+/// Runs `args` to success and returns the id from its trailing `Created <id>` line.
+fn create_record(dir: &Path, args: &[&str]) -> String {
+    let created = vitni(dir).args(args).assert().success();
+    let stdout = stdout(&created);
+    let line = stdout.lines().find(|line| line.starts_with("Created ")).unwrap();
+    line.trim_start_matches("Created ").trim().to_owned()
+}
+
+/// Creates one record of `aggregate` (with whatever it depends on) and returns its id, or `None` for a
+/// name with no restrictions.
+fn try_create_restrictable(dir: &Path, aggregate: &str) -> Option<String> {
+    let id = match aggregate {
+        "person" => create_record(dir, &["person", "create", "--given", "Ada"]),
+        "family" => create_record(dir, &["family", "create"]),
+        "place" => create_record(dir, &["place", "create", "--type", "farm", "--name", "Nordås"]),
+        "source" => create_record(dir, &["source", "create", "--title", "Folketelling 1801"]),
+        "citation" => {
+            let source = create_record(dir, &["source", "create", "--title", "Parish register"]);
+            create_record(dir, &["citation", "create", "--source", &source])
+        }
+        "event" => create_record(dir, &["event", "create", "--type", "birth"]),
+        "dna-test" => {
+            let person = create_record(dir, &["person", "create", "--given", "Ada"]);
+            create_record(dir, &["dna-test", "create", "--person", &person])
+        }
+        "dna-match" => {
+            let ada = create_record(dir, &["person", "create", "--given", "Ada"]);
+            let bob = create_record(dir, &["person", "create", "--given", "Bob"]);
+            let test_a = create_record(dir, &["dna-test", "create", "--person", &ada]);
+            let test_b = create_record(dir, &["dna-test", "create", "--person", &bob]);
+            create_record(
+                dir,
+                &[
+                    "dna-match",
+                    "observe",
+                    "--test-a",
+                    &test_a,
+                    "--test-b",
+                    &test_b,
+                    "--provider",
+                    "ancestry-dna",
+                    "--shared-cm",
+                    "850.5",
+                ],
+            )
+        }
+        "repository" => create_record(dir, &["repository", "create", "--name", "Statsarkivet"]),
+        "note" => create_record(dir, &["note", "create", "--text", "a witness note"]),
+        "media" => create_record(dir, &["media", "create", "--path", "scan.png"]),
+        "tag" => create_record(dir, &["tag", "create", "--name", "Living"]),
+        "research-note" => {
+            let person = create_record(dir, &["person", "create", "--given", "Ada"]);
+            let subject = format!("person:{person}");
+            create_record(
+                dir,
+                &[
+                    "research-note",
+                    "create",
+                    "--subject",
+                    &subject,
+                    "--title",
+                    "Who was Ada?",
+                ],
+            )
+        }
+        _ => return None,
+    };
+    Some(id)
+}
+
+/// [`try_create_restrictable`] for a name known to be restrictable.
+fn create_restrictable(dir: &Path, aggregate: &str) -> String {
+    try_create_restrictable(dir, aggregate).unwrap()
+}
+
+#[test]
+fn set_restrictions_writes_and_clears_restrictions_on_every_aggregate() {
+    let aggregates = [
+        "person",
+        "family",
+        "place",
+        "source",
+        "citation",
+        "event",
+        "dna-test",
+        "dna-match",
+        "repository",
+        "note",
+        "media",
+        "tag",
+        "research-note",
+    ];
+    for aggregate in aggregates {
+        let dir = TempDir::new().unwrap();
+        init(dir.path());
+        let id = create_restrictable(dir.path(), aggregate);
+
+        vitni(dir.path())
+            .args([aggregate, "set-restrictions", &id, "--restriction", "privacy,locked"])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains(format!("Updated {id}")));
+        let shown = vitni(dir.path()).args([aggregate, "show", &id]).assert().success();
+        assert!(
+            stdout(&shown).trim_end().ends_with("[locked, privacy]"),
+            "{aggregate}: {}",
+            stdout(&shown)
+        );
+        let listed = vitni(dir.path()).args([aggregate, "list"]).assert().success();
+        assert!(
+            stdout(&listed).contains("[locked, privacy]"),
+            "{aggregate}: {}",
+            stdout(&listed)
+        );
+
+        vitni(dir.path())
+            .args([aggregate, "set-restrictions", &id, "--clear"])
+            .assert()
+            .success();
+        let shown = vitni(dir.path()).args([aggregate, "show", &id]).assert().success();
+        let shown = stdout(&shown);
+        assert!(
+            !shown.contains("locked") && !shown.contains("privacy"),
+            "{aggregate}: {shown}"
+        );
+    }
+}
+
+#[test]
+fn set_restrictions_accepts_the_flag_repeated() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    let id = create_restrictable(dir.path(), "person");
+
+    vitni(dir.path())
+        .args(["person", "set-restrictions", &id, "--restriction", "confidential"])
+        .args(["--restriction", "privacy"])
+        .assert()
+        .success();
+    vitni(dir.path())
+        .args(["person", "show", &id])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("[confidential, privacy]"));
+}
+
+#[test]
+fn set_restrictions_requires_a_restriction_or_clear() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    let id = create_restrictable(dir.path(), "person");
+
+    vitni(dir.path())
+        .args(["person", "set-restrictions", &id])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--restriction"));
+    vitni(dir.path())
+        .args(["person", "set-restrictions", &id, "--clear", "--restriction", "privacy"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("cannot be used with"));
+    vitni(dir.path())
+        .args(["person", "set-restrictions", &id, "--restriction", "secret"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("secret"));
+}
+
+#[test]
+fn set_restrictions_on_an_unknown_record_fails_naming_it() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+
+    vitni(dir.path())
+        .args(["note", "set-restrictions", "N9999", "--restriction", "privacy"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("N9999"));
+}
+
+#[test]
+fn restrictions_render_in_the_workspace_language() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    let id = create_restrictable(dir.path(), "source");
+    set_ui_language_norwegian(dir.path());
+
+    vitni(dir.path())
+        .args(["source", "set-restrictions", &id, "--restriction", "privacy"])
+        .assert()
+        .success();
+    let shown = vitni(dir.path()).args(["source", "show", &id]).assert().success();
+    assert!(
+        stdout(&shown).trim_end().ends_with("[personvern]"),
+        "{}",
+        stdout(&shown)
+    );
+}

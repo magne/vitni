@@ -4,10 +4,10 @@ use clap::Subcommand;
 use vitni_app::{
     AppError, MutationMeta, NewResearchNote, NewResearchNoteSubject, Provenance, Session, Workspace,
     add_subject_to_research_note, create_research_note, list_research_notes, remove_subject_from_research_note,
-    set_research_note_body, show_research_note,
+    set_research_note_body, set_research_note_restrictions, show_research_note,
 };
 
-use crate::args::SubjectKindArg;
+use crate::args::{RestrictionsArgs, SubjectKindArg};
 use crate::i18n::Localizer;
 
 /// `ResearchNote` subcommands.
@@ -55,6 +55,13 @@ pub enum ResearchNoteCmd {
         human_id: String,
         /// The Markdown argument text.
         body: String,
+    },
+    /// Set (or clear) a research note's privacy restrictions, replacing its current set.
+    SetRestrictions {
+        /// The research note's human id (e.g. `A0001`).
+        human_id: String,
+        #[command(flatten)]
+        restrictions: RestrictionsArgs,
     },
     /// Show one research note.
     Show {
@@ -143,9 +150,32 @@ pub async fn run(
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
+        ResearchNoteCmd::SetRestrictions { human_id, restrictions } => {
+            restrict(workspace, session, &human_id, restrictions, localizer).await
+        }
         ResearchNoteCmd::Show { human_id } => show(workspace, &human_id, localizer).await,
         ResearchNoteCmd::List => list(workspace, localizer).await,
     }
+}
+
+/// Replaces a research note's privacy restrictions and reports the update.
+async fn restrict(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    restrictions: RestrictionsArgs,
+    localizer: &Localizer,
+) -> Result<(), AppError> {
+    set_research_note_restrictions(
+        workspace,
+        session,
+        human_id,
+        restrictions.into_set(),
+        MutationMeta::default(),
+    )
+    .await?;
+    println!("{}", localizer.updated(human_id));
+    Ok(())
 }
 
 /// Renders one research note, or errors if absent.

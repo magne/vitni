@@ -5,11 +5,12 @@ use uuid::Uuid;
 use vitni_app::{
     AppError, MatchableKind, MediaRefInput, MutationMeta, NewSource, Provenance, Session, Workspace,
     add_source_attribute, attach_source_media, attach_source_note, create_source, link_source_repository, list_sources,
-    set_source_abbrev, set_source_author, set_source_pub_info, set_title, show_source, tag_source,
+    set_source_abbrev, set_source_author, set_source_pub_info, set_source_restrictions, set_title, show_source,
+    tag_source,
 };
 use vitni_core::ids::{MediaId, NoteId};
 
-use crate::args::SourceMediaTypeArg;
+use crate::args::{RestrictionsArgs, SourceMediaTypeArg};
 use crate::commands::similar::hint_similar;
 use crate::i18n::Localizer;
 
@@ -112,6 +113,13 @@ pub enum SourceCmd {
         /// The tag aggregate id (UUID).
         #[arg(long)]
         tag: Uuid,
+    },
+    /// Set (or clear) a source's privacy restrictions, replacing its current set.
+    SetRestrictions {
+        /// The source's human id (e.g. `S0001`).
+        human_id: String,
+        #[command(flatten)]
+        restrictions: RestrictionsArgs,
     },
     /// Show one source.
     Show {
@@ -217,9 +225,32 @@ pub async fn run(
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
+        SourceCmd::SetRestrictions { human_id, restrictions } => {
+            restrict(workspace, session, &human_id, restrictions, localizer).await
+        }
         SourceCmd::Show { human_id } => show(workspace, &human_id, localizer).await,
         SourceCmd::List => list(workspace, localizer).await,
     }
+}
+
+/// Replaces a source's privacy restrictions and reports the update.
+async fn restrict(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    restrictions: RestrictionsArgs,
+    localizer: &Localizer,
+) -> Result<(), AppError> {
+    set_source_restrictions(
+        workspace,
+        session,
+        human_id,
+        restrictions.into_set(),
+        MutationMeta::default(),
+    )
+    .await?;
+    println!("{}", localizer.updated(human_id));
+    Ok(())
 }
 
 /// Renders one source, or errors if absent.
