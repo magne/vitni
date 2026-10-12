@@ -151,15 +151,6 @@ long-standing "DNA match views in the UI" item is closed.
   checks to the other aggregates (such as a date inversion on an Event or Place) is its own item.
 - **Repository media refs (U31)** — should Repository carry media refs (e.g. archive photos)? A
   data-model question.
-- **An unreadable event stops the workspace opening** — since #486 a replay fails on an event it
-  cannot read or upcast, and `open` replays in three places: the rebuild of a view table predating the
-  `human_id` column, the `record_origins` backfill, and the catch-up of journalled writes
-  (`vitni-db/src/{sqlite,postgres}.rs`). One corrupt or unknown payload there now fails the open, where
-  before it was skipped silently, and nothing short of editing the database gets the workspace open
-  again. The error does not say which event: a corrupted person payload reads ``rebuilding projection
-  person_view: person_view: missing field `assertion_id` ``. *Exit:* the error names the event (aggregate
-  type, id, sequence), and a workspace with an unreadable event can still be opened to export or
-  restore a backup. — #535
 
 ## Frontend & interaction
 
