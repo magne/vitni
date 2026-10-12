@@ -9,11 +9,13 @@
 //!
 //! A write is conditional on the sequence it read, so two writers of one view — a command and another
 //! process catching up the same aggregate — cannot both land: the loser reads the view again and folds
-//! what is still missing.
+//! what is still missing. A batch that starts past the view's next event — a commit that dispatched
+//! before an earlier one, or one after a failed write — is folded from the aggregate's log instead.
 
 use std::marker::PhantomData;
 
 use async_trait::async_trait;
+use cqrs_es::persist::{EventUpcaster, PersistedEventRepository};
 use cqrs_es::{Aggregate, EventEnvelope, Query, View};
 
 use crate::store::{DbError, deserialize_view};
@@ -25,6 +27,9 @@ pub(crate) mod sqlite;
 
 /// How many times a write that lost to another writer reads the view again before it gives up.
 const WRITE_ATTEMPTS: usize = 5;
+
+/// The upcasters an aggregate's stored payloads need, made afresh for each read (ADR 0010).
+pub(crate) type Upcasters = fn() -> Vec<Box<dyn EventUpcaster>>;
 
 /// A batch that starts past the event after the view's last: the view is missing events the batch
 /// does not carry, so folding it would skip them.
@@ -98,6 +103,59 @@ fn sequence_to(sequence: usize) -> Result<i64, DbError> {
     i64::try_from(sequence).map_err(|_| DbError::Backend(format!("sequence {sequence} does not fit the column")))
 }
 
+/// One engine's event log, read with the upcasters its payloads need.
+pub(crate) struct EventLog<E> {
+    repository: E,
+    upcasters: Upcasters,
+}
+
+impl<E: PersistedEventRepository> EventLog<E> {
+    /// The log `repository` reads, upcast by `upcasters`.
+    pub(crate) fn new(repository: E, upcasters: Upcasters) -> Self {
+        Self { repository, upcasters }
+    }
+
+    /// Every event of `aggregate_id`, in sequence order.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError::Backend`] when the log cannot be read or an event cannot be decoded.
+    pub(crate) async fn events<A: Aggregate>(&self, aggregate_id: &str) -> Result<Vec<EventEnvelope<A>>, DbError> {
+        let reading = |e: cqrs_es::persist::PersistenceError| {
+            DbError::Backend(format!("reading the events of {} {aggregate_id}: {e}", A::TYPE))
+        };
+        let upcasters = (self.upcasters)();
+        let mut stream = self
+            .repository
+            .stream_events::<A>(aggregate_id)
+            .await
+            .map_err(reading)?;
+        let mut events = Vec::new();
+        while let Some(event) = stream.next::<A>(&upcasters).await {
+            events.push(event.map_err(reading)?);
+        }
+        Ok(events)
+    }
+}
+
+/// Replays `aggregate_id`'s whole log through `queries` as one batch, as its commits dispatched it —
+/// the open-time repair of an aggregate the write journal names (ADR 0050).
+///
+/// # Errors
+///
+/// [`DbError::Backend`] when the log cannot be read or a query reports a failure.
+pub(crate) async fn replay_aggregate<A: Aggregate, E: PersistedEventRepository>(
+    log: &EventLog<E>,
+    queries: &QueryChain<A>,
+    aggregate_id: &str,
+) -> Result<(), DbError> {
+    let events = log.events::<A>(aggregate_id).await?;
+    let ((), failures) = crate::projection_failures::watch(queries.dispatch(aggregate_id, &events)).await;
+    failures.map_or(Ok(()), |failures| {
+        Err(failures.into_error(&format!("replaying {} {aggregate_id}", A::TYPE)))
+    })
+}
+
 /// An engine's view table rows, read and written by [`ProjectionQuery`].
 #[async_trait]
 pub(crate) trait ViewRows: Send + Sync {
@@ -118,25 +176,28 @@ pub(crate) trait ViewRows: Send + Sync {
 
 /// A `cqrs-es` query that folds an aggregate's events into its view row in `table`, skipping the
 /// events the row already holds. Its failures are reported through [`crate::projection_failures`].
-pub(crate) struct ProjectionQuery<V, A, R> {
+pub(crate) struct ProjectionQuery<V, A, R, E> {
     rows: R,
+    log: EventLog<E>,
     table: &'static str,
     _view: PhantomData<fn() -> (V, A)>,
 }
 
-impl<V, A, R> ProjectionQuery<V, A, R> {
-    /// The query writing `table` through `rows`.
-    pub(crate) fn new(rows: R, table: &'static str) -> Self {
+impl<V, A, R, E> ProjectionQuery<V, A, R, E> {
+    /// The query writing `table` through `rows`, reading `log` for the events a batch lacks.
+    pub(crate) fn new(rows: R, log: EventLog<E>, table: &'static str) -> Self {
         Self {
             rows,
+            log,
             table,
             _view: PhantomData,
         }
     }
 }
 
-impl<V: View<A>, A: Aggregate, R: ViewRows> ProjectionQuery<V, A, R> {
+impl<V: View<A>, A: Aggregate, R: ViewRows, E: PersistedEventRepository> ProjectionQuery<V, A, R, E> {
     async fn apply(&self, view_id: &str, events: &[EventEnvelope<A>]) -> Result<(), DbError> {
+        let mut log = None;
         for _ in 0..WRITE_ATTEMPTS {
             let stored = self.rows.load(self.table, view_id).await?;
             let (mut view, read) = match stored {
@@ -146,8 +207,14 @@ impl<V: View<A>, A: Aggregate, R: ViewRows> ProjectionQuery<V, A, R> {
                 ),
                 None => (V::default(), None),
             };
-            let folded = fold(&mut view, read.unwrap_or(0), events)
-                .map_err(|gap| DbError::Backend(format!("updating {view_id}: {gap}")))?;
+            let applied = read.unwrap_or(0);
+            let mut folded = fold(&mut view, applied, log.as_deref().unwrap_or(events));
+            if folded.is_err() && log.is_none() {
+                let logged = self.log.events::<A>(view_id).await?;
+                folded = fold(&mut view, applied, &logged);
+                log = Some(logged);
+            }
+            let folded = folded.map_err(|gap| DbError::Backend(format!("updating {view_id}: {gap}")))?;
             let Some(sequence) = folded else {
                 return Ok(());
             };
@@ -165,7 +232,7 @@ impl<V: View<A>, A: Aggregate, R: ViewRows> ProjectionQuery<V, A, R> {
 }
 
 #[async_trait]
-impl<V: View<A>, A: Aggregate, R: ViewRows> Query<A> for ProjectionQuery<V, A, R> {
+impl<V: View<A>, A: Aggregate, R: ViewRows, E: PersistedEventRepository> Query<A> for ProjectionQuery<V, A, R, E> {
     async fn dispatch(&self, view_id: &str, events: &[EventEnvelope<A>]) {
         if let Err(error) = self.apply(view_id, events).await {
             crate::projection_failures::report(self.table, &error);

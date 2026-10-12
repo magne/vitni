@@ -65,9 +65,11 @@ macro_rules! postgres_open_cqrs {
 /// Every query one aggregate's commits dispatch to, in order — the twin of the SQLite backend's
 /// `sqlite_queries!`.
 macro_rules! postgres_queries {
-    ($snake:ident, $pool:expr, $State:ty, $View:ty, $table_const:ident) => {{
+    ($snake:ident, $pool:expr, $State:ty, $View:ty, $table_const:ident, $upcasters:expr) => {{
         let mut queries: Vec<Box<dyn Query<$State>>> =
-            vec![Box::new(projection_query::<$View, $State>($pool, $table_const))];
+            vec![Box::new(projection_query::<$View, $State>($pool, $table_const, || {
+                $upcasters
+            }))];
         postgres_side_indexes!($snake, $pool, queries);
         queries.push(Box::new(crate::record_origins::postgres::RecordOriginsQuery::new(
             $pool.clone(),
@@ -244,13 +246,13 @@ macro_rules! postgres_store {
                     .await
                     .map_err(|e| DbError::Backend(format!("creating record origins index: {e}")))?;
                 $(
-                    let $snake = postgres_open_cqrs!(pool, postgres_queries!($snake, &pool, $State, $View, $table_const), $wiring);
+                    let $snake = postgres_open_cqrs!(pool, postgres_queries!($snake, &pool, $State, $View, $table_const, $upcasters), $wiring);
                     if stale_tables.contains(&$table_const) {
                         tracing::info!(
                             table = $table_const,
                             "projection table predated the human_id or sequence column; rebuilding from the event log"
                         );
-                        rebuild_view::<$State, $View>(&pool, $table_const, $upcasters, crate::exclusive::SHARED_REPLAY_BUFFER).await?;
+                        rebuild_view::<$State, $View>(&pool, $table_const, || $upcasters, crate::exclusive::SHARED_REPLAY_BUFFER).await?;
                     }
                 )+
                 if origins_need_backfill {
@@ -332,7 +334,7 @@ macro_rules! postgres_store {
             /// its exclusive transaction.
             async fn rebuild_projections_on(pool: &Pool<Postgres>, replay_buffer: usize) -> Result<(), DbError> {
                 $(
-                    rebuild_view::<$State, $View>(pool, $table_const, $upcasters, replay_buffer).await?;
+                    rebuild_view::<$State, $View>(pool, $table_const, || $upcasters, replay_buffer).await?;
                 )+
                 // Place's succession cross-reference index (ADR 0026 §4) is derived from the (now
                 // freshly rebuilt) Place projection above, not replayed from raw events itself.
@@ -368,22 +370,37 @@ macro_rules! postgres_store {
                 exclusive.finish(outcome).await
             }
 
-            /// Replays every aggregate a command left journalled through all of its queries — the twin
-            /// of the SQLite backend's `catch_up_journal` (ADR 0050).
+            /// Replays every aggregate a command left journalled through all of its queries, as one
+            /// batch — one whose process was killed after its events committed and before every query
+            /// ran, or whose projection failed to update (ADR 0050). Each query skips what it already
+            /// holds: the projection folds only the events after its last, the indexes are keyed by
+            /// event or re-derived from the projection. An aggregate that cannot be replayed is logged
+            /// and stays journalled, so the workspace still opens and a rebuild can repair it.
             async fn catch_up_journal(pool: &Pool<Postgres>) -> Result<(), DbError> {
-                let pending = crate::record_origins::postgres::pending_writes(pool).await?;
-                $(
-                    for write in &pending {
-                        if write.aggregate_type == <$State as Aggregate>::TYPE {
-                            let queries = crate::projection::QueryChain(postgres_queries!($snake, pool, $State, $View, $table_const));
-                            replay_aggregate::<$State, _>(pool, queries, $upcasters, $table_const, &write.aggregate_id).await?;
-                        }
+                for write in crate::record_origins::postgres::pending_writes(pool).await? {
+                    match Self::replay_journalled(pool, &write.aggregate_type, &write.aggregate_id).await {
+                        Ok(()) => crate::record_origins::postgres::end_write(pool, write.entry).await?,
+                        Err(error) => tracing::error!(
+                            aggregate_type = write.aggregate_type,
+                            aggregate_id = write.aggregate_id,
+                            %error,
+                            "a journalled aggregate could not be replayed; it stays journalled"
+                        ),
                     }
-                )+
-                for write in &pending {
-                    crate::record_origins::postgres::end_write(pool, write.entry).await?;
                 }
                 Ok(())
+            }
+
+            /// Replays one journalled aggregate's log through its queries.
+            async fn replay_journalled(pool: &Pool<Postgres>, aggregate_type: &str, aggregate_id: &str) -> Result<(), DbError> {
+                $(
+                    if aggregate_type == <$State as Aggregate>::TYPE {
+                        let log = crate::projection::EventLog::new(PostgresEventRepository::new(pool.clone()), || $upcasters);
+                        let queries = crate::projection::QueryChain(postgres_queries!($snake, pool, $State, $View, $table_const, $upcasters));
+                        return crate::projection::replay_aggregate(&log, &queries, aggregate_id).await;
+                    }
+                )+
+                Err(DbError::Backend(format!("the write journal names an unknown aggregate type {aggregate_type}")))
             }
 
             /// Clears the record origins index, replays every aggregate's log into it, and marks it
@@ -796,21 +813,6 @@ where
     crate::projection_failures::watch_replay(replay.replay_all(), &context).await
 }
 
-/// Replays one aggregate's event log through `query`; `view_table` is its projection, which names
-/// the failures.
-async fn replay_aggregate<A: Aggregate, Q: Query<A>>(
-    pool: &Pool<Postgres>,
-    query: Q,
-    upcasters: Vec<Box<dyn EventUpcaster>>,
-    view_table: &'static str,
-    aggregate_id: &str,
-) -> Result<(), DbError> {
-    let mut replay = QueryReplay::new(PostgresEventRepository::new(pool.clone()), query).with_upcasters(upcasters);
-    replay.use_error_handler(crate::projection_failures::handler(view_table));
-    let context = format!("replaying {view_table} {aggregate_id}");
-    crate::projection_failures::watch_replay(replay.replay(aggregate_id), &context).await
-}
-
 /// Clears one view table and replays its aggregate's full event log back into it (ADR 0010, 0050).
 ///
 /// `upcasters` migrate historical payloads during the replay; pass an empty vec for aggregates
@@ -819,7 +821,7 @@ async fn replay_aggregate<A: Aggregate, Q: Query<A>>(
 async fn rebuild_view<A, V>(
     pool: &Pool<Postgres>,
     table: &'static str,
-    upcasters: Vec<Box<dyn EventUpcaster>>,
+    upcasters: crate::projection::Upcasters,
     replay_buffer: usize,
 ) -> Result<(), DbError>
 where
@@ -831,9 +833,9 @@ where
         .map_err(|e| DbError::Backend(format!("clearing projection {table}: {e}")))?;
     let mut replay = QueryReplay::new(
         PostgresEventRepository::new(pool.clone()).with_streaming_channel_size(replay_buffer),
-        projection_query::<V, A>(pool, table),
+        projection_query::<V, A>(pool, table, upcasters),
     )
-    .with_upcasters(upcasters);
+    .with_upcasters(upcasters());
     replay.use_error_handler(crate::projection_failures::handler(table));
     crate::projection_failures::watch_replay(replay.replay_all(), &format!("rebuilding projection {table}")).await
 }
@@ -843,10 +845,12 @@ where
 fn projection_query<V, A>(
     pool: &Pool<Postgres>,
     table: &'static str,
-) -> crate::projection::ProjectionQuery<V, A, Pool<Postgres>>
+    upcasters: crate::projection::Upcasters,
+) -> crate::projection::ProjectionQuery<V, A, Pool<Postgres>, PostgresEventRepository>
 where
     A: Aggregate,
     V: View<A>,
 {
-    crate::projection::ProjectionQuery::new(pool.clone(), table)
+    let log = crate::projection::EventLog::new(PostgresEventRepository::new(pool.clone()), upcasters);
+    crate::projection::ProjectionQuery::new(pool.clone(), log, table)
 }

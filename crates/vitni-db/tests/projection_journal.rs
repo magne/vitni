@@ -104,6 +104,9 @@ const RESTORE_VIEW: [&str; 2] = [
 const JOURNAL_PERSON: &str = "INSERT INTO record_origins_pending (aggregate_type, aggregate_id) \
      VALUES ('person', '00000000-0000-0000-0000-000000000001')";
 
+/// How many writes the journal holds.
+const PENDING: &str = "SELECT COUNT(*) FROM record_origins_pending";
+
 /// Drops the person's link to the event of the last commit, written from its view.
 const DROP_LAST_LINK: &str = "DELETE FROM record_links WHERE target = '00000000-0000-0000-0000-000000000015'";
 
@@ -177,7 +180,7 @@ macro_rules! journal_tests {
         }
 
         #[tokio::test]
-        async fn a_view_missing_earlier_events_fails_the_next_commit_and_the_next_open_repairs_it() {
+        async fn a_commit_onto_a_view_missing_earlier_events_folds_them_from_the_log() {
             let uninterrupted = $new;
             seed_and_take_part(&uninterrupted).await;
             let store = uninterrupted.open().await;
@@ -199,13 +202,32 @@ macro_rules! journal_tests {
                 2,
                 "nothing journalled the lost write"
             );
-            let failed = super::take_part(&store, 22).await;
-            assert!(
-                matches!(failed, Err(vitni_db::CommandError::Store(_))),
-                "{failed:?}"
-            );
+            super::take_part(&store, 22).await.unwrap();
+            assert_eq!(super::derived(&store).await, whole);
+        }
+
+        #[tokio::test]
+        async fn a_journalled_aggregate_that_cannot_be_replayed_stays_journalled_and_the_workspace_opens() {
+            let workspace = $new;
+            let whole = seed_and_take_part(&workspace).await;
+            workspace
+                .run(&[
+                    "DROP TABLE kept_view",
+                    "UPDATE person_view SET payload = '\"unreadable\"'",
+                    super::JOURNAL_PERSON,
+                ])
+                .await;
+            let store = workspace.open().await;
+            assert_eq!(workspace.pending().await, 1, "kept for the next open");
+            store.rebuild_projections().await.unwrap();
             drop(store);
-            assert_eq!(super::derived(&workspace.open().await).await, whole);
+            let store = workspace.open().await;
+            assert_eq!(
+                workspace.pending().await,
+                0,
+                "replayed once the rebuild repaired the view"
+            );
+            assert_eq!(super::derived(&store).await, whole);
         }
 
         #[tokio::test]
@@ -250,6 +272,13 @@ mod sqlite {
             }
             pool.close().await;
         }
+
+        async fn pending(&self) -> i64 {
+            let pool = sqlx::SqlitePool::connect(&self.url).await.unwrap();
+            let pending = sqlx::query_scalar(super::PENDING).fetch_one(&pool).await.unwrap();
+            pool.close().await;
+            pending
+        }
     }
 
     journal_tests!(Workspace::new());
@@ -284,6 +313,13 @@ mod postgres {
                 sqlx::query(statement).execute(&pool).await.unwrap();
             }
             pool.close().await;
+        }
+
+        async fn pending(&self) -> i64 {
+            let pool = sqlx::PgPool::connect(self.db.dsn()).await.unwrap();
+            let pending = sqlx::query_scalar(super::PENDING).fetch_one(&pool).await.unwrap();
+            pool.close().await;
+            pending
         }
     }
 
