@@ -280,18 +280,25 @@ pub async fn load_data_quality(services: Services, data_version: u32) -> ScreenD
     screen
 }
 
-/// Loads the per-aggregate record counts for the rail badges and dashboard, or `None` if the
-/// workspace cannot be opened (the rail then shows no counts rather than an error).
-pub async fn load_counts(services: Services) -> Option<WorkspaceCounts> {
-    let workspace = services.open().await.ok()?;
-    workspace_counts(&workspace).await.ok()
+/// What the shell shows about the open workspace, read in one open: the rail badges' counts and the
+/// banner's unreadable events.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ShellStatus {
+    /// The per-aggregate record counts, or `None` if they could not be read (no badges shown).
+    pub counts: Option<WorkspaceCounts>,
+    /// How many events the workspace holds that this version cannot read, as its open found them
+    /// (ADR 0051).
+    pub unreadable: usize,
 }
 
-/// How many events the workspace holds that this version cannot read, as its open found them (ADR
-/// 0051), for the shell banner; `None` if the workspace cannot be opened.
-pub async fn load_unreadable_count(services: Services) -> Option<usize> {
+/// Loads the [`ShellStatus`], or `None` if the workspace cannot be opened (the rail then shows no
+/// counts and the shell no banner, rather than an error).
+pub async fn load_shell_status(services: Services) -> Option<ShellStatus> {
     let workspace = services.open().await.ok()?;
-    Some(workspace.unreadable_events().len())
+    Some(ShellStatus {
+        counts: workspace_counts(&workspace).await.ok(),
+        unreadable: workspace.unreadable_events().len(),
+    })
 }
 
 /// Resolves the current display name of the record `(category, human_id)` for a record link, or

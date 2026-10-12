@@ -12,7 +12,15 @@ impl Localizer {
         let mut warning = fl!(self.loader, "workspace-unreadable-events", count = events.len());
         for event in events {
             warning.push_str("\n  ");
-            warning.push_str(&event.to_string());
+            warning.push_str(&fl!(
+                self.loader,
+                "workspace-unreadable-event",
+                kind = event.aggregate_type.clone(),
+                id = event.aggregate_id.clone(),
+                sequence = event.sequence.to_string(),
+                event = event.event_type.clone(),
+                reason = event.reason.clone()
+            ));
         }
         warning
     }

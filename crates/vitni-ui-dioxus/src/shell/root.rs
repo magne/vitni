@@ -10,7 +10,7 @@ use crate::screens::{
     DashboardScreen, ExportScreen, GeographyScreen, HelpScreen, ImportScreen, MatchesScreen, PedigreeScreen,
     PluginPanelScreen, PreferencesScreen, RecordDetail,
 };
-use crate::services::{load_counts, load_unreadable_count};
+use crate::services::load_shell_status;
 use crate::shell::banner::ShellBanner;
 use crate::shell::close_confirm::CloseConfirmDialog;
 use crate::shell::explorer::Explorer;
@@ -28,7 +28,7 @@ use crate::shell::tabstrip::RecordTabstrip;
 use crate::shell::toast::ShellToast;
 use crate::shell::topbar::Topbar;
 use crate::shell::window_geometry::WindowGeometryManager;
-use crate::shell::{ChromeCtx, CountsCtx, NameCache, ShortcutsCtx};
+use crate::shell::{ChromeCtx, NameCache, ShellStatusCtx, ShortcutsCtx};
 
 /// The application shell. Provides [`NavState`], installs the keyboard layer, and lays out the rail,
 /// top bar, tabstrip, work area, status bar, and overlays.
@@ -67,37 +67,25 @@ pub fn Shell() -> Element {
     crate::media_asset::use_media_asset_handler(media_root);
     let gp = use_keyboard_dispatch();
     let chrome = use_context::<ChromeCtx>();
-    // The rail count badges: refetched whenever a mutation bumps `data_version`. Degrades to no
-    // counts when the application state is absent (e.g. an SSR test renders the shell bare).
+    // The rail count badges and the banner's unreadable events (ADR 0051), read in one open and
+    // refetched whenever a mutation, rebuild or restore bumps `data_version`. Degrades to no counts
+    // and no banner when the application state is absent (e.g. an SSR test renders the shell bare).
     let services = match try_consume_context::<AppCtx>() {
         Some(AppCtx::Ready(state)) => Some(state.services().clone()),
         _ => None,
     };
-    let counts_services = services.clone();
-    let counts = use_resource(move || {
-        let services = counts_services.clone();
-        let _ = nav.data_version.read();
-        async move {
-            match services {
-                Some(services) => load_counts(services).await,
-                None => None,
-            }
-        }
-    });
-    use_context_provider(|| CountsCtx(counts));
-    // The banner's unreadable events (ADR 0051), re-read on the same bumps: a rebuild or restore that
-    // changes them bumps `data_version`, and the reopen reports them afresh.
-    let unreadable = use_resource(move || {
+    let status = use_resource(move || {
         let services = services.clone();
         let _ = nav.data_version.read();
         async move {
             match services {
-                Some(services) => load_unreadable_count(services).await,
+                Some(services) => load_shell_status(services).await,
                 None => None,
             }
         }
     });
-    let unreadable = unreadable.read().flatten().unwrap_or(0);
+    use_context_provider(|| ShellStatusCtx(status));
+    let unreadable = status.read().flatten().map_or(0, |status| status.unreadable);
     let theme = nav.theme.read().attr();
     let notices = ShellNotices {
         nothing_to_undo: chrome.0.kbd_nothing_to_undo(),

@@ -8,7 +8,7 @@ use vitni_ui::{Category, Destination, RailGroup, RailItem, rail_items};
 use crate::components::or_dash;
 use crate::shell::nav_state::NavState;
 use crate::shell::roving::roving_vertical;
-use crate::shell::{ChromeCtx, CountsCtx};
+use crate::shell::{ChromeCtx, ShellStatusCtx};
 
 /// The projected record count for a category, read from the workspace counts.
 fn count_for(counts: &WorkspaceCounts, category: Category) -> Option<u64> {
@@ -120,9 +120,10 @@ fn RailItemView(
     let label = chrome.0.rail_label(item.label_id);
     // The badge count, when this is an entity item and the counts have loaded.
     let count = if item.has_count {
-        let counts = try_consume_context::<CountsCtx>()
+        let counts = try_consume_context::<ShellStatusCtx>()
             .and_then(|ctx| *ctx.0.read())
-            .flatten();
+            .flatten()
+            .and_then(|status| status.counts);
         match (counts, destination) {
             (Some(counts), Destination::Category(category)) => count_for(&counts, category),
             _ => None,
