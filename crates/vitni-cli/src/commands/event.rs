@@ -5,11 +5,11 @@ use uuid::Uuid;
 use vitni_app::{
     AppError, DateParts, MatchableKind, MediaRefInput, MutationMeta, NewEvent, Provenance, Session, Workspace,
     add_event_citation, assert_event_date, attach_event_media, attach_event_note, create_event, link_place,
-    list_events, set_event_description, set_event_type, show_event, tag_event,
+    list_events, set_event_description, set_event_restrictions, set_event_type, show_event, tag_event,
 };
 use vitni_core::ids::{MediaId, NoteId};
 
-use crate::args::EventTypeArg;
+use crate::args::{EventTypeArg, RestrictionsArgs};
 use crate::commands::similar::hint_similar;
 use crate::i18n::Localizer;
 
@@ -104,6 +104,13 @@ pub enum EventCmd {
         #[arg(long)]
         tag: Uuid,
     },
+    /// Set (or clear) an event's privacy restrictions, replacing its current set.
+    SetRestrictions {
+        /// The event's human id (e.g. `E0001`).
+        human_id: String,
+        #[command(flatten)]
+        restrictions: RestrictionsArgs,
+    },
     /// Show one event.
     Show {
         /// The event's human id (e.g. `E0001`).
@@ -193,9 +200,32 @@ pub async fn run(
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
+        EventCmd::SetRestrictions { human_id, restrictions } => {
+            restrict(workspace, session, &human_id, restrictions, localizer).await
+        }
         EventCmd::Show { human_id } => show(workspace, &human_id, localizer).await,
         EventCmd::List => list(workspace, localizer).await,
     }
+}
+
+/// Replaces an event's privacy restrictions and reports the update.
+async fn restrict(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    restrictions: RestrictionsArgs,
+    localizer: &Localizer,
+) -> Result<(), AppError> {
+    set_event_restrictions(
+        workspace,
+        session,
+        human_id,
+        restrictions.into_set(),
+        MutationMeta::default(),
+    )
+    .await?;
+    println!("{}", localizer.updated(human_id));
+    Ok(())
 }
 
 /// Renders one event, or errors if absent.

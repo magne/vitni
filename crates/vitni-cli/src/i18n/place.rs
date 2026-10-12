@@ -39,7 +39,8 @@ impl Localizer {
             name = name,
             place_type = place_type,
             code = code,
-            coords = coords
+            coords = coords,
+            restrictions = self.restrictions_tag(&summary.restrictions)
         )
     }
 

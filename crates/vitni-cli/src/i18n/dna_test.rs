@@ -29,7 +29,8 @@ impl Localizer {
             person = person,
             provider = provider,
             test_type = test_type,
-            haplogroups = summary.haplogroups.len().to_string()
+            haplogroups = summary.haplogroups.len().to_string(),
+            restrictions = self.restrictions_tag(&summary.restrictions)
         )
     }
 

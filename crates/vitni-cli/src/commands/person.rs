@@ -4,10 +4,10 @@ use clap::Subcommand;
 use vitni_app::{
     Age, AppError, Attribute, DateParts, MatchableKind, MutationMeta, NewParticipation, NewPerson, PersonNameParts,
     Provenance, Session, Workspace, add_name, assert_participation, create_person, list_persons, record_birth,
-    show_person,
+    set_restrictions, show_person,
 };
 
-use crate::args::{ConfidenceArg, EvidenceArg, ParticipantRoleArg};
+use crate::args::{ConfidenceArg, EvidenceArg, ParticipantRoleArg, RestrictionsArgs};
 use crate::commands::similar::hint_similar;
 use crate::i18n::Localizer;
 
@@ -137,6 +137,13 @@ pub enum PersonCmd {
         #[arg(long = "note", value_name = "NOTE_ID")]
         notes: Vec<String>,
     },
+    /// Set (or clear) a person's privacy restrictions, replacing its current set.
+    SetRestrictions {
+        /// The person's human id (e.g. `I0001`).
+        human_id: String,
+        #[command(flatten)]
+        restrictions: RestrictionsArgs,
+    },
     /// Show one person.
     Show {
         /// The person's human id (e.g. `I0001`).
@@ -239,9 +246,32 @@ pub async fn run(
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
+        PersonCmd::SetRestrictions { human_id, restrictions } => {
+            restrict(workspace, session, &human_id, restrictions, localizer).await
+        }
         PersonCmd::Show { human_id } => show(workspace, &human_id, localizer).await,
         PersonCmd::List => list(workspace, localizer).await,
     }
+}
+
+/// Replaces a person's privacy restrictions and reports the update.
+async fn restrict(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    restrictions: RestrictionsArgs,
+    localizer: &Localizer,
+) -> Result<(), AppError> {
+    set_restrictions(
+        workspace,
+        session,
+        human_id,
+        restrictions.into_set(),
+        MutationMeta::default(),
+    )
+    .await?;
+    println!("{}", localizer.updated(human_id));
+    Ok(())
 }
 
 /// Renders one person, or errors if absent.

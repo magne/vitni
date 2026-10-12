@@ -10,6 +10,7 @@
 //! the structured [`AppError`] / [`PersonError`] / [`DbError`] surface and the [`Sex`] value to
 //! localized strings, keeping `vitni-app`/`vitni-core`/`vitni-db` free of UI text.
 
+use std::collections::BTreeSet;
 use std::path::Path;
 
 use i18n_embed::fluent::{FluentLanguageLoader, fluent_language_loader};
@@ -132,6 +133,28 @@ impl Localizer {
     #[must_use]
     pub fn updated(&self, id: &str) -> String {
         fl!(self.loader, "updated", id = id)
+    }
+
+    /// Renders a record's privacy restrictions as ` [label, …]`, or empty when unrestricted.
+    fn restrictions_tag(&self, restrictions: &BTreeSet<Restriction>) -> String {
+        if restrictions.is_empty() {
+            return String::new();
+        }
+        let value = restrictions
+            .iter()
+            .map(|&restriction| self.restriction_label(restriction))
+            .collect::<Vec<_>>()
+            .join(", ");
+        fl!(self.loader, "restrictions-tag", value = value)
+    }
+
+    /// The localized label for a single [`Restriction`].
+    fn restriction_label(&self, restriction: Restriction) -> String {
+        match restriction {
+            Restriction::Confidential => fl!(self.loader, "restriction-confidential"),
+            Restriction::Locked => fl!(self.loader, "restriction-locked"),
+            Restriction::Privacy => fl!(self.loader, "restriction-privacy"),
+        }
     }
 
     /// `Initialized workspace "gen" at /path`.

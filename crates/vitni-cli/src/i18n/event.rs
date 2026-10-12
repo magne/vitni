@@ -34,7 +34,8 @@ impl Localizer {
             date = date,
             place = place,
             description = description,
-            participants = summary.participants.len().to_string()
+            participants = summary.participants.len().to_string(),
+            restrictions = self.restrictions_tag(&summary.restrictions)
         )
     }
 

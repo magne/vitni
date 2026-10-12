@@ -30,7 +30,8 @@ impl Localizer {
             shared = shared,
             predicted = predicted,
             status = status,
-            segments = summary.segments.len().to_string()
+            segments = summary.segments.len().to_string(),
+            restrictions = self.restrictions_tag(&summary.restrictions)
         )
     }
 

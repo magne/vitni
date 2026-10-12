@@ -25,7 +25,8 @@ impl Localizer {
             title = title,
             author = author,
             repositories = summary.repositories.len().to_string(),
-            attributes = summary.attributes.len().to_string()
+            attributes = summary.attributes.len().to_string(),
+            restrictions = self.restrictions_tag(&summary.restrictions)
         )
     }
 

@@ -1,6 +1,6 @@
 ## Media output
 media-list-empty = Ingen medier ennå.
-media-summary = { $id }  sti: { $path }  sjekksum: { $checksum }  attributter: { $attributes }
+media-summary = { $id }  sti: { $path }  sjekksum: { $checksum }  attributter: { $attributes }{ $restrictions }
 
 ## AppError
 err-media-not-found = ingen medium med human_id "{ $id }"

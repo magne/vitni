@@ -1,6 +1,6 @@
 ## DNA-match output
 dna-match-list-empty = Ingen DNA-treff ennå.
-dna-match-summary = { $id }  delt: { $shared } cM  antatt: { $predicted }  status: { $status }  segmenter: { $segments }
+dna-match-summary = { $id }  delt: { $shared } cM  antatt: { $predicted }  status: { $status }  segmenter: { $segments }{ $restrictions }
 dna-match-status-confirmed = bekreftet
 dna-match-status-rejected = avvist
 

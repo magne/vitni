@@ -5,11 +5,11 @@ use uuid::Uuid;
 use vitni_app::{
     AppError, MutationMeta, NewDnaTest, Provenance, Session, Workspace, assert_dna_test_haplogroup,
     attach_dna_test_note, create_dna_test, list_dna_tests, set_dna_test_genome_build, set_dna_test_kit_id,
-    set_dna_test_provider, set_dna_test_type, show_dna_test, tag_dna_test,
+    set_dna_test_provider, set_dna_test_restrictions, set_dna_test_type, show_dna_test, tag_dna_test,
 };
 use vitni_core::ids::NoteId;
 
-use crate::args::{DnaGenomeBuildArg, DnaProviderArg, DnaTestTypeArg};
+use crate::args::{DnaGenomeBuildArg, DnaProviderArg, DnaTestTypeArg, RestrictionsArgs};
 use crate::i18n::Localizer;
 
 /// `DnaTest` subcommands.
@@ -85,6 +85,13 @@ pub enum DnaTestCmd {
         /// The tag aggregate id (UUID).
         #[arg(long)]
         tag: Uuid,
+    },
+    /// Set (or clear) a DNA test's privacy restrictions, replacing its current set.
+    SetRestrictions {
+        /// The test's human id (e.g. `D0001`).
+        human_id: String,
+        #[command(flatten)]
+        restrictions: RestrictionsArgs,
     },
     /// Show one DNA test.
     Show {
@@ -178,9 +185,32 @@ pub async fn run(
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
+        DnaTestCmd::SetRestrictions { human_id, restrictions } => {
+            restrict(workspace, session, &human_id, restrictions, localizer).await
+        }
         DnaTestCmd::Show { human_id } => show(workspace, &human_id, localizer).await,
         DnaTestCmd::List => list(workspace, localizer).await,
     }
+}
+
+/// Replaces a DNA test's privacy restrictions and reports the update.
+async fn restrict(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    restrictions: RestrictionsArgs,
+    localizer: &Localizer,
+) -> Result<(), AppError> {
+    set_dna_test_restrictions(
+        workspace,
+        session,
+        human_id,
+        restrictions.into_set(),
+        MutationMeta::default(),
+    )
+    .await?;
+    println!("{}", localizer.updated(human_id));
+    Ok(())
 }
 
 /// Renders one DNA test, or errors if absent.

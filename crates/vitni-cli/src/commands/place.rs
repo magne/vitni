@@ -6,12 +6,12 @@ use vitni_app::{
     AppError, DateParts, MatchableKind, MediaRefInput, MutationMeta, NewPlace, PlaceSuccessionInput, Provenance,
     Session, Workspace, add_place_citation, add_place_name, assert_place_coordinates, assert_place_enclosed_by,
     assert_place_succession, attach_place_media, attach_place_note, create_place, gregorian_date, list_places,
-    set_place_code, set_place_type, show_place, tag_place,
+    set_place_code, set_place_restrictions, set_place_type, show_place, tag_place,
 };
 use vitni_core::geo::{GeoCoordinates, Microdegrees};
 use vitni_core::ids::{MediaId, NoteId};
 
-use crate::args::{PlaceTypeArg, SuccessionKindArg};
+use crate::args::{PlaceTypeArg, RestrictionsArgs, SuccessionKindArg};
 use crate::commands::similar::hint_similar;
 use crate::i18n::Localizer;
 
@@ -142,6 +142,13 @@ pub enum PlaceCmd {
         #[arg(long)]
         tag: Uuid,
     },
+    /// Set (or clear) a place's privacy restrictions, replacing its current set.
+    SetRestrictions {
+        /// The place's human id (e.g. `P0001`).
+        human_id: String,
+        #[command(flatten)]
+        restrictions: RestrictionsArgs,
+    },
     /// Show one place.
     Show {
         /// The place's human id (e.g. `P0001`).
@@ -250,6 +257,9 @@ pub async fn run(
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
+        PlaceCmd::SetRestrictions { human_id, restrictions } => {
+            restrict(workspace, session, &human_id, restrictions, localizer).await
+        }
         PlaceCmd::Show { human_id } => show(workspace, &human_id, localizer).await,
         PlaceCmd::List => list(workspace, localizer).await,
     }
@@ -275,6 +285,26 @@ fn succession_input(
         kind: kind.into(),
         date: year.map(|year| gregorian_date(DateParts { year, month, day })),
     }
+}
+
+/// Replaces a place's privacy restrictions and reports the update.
+async fn restrict(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    restrictions: RestrictionsArgs,
+    localizer: &Localizer,
+) -> Result<(), AppError> {
+    set_place_restrictions(
+        workspace,
+        session,
+        human_id,
+        restrictions.into_set(),
+        MutationMeta::default(),
+    )
+    .await?;
+    println!("{}", localizer.updated(human_id));
+    Ok(())
 }
 
 /// Renders one place, or errors if absent.

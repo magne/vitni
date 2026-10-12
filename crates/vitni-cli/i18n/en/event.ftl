@@ -1,6 +1,6 @@
 ## Event output
 event-list-empty = No events yet.
-event-summary = { $id }  type: { $event_type }  date: { $date }  place: { $place }  desc: { $description }  participants: { $participants }
+event-summary = { $id }  type: { $event_type }  date: { $date }  place: { $place }  desc: { $description }  participants: { $participants }{ $restrictions }
 
 ## Event-type labels
 event-type-birth = birth

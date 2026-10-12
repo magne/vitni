@@ -1,6 +1,6 @@
 ## Event output
 event-list-empty = Ingen hendelser ennå.
-event-summary = { $id }  type: { $event_type }  dato: { $date }  sted: { $place }  beskr: { $description }  deltakere: { $participants }
+event-summary = { $id }  type: { $event_type }  dato: { $date }  sted: { $place }  beskr: { $description }  deltakere: { $participants }{ $restrictions }
 
 ## Event-type labels
 event-type-birth = fødsel

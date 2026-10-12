@@ -5,10 +5,11 @@ use uuid::Uuid;
 use vitni_app::{
     AppError, DateParts, MatchableKind, MutationMeta, NewMedia, Provenance, Session, Workspace, add_media_attribute,
     add_media_citation, assert_media_date, attach_media_note, create_media, list_media, set_media_checksum,
-    set_media_file_path, set_media_web_path, show_media, tag_media,
+    set_media_file_path, set_media_restrictions, set_media_web_path, show_media, tag_media,
 };
 use vitni_core::ids::NoteId;
 
+use crate::args::RestrictionsArgs;
 use crate::commands::similar::hint_similar;
 use crate::i18n::Localizer;
 
@@ -100,6 +101,13 @@ pub enum MediaCmd {
         #[arg(long)]
         tag: Uuid,
     },
+    /// Set (or clear) a media object's privacy restrictions, replacing its current set.
+    SetRestrictions {
+        /// The media's human id (e.g. `O0001`).
+        human_id: String,
+        #[command(flatten)]
+        restrictions: RestrictionsArgs,
+    },
     /// Show one media object.
     Show {
         /// The media's human id (e.g. `O0001`).
@@ -185,9 +193,32 @@ pub async fn run(
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
+        MediaCmd::SetRestrictions { human_id, restrictions } => {
+            restrict(workspace, session, &human_id, restrictions, localizer).await
+        }
         MediaCmd::Show { human_id } => show(workspace, &human_id, localizer).await,
         MediaCmd::List => list(workspace, localizer).await,
     }
+}
+
+/// Replaces a media object's privacy restrictions and reports the update.
+async fn restrict(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    restrictions: RestrictionsArgs,
+    localizer: &Localizer,
+) -> Result<(), AppError> {
+    set_media_restrictions(
+        workspace,
+        session,
+        human_id,
+        restrictions.into_set(),
+        MutationMeta::default(),
+    )
+    .await?;
+    println!("{}", localizer.updated(human_id));
+    Ok(())
 }
 
 /// Renders one media object, or errors if absent.

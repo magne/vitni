@@ -1,6 +1,6 @@
 ## Note output
 note-list-empty = No notes yet.
-note-summary = { $id }  type: { $note_type }  { $text }
+note-summary = { $id }  type: { $note_type }  { $text }{ $restrictions }
 
 ## Note-type labels
 note-type-general = general

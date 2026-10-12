@@ -1,6 +1,6 @@
 ## Place output
 place-list-empty = Ingen steder ennå.
-place-summary = { $id }  { $name }  type: { $place_type }  kode: { $code }  koord: { $coords }
+place-summary = { $id }  { $name }  type: { $place_type }  kode: { $code }  koord: { $coords }{ $restrictions }
 
 ## Place-type labels
 place-type-country = land

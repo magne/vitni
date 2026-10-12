@@ -4,10 +4,10 @@ use clap::Subcommand;
 use uuid::Uuid;
 use vitni_app::{
     AppError, MatchableKind, MutationMeta, NewNote, Provenance, Session, Workspace, create_note, list_notes,
-    set_note_text, set_note_type, show_note, tag_note,
+    set_note_restrictions, set_note_text, set_note_type, show_note, tag_note,
 };
 
-use crate::args::NoteTypeArg;
+use crate::args::{NoteTypeArg, RestrictionsArgs};
 use crate::commands::similar::hint_similar;
 use crate::i18n::Localizer;
 
@@ -53,6 +53,13 @@ pub enum NoteCmd {
         /// The tag aggregate id (UUID).
         #[arg(long)]
         tag: Uuid,
+    },
+    /// Set (or clear) a note's privacy restrictions, replacing its current set.
+    SetRestrictions {
+        /// The note's human id (e.g. `N0001`).
+        human_id: String,
+        #[command(flatten)]
+        restrictions: RestrictionsArgs,
     },
     /// Show one note.
     Show {
@@ -120,9 +127,32 @@ pub async fn run(
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
+        NoteCmd::SetRestrictions { human_id, restrictions } => {
+            restrict(workspace, session, &human_id, restrictions, localizer).await
+        }
         NoteCmd::Show { human_id } => show(workspace, &human_id, localizer).await,
         NoteCmd::List => list(workspace, localizer).await,
     }
+}
+
+/// Replaces a note's privacy restrictions and reports the update.
+async fn restrict(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    restrictions: RestrictionsArgs,
+    localizer: &Localizer,
+) -> Result<(), AppError> {
+    set_note_restrictions(
+        workspace,
+        session,
+        human_id,
+        restrictions.into_set(),
+        MutationMeta::default(),
+    )
+    .await?;
+    println!("{}", localizer.updated(human_id));
+    Ok(())
 }
 
 /// Renders one note, or errors if absent.

@@ -5,11 +5,11 @@ use uuid::Uuid;
 use vitni_app::{
     Address, AppError, MatchableKind, MutationMeta, NewRepository, Provenance, Session, Url, Workspace,
     add_repository_address, add_repository_url, attach_repository_note, create_repository, list_repositories,
-    set_repository_name, set_repository_type, show_repository, tag_repository,
+    set_repository_name, set_repository_restrictions, set_repository_type, show_repository, tag_repository,
 };
 use vitni_core::ids::NoteId;
 
-use crate::args::RepositoryTypeArg;
+use crate::args::{RepositoryTypeArg, RestrictionsArgs};
 use crate::commands::similar::hint_similar;
 use crate::i18n::Localizer;
 
@@ -96,6 +96,13 @@ pub enum RepositoryCmd {
         /// The tag aggregate id (UUID).
         #[arg(long)]
         tag: Uuid,
+    },
+    /// Set (or clear) a repository's privacy restrictions, replacing its current set.
+    SetRestrictions {
+        /// The repository's human id (e.g. `R0001`).
+        human_id: String,
+        #[command(flatten)]
+        restrictions: RestrictionsArgs,
     },
     /// Show one repository.
     Show {
@@ -188,9 +195,32 @@ pub async fn run(
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
+        RepositoryCmd::SetRestrictions { human_id, restrictions } => {
+            restrict(workspace, session, &human_id, restrictions, localizer).await
+        }
         RepositoryCmd::Show { human_id } => show(workspace, &human_id, localizer).await,
         RepositoryCmd::List => list(workspace, localizer).await,
     }
+}
+
+/// Replaces a repository's privacy restrictions and reports the update.
+async fn restrict(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    restrictions: RestrictionsArgs,
+    localizer: &Localizer,
+) -> Result<(), AppError> {
+    set_repository_restrictions(
+        workspace,
+        session,
+        human_id,
+        restrictions.into_set(),
+        MutationMeta::default(),
+    )
+    .await?;
+    println!("{}", localizer.updated(human_id));
+    Ok(())
 }
 
 /// Renders one repository, or errors if absent.

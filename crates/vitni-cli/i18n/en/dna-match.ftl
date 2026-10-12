@@ -1,6 +1,6 @@
 ## DNA-match output
 dna-match-list-empty = No DNA matches yet.
-dna-match-summary = { $id }  shared: { $shared } cM  predicted: { $predicted }  status: { $status }  segments: { $segments }
+dna-match-summary = { $id }  shared: { $shared } cM  predicted: { $predicted }  status: { $status }  segments: { $segments }{ $restrictions }
 dna-match-status-confirmed = confirmed
 dna-match-status-rejected = rejected
 
