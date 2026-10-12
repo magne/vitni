@@ -151,13 +151,6 @@ long-standing "DNA match views in the UI" item is closed.
   checks to the other aggregates (such as a date inversion on an Event or Place) is its own item.
 - **Repository media refs (U31)** — should Repository carry media refs (e.g. archive photos)? A
   data-model question.
-- **A projection is written after the event commit** — `cqrs-es` commits an aggregate's events, then
-  writes its projection through `GenericQuery`, so a process killed between the two leaves the
-  projection without the newest events until `vitni rebuild`. The `record_origins` index has the same
-  window and closes it with a write journal that the next open replays (`record_origins_pending`,
-  `vitni-db/src/{sqlite,postgres}.rs`); a projection cannot reuse it as is, because its replay applies
-  the events onto the stored view and would apply them twice. *Exit:* a test that kills a commit
-  between its events and its projection write finds the projection whole on the next open. — #536
 - **An unreadable event stops the workspace opening** — since #486 a replay fails on an event it
   cannot read or upcast, and `open` replays in three places: the rebuild of a view table predating the
   `human_id` column, the `record_origins` backfill, and the catch-up of journalled writes
