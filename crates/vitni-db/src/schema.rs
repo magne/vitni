@@ -91,8 +91,9 @@ pub async fn create_sqlite_view_table(pool: &Pool<Sqlite>, view_name: &str) -> R
 }
 
 /// Returns whether `view_name` exists in SQLite but predates the generated `human_id` column
-/// (ADR 0032) or the `sequence` column (ADR 0050) — the signal that it must be dropped and rebuilt rather than left in place. A
-/// nonexistent table (nothing to migrate; the caller creates it fresh) is not stale.
+/// (ADR 0032) or the `sequence` column (ADR 0050) — the signal that it must be dropped and rebuilt
+/// rather than left in place. A nonexistent table (nothing to migrate; the caller creates it fresh)
+/// is not stale.
 ///
 /// Uses `PRAGMA table_xinfo`, not `table_info`: SQLite reports a `GENERATED ALWAYS ... STORED`
 /// column as hidden, and `table_info` omits hidden columns (`table_xinfo` is the variant that
@@ -240,8 +241,8 @@ pub async fn create_postgres_view_table(pool: &Pool<Postgres>, view_name: &str) 
 }
 
 /// Returns whether `view_name` exists in Postgres but predates the generated `human_id` column
-/// (ADR 0032) or the `sequence` column (ADR 0050) — the twin of [`sqlite_view_table_is_stale`]. A nonexistent table (nothing to
-/// migrate; the caller creates it fresh) is not stale.
+/// (ADR 0032) or the `sequence` column (ADR 0050) — the twin of [`sqlite_view_table_is_stale`]. A
+/// nonexistent table (nothing to migrate; the caller creates it fresh) is not stale.
 ///
 /// # Errors
 ///

@@ -210,11 +210,11 @@ macro_rules! postgres_store {
                 schema::init_postgres(&pool)
                     .await
                     .map_err(|e| DbError::Backend(format!("initializing event store: {e}")))?;
-                // Drops and recreates any view table left over from before the `human_id` column
-                // existed (ADR 0032), creates every table fresh, and indexes the human-id-bearing
-                // ones; returns which tables were dropped, so their aggregate's event log can be
-                // replayed to repopulate them below (rebuilding needs the aggregate's `State`/`View`
-                // types, which this untyped helper does not have).
+                // Drops and recreates any view table left over from before the `human_id` (ADR 0032)
+                // or `sequence` (ADR 0050) column existed, creates every table fresh, and indexes the
+                // human-id-bearing ones; returns which tables were dropped, so their aggregate's event log
+                // can be replayed to repopulate them below (rebuilding needs the aggregate's
+                // `State`/`View` types, which this untyped helper does not have).
                 let stale_tables = migrate_postgres_view_tables(&pool).await?;
                 // The Place succession cross-reference index (ADR 0026 §4) is not one of the generic
                 // per-aggregate projections: it is derived from the Place projection and keyed by its
@@ -248,7 +248,7 @@ macro_rules! postgres_store {
                     if stale_tables.contains(&$table_const) {
                         tracing::info!(
                             table = $table_const,
-                            "projection table predated the human_id column; rebuilding from the event log"
+                            "projection table predated the human_id or sequence column; rebuilding from the event log"
                         );
                         rebuild_view::<$State, $View>(&pool, $table_const, $upcasters, crate::exclusive::SHARED_REPLAY_BUFFER).await?;
                     }
@@ -323,8 +323,7 @@ macro_rules! postgres_store {
             /// Rebuilds every projection from the event log (ADR 0010): each view table is cleared,
             /// then its aggregate's full history is replayed back into it through the same
             /// projection query the live store uses (ADR 0050), with the Event aggregate's upcasters
-            /// applied. A
-            /// maintenance operation — the caller must ensure no commands run concurrently.
+            /// applied. A maintenance operation — the caller must ensure no commands run concurrently.
             pub(crate) async fn rebuild_projections(&self) -> Result<(), DbError> {
                 Self::rebuild_projections_on(&self.pool, crate::exclusive::SHARED_REPLAY_BUFFER).await
             }
