@@ -156,6 +156,25 @@ pub(crate) async fn begin_write(pool: &Pool<Sqlite>, aggregate_type: &str, aggre
     .map_err(|e| DbError::Backend(format!("journalling a write to {aggregate_type} {aggregate_id}: {e}")))
 }
 
+/// Journals the aggregate unless an entry already names it: one whose log holds an unreadable event,
+/// so every open replays it until it reads (ADR 0051).
+///
+/// # Errors
+///
+/// A [`DbError`] if the statement fails.
+pub(crate) async fn journal_once(pool: &Pool<Sqlite>, aggregate_type: &str, aggregate_id: &str) -> Result<(), DbError> {
+    sqlx::query(&format!(
+        "INSERT INTO {RECORD_ORIGINS_PENDING_TABLE} (aggregate_type, aggregate_id) SELECT ?1, ?2 \
+         WHERE NOT EXISTS (SELECT 1 FROM {RECORD_ORIGINS_PENDING_TABLE} WHERE aggregate_type = ?1 AND aggregate_id = ?2)"
+    ))
+    .bind(aggregate_type)
+    .bind(aggregate_id)
+    .execute(pool)
+    .await
+    .map_err(|e| DbError::Backend(format!("journalling {aggregate_type} {aggregate_id}: {e}")))?;
+    Ok(())
+}
+
 /// Withdraws a [`begin_write`] entry once its command's events are committed and every query has run.
 ///
 /// # Errors

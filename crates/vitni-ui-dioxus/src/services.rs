@@ -1748,11 +1748,16 @@ pub async fn replace_backup(services: Services, archive: PathBuf) -> Result<Repl
 /// Rebuilds every projection from the event log for the open workspace, returning a localized error
 /// on failure. The Preferences Maintenance card's counterpart to the CLI's `vitni rebuild`
 /// (`Workspace::rebuild_projections`, an ADR 0010 maintenance op) — the tool for recovering after a
-/// `vitni-db` schema change.
+/// `vitni-db` schema change. An event it cannot read is journalled, so the next open — the shell's
+/// banner reload after the rebuild — reports it (ADR 0051).
 pub async fn rebuild_projections(services: Services) -> Result<(), String> {
     let loc = services.localizer();
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
-    workspace.rebuild_projections().await.map_err(|error| loc.error(&error))
+    workspace
+        .rebuild_projections()
+        .await
+        .map(|_journalled| ())
+        .map_err(|error| loc.error(&error))
 }
 
 #[cfg(test)]

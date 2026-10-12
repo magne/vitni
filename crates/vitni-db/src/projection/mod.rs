@@ -11,6 +11,9 @@
 //! process catching up the same aggregate — cannot both land: the loser reads the view again and folds
 //! what is still missing. A batch that starts past the view's next event — a commit that dispatched
 //! before an earlier one, or one after a failed write — is folded from the aggregate's log instead.
+//!
+//! vitni reads the log itself rather than through `cqrs-es`'s replay, so an event that does not decode
+//! is named by its key, and the events before it are still folded (ADR 0051).
 
 use std::marker::PhantomData;
 
@@ -18,6 +21,7 @@ use async_trait::async_trait;
 use cqrs_es::persist::{EventUpcaster, PersistedEventRepository};
 use cqrs_es::{Aggregate, EventEnvelope, Query, View};
 
+use crate::raw::{UnreadableEvent, decode_event};
 use crate::store::{DbError, deserialize_view};
 
 #[cfg(feature = "postgres")]
@@ -115,45 +119,86 @@ impl<E: PersistedEventRepository> EventLog<E> {
         Self { repository, upcasters }
     }
 
+    /// The events of `aggregate_id` up to its first unreadable one, in sequence order, and that one.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError::Backend`] when the log cannot be read.
+    pub(crate) async fn read<A: Aggregate>(&self, aggregate_id: &str) -> Result<Readable<A>, DbError> {
+        let serialized = self
+            .repository
+            .get_events::<A>(aggregate_id)
+            .await
+            .map_err(|e| DbError::Backend(format!("reading the events of {} {aggregate_id}: {e}", A::TYPE)))?;
+        let upcasters = (self.upcasters)();
+        let mut events = Vec::with_capacity(serialized.len());
+        for event in serialized {
+            match decode_event::<A>(event, &upcasters) {
+                Ok(event) => events.push(event),
+                Err(unreadable) => {
+                    return Ok(Readable {
+                        events,
+                        unreadable: Some(unreadable),
+                    });
+                }
+            }
+        }
+        Ok(Readable {
+            events,
+            unreadable: None,
+        })
+    }
+
     /// Every event of `aggregate_id`, in sequence order.
     ///
     /// # Errors
     ///
-    /// [`DbError::Backend`] when the log cannot be read or an event cannot be decoded.
+    /// [`DbError::Backend`] when the log cannot be read or an event cannot be decoded, naming it.
     pub(crate) async fn events<A: Aggregate>(&self, aggregate_id: &str) -> Result<Vec<EventEnvelope<A>>, DbError> {
-        let reading = |e: cqrs_es::persist::PersistenceError| {
-            DbError::Backend(format!("reading the events of {} {aggregate_id}: {e}", A::TYPE))
-        };
-        let upcasters = (self.upcasters)();
-        let mut stream = self
-            .repository
-            .stream_events::<A>(aggregate_id)
-            .await
-            .map_err(reading)?;
-        let mut events = Vec::new();
-        while let Some(event) = stream.next::<A>(&upcasters).await {
-            events.push(event.map_err(reading)?);
+        let Readable { events, unreadable } = self.read::<A>(aggregate_id).await?;
+        match unreadable {
+            None => Ok(events),
+            Some(unreadable) => Err(DbError::Backend(unreadable.to_string())),
         }
-        Ok(events)
     }
 }
 
-/// Replays `aggregate_id`'s whole log through `queries` as one batch, as its commits dispatched it —
-/// the open-time repair of an aggregate the write journal names (ADR 0050).
+/// An aggregate's log as far as it reads: [`EventLog::read`].
+pub(crate) struct Readable<A: Aggregate> {
+    /// The events before the first unreadable one — all of them when none is.
+    pub(crate) events: Vec<EventEnvelope<A>>,
+    /// The first event that does not decode, if any.
+    pub(crate) unreadable: Option<UnreadableEvent>,
+}
+
+/// Replays each of `aggregate_ids`' logs through `query`, one batch per aggregate, as its commits
+/// dispatched it (ADR 0050, 0051). An aggregate's batch stops before its first unreadable event, and
+/// that event is returned rather than failing the replay; an aggregate with no events is skipped.
 ///
 /// # Errors
 ///
-/// [`DbError::Backend`] when the log cannot be read or a query reports a failure.
-pub(crate) async fn replay_aggregate<A: Aggregate, E: PersistedEventRepository>(
+/// [`DbError::Backend`] when a log cannot be read, or reading `{context}: …` when the query reports a
+/// failure.
+pub(crate) async fn replay<A: Aggregate, E: PersistedEventRepository>(
     log: &EventLog<E>,
-    queries: &QueryChain<A>,
-    aggregate_id: &str,
-) -> Result<(), DbError> {
-    let events = log.events::<A>(aggregate_id).await?;
-    let ((), failures) = crate::projection_failures::watch(queries.dispatch(aggregate_id, &events)).await;
-    failures.map_or(Ok(()), |failures| {
-        Err(failures.into_error(&format!("replaying {} {aggregate_id}", A::TYPE)))
+    query: &impl Query<A>,
+    aggregate_ids: &[String],
+    context: &str,
+) -> Result<Vec<UnreadableEvent>, DbError> {
+    let (result, failures) = crate::projection_failures::watch(async {
+        let mut unreadable = Vec::new();
+        for aggregate_id in aggregate_ids {
+            let readable = log.read::<A>(aggregate_id).await?;
+            if !readable.events.is_empty() {
+                query.dispatch(aggregate_id, &readable.events).await;
+            }
+            unreadable.extend(readable.unreadable);
+        }
+        Ok::<_, DbError>(unreadable)
     })
+    .await;
+    let unreadable = result?;
+    failures.map_or(Ok(unreadable), |failures| Err(failures.into_error(context)))
 }
 
 /// An engine's view table rows, read and written by [`ProjectionQuery`].

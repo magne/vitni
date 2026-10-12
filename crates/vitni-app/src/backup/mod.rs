@@ -518,6 +518,7 @@ async fn finish_restore(
     checked: &CheckedArchive,
     dir: &Path,
 ) -> Result<(usize, media::Verification), AppError> {
+    // Every archived event was decoded by the check, so the rebuild meets none it cannot read.
     workspace.rebuild_projections().await?;
     let media_restored = media::extract(archive, &checked.media_members, dir)?;
     let verification = media::verify(&checked.media, dir)?;

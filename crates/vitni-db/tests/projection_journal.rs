@@ -2,6 +2,9 @@
 //! between leaves the view, and the indexes read from it, without the newest events. These tests put
 //! a workspace in that state with SQL and check the next open makes it whole, on SQLite and (under
 //! `--features postgres`, with a Docker daemon) Postgres.
+//!
+//! The same journal keeps an aggregate holding an event it cannot read (#535, ADR 0051): every open
+//! replays it, folds the events before that one, and reports the event, so the workspace still opens.
 
 #![cfg(any(feature = "sqlite", feature = "postgres"))]
 #![expect(clippy::unwrap_used, reason = "tests abort on setup/assertion failure")]
@@ -14,7 +17,7 @@ use vitni_core::ids::{AgentId, AssertionId, EventId, HumanId, PersonId};
 use vitni_core::person::PersonError;
 use vitni_core::person::command::{PersonCommand, PersonCommandEnvelope};
 use vitni_core::provenance::{Agent, AgentKind, AssertionMeta, EventContext, Timestamp};
-use vitni_db::{CommandError, ProjectionRow, RecordLink, Store};
+use vitni_db::{CommandError, ProjectionRow, RecordLink, Store, UnreadableEvent};
 
 /// The person every test changes.
 const PERSON: u128 = 1;
@@ -107,8 +110,54 @@ const JOURNAL_PERSON: &str = "INSERT INTO record_origins_pending (aggregate_type
 /// How many writes the journal holds.
 const PENDING: &str = "SELECT COUNT(*) FROM record_origins_pending";
 
+/// Whether the record origins index is marked complete: the number of marker rows.
+const ORIGINS_COMPLETE: &str = "SELECT COUNT(*) FROM record_origins_state";
+
 /// Drops the person's link to the event of the last commit, written from its view.
 const DROP_LAST_LINK: &str = "DELETE FROM record_links WHERE target = '00000000-0000-0000-0000-000000000015'";
+
+/// Keeps the person's first participation (its second event) aside, so [`READABLE_AGAIN`] can put it
+/// back.
+const KEEP_EVENT: &str = "CREATE TABLE kept_event AS SELECT payload FROM events \
+     WHERE aggregate_type = 'person' AND sequence = 2";
+
+/// Overwrites the person's second event with a payload no version of vitni reads.
+const UNREADABLE: &str = "UPDATE events SET payload = '{\"type\":\"NoSuchEvent\"}' \
+     WHERE aggregate_type = 'person' AND sequence = 2";
+
+/// Writes the kept payload back: the event reads again, as after an update that knows it.
+const READABLE_AGAIN: [&str; 2] = [
+    "UPDATE events SET payload = (SELECT payload FROM kept_event) \
+     WHERE aggregate_type = 'person' AND sequence = 2",
+    "DROP TABLE kept_event",
+];
+
+/// Withdraws the record origins completion marker, as a fill cut short leaves it.
+const ORIGINS_INCOMPLETE: &str = "DELETE FROM record_origins_state";
+
+/// Leaves the person's view table without its sequence column, so the next open rebuilds it.
+const STALE_PERSON_VIEW: &str = "ALTER TABLE person_view RENAME COLUMN sequence TO version";
+
+/// The person's unreadable second event, as a replay reports it.
+fn unreadable_participation(reported: &[UnreadableEvent]) -> &UnreadableEvent {
+    assert_eq!(reported.len(), 1, "the one unreadable event: {reported:?}");
+    let event = reported.first().unwrap();
+    assert_eq!(
+        (
+            event.aggregate_type.as_str(),
+            event.aggregate_id.as_str(),
+            event.sequence
+        ),
+        ("person", id(PERSON).as_str(), 2)
+    );
+    assert!(
+        event
+            .to_string()
+            .starts_with(&format!("person event {} #2 (ParticipationAsserted): ", id(PERSON))),
+        "names the event: {event}"
+    );
+    event
+}
 
 /// What a commit killed after its events and before its projection leaves: the view and its links
 /// as they were, and the journal entry naming the person.
@@ -219,7 +268,7 @@ macro_rules! journal_tests {
                 .await;
             let store = workspace.open().await;
             assert_eq!(workspace.pending().await, 1, "kept for the next open");
-            store.rebuild_projections().await.unwrap();
+            assert!(store.rebuild_projections().await.unwrap().is_empty());
             drop(store);
             let store = workspace.open().await;
             assert_eq!(
@@ -231,14 +280,120 @@ macro_rules! journal_tests {
         }
 
         #[tokio::test]
-        async fn a_view_table_without_event_sequences_is_rebuilt() {
+        async fn a_stale_view_table_over_an_unreadable_event_opens_with_the_events_before_it() {
+            let workspace = $new;
+            seed_and_take_part(&workspace).await;
+            workspace
+                .run(&[
+                    "DROP TABLE kept_view",
+                    super::UNREADABLE,
+                    super::STALE_PERSON_VIEW,
+                ])
+                .await;
+            let store = workspace.open().await;
+            super::unreadable_participation(store.unreadable_events());
+            assert_eq!(
+                super::person_sequence(&store).await,
+                1,
+                "the events before the unreadable one"
+            );
+            assert_eq!(
+                workspace.pending().await,
+                1,
+                "journalled, so every open replays it"
+            );
+        }
+
+        #[tokio::test]
+        async fn an_origins_fill_over_an_unreadable_event_opens_and_finishes() {
+            let workspace = $new;
+            seed_and_take_part(&workspace).await;
+            workspace
+                .run(&[
+                    "DROP TABLE kept_view",
+                    super::UNREADABLE,
+                    super::ORIGINS_INCOMPLETE,
+                ])
+                .await;
+            let store = workspace.open().await;
+            super::unreadable_participation(store.unreadable_events());
+            drop(store);
+            assert_eq!(
+                workspace.origins_complete().await,
+                1,
+                "not refilled on every open"
+            );
+        }
+
+        #[tokio::test]
+        async fn an_unreadable_event_is_reported_on_every_open_and_journalled_once() {
+            let workspace = $new;
+            seed_and_take_part(&workspace).await;
+            workspace
+                .run(&[
+                    "DROP TABLE kept_view",
+                    super::UNREADABLE,
+                    super::STALE_PERSON_VIEW,
+                ])
+                .await;
+            for _ in 0..3 {
+                let store = workspace.open().await;
+                super::unreadable_participation(store.unreadable_events());
+            }
+            assert_eq!(workspace.pending().await, 1);
+        }
+
+        #[tokio::test]
+        async fn an_event_that_reads_again_is_folded_on_the_next_open() {
             let workspace = $new;
             let whole = seed_and_take_part(&workspace).await;
             workspace
                 .run(&[
                     "DROP TABLE kept_view",
-                    "ALTER TABLE person_view RENAME COLUMN sequence TO version",
+                    super::KEEP_EVENT,
+                    super::UNREADABLE,
+                    super::STALE_PERSON_VIEW,
                 ])
+                .await;
+            super::unreadable_participation(workspace.open().await.unreadable_events());
+            workspace.run(&super::READABLE_AGAIN).await;
+            let store = workspace.open().await;
+            assert_eq!(store.unreadable_events(), &[]);
+            assert_eq!(workspace.pending().await, 0);
+            assert_eq!(super::derived(&store).await, whole);
+        }
+
+        #[tokio::test]
+        async fn a_rebuild_reports_an_unreadable_event_and_rebuilds_the_rest() {
+            let workspace = $new;
+            seed_and_take_part(&workspace).await;
+            workspace.run(&["DROP TABLE kept_view", super::UNREADABLE]).await;
+            let store = workspace.open().await;
+            assert_eq!(store.unreadable_events(), &[], "no open replay read it");
+            let reported = store.rebuild_projections().await.unwrap();
+            super::unreadable_participation(&reported);
+            assert_eq!(super::person_sequence(&store).await, 1);
+            let events = store.projection_rows().await.unwrap();
+            assert_eq!(
+                events.iter().filter(|row| row.table == "event_view").count(),
+                3,
+                "the other aggregates are rebuilt whole"
+            );
+            drop(store);
+            assert_eq!(
+                workspace.pending().await,
+                1,
+                "journalled once, though two replays met it"
+            );
+            super::unreadable_participation(workspace.open().await.unreadable_events());
+        }
+
+        #[tokio::test]
+        async fn a_view_table_without_event_sequences_is_rebuilt() {
+            let workspace = $new;
+            let whole = seed_and_take_part(&workspace).await;
+            workspace
+                .run(&["DROP TABLE kept_view", super::STALE_PERSON_VIEW])
                 .await;
             assert_eq!(super::derived(&workspace.open().await).await, whole);
         }
@@ -278,6 +433,16 @@ mod sqlite {
             let pending = sqlx::query_scalar(super::PENDING).fetch_one(&pool).await.unwrap();
             pool.close().await;
             pending
+        }
+
+        async fn origins_complete(&self) -> i64 {
+            let pool = sqlx::SqlitePool::connect(&self.url).await.unwrap();
+            let complete = sqlx::query_scalar(super::ORIGINS_COMPLETE)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+            pool.close().await;
+            complete
         }
     }
 
@@ -320,6 +485,16 @@ mod postgres {
             let pending = sqlx::query_scalar(super::PENDING).fetch_one(&pool).await.unwrap();
             pool.close().await;
             pending
+        }
+
+        async fn origins_complete(&self) -> i64 {
+            let pool = sqlx::PgPool::connect(self.db.dsn()).await.unwrap();
+            let complete = sqlx::query_scalar(super::ORIGINS_COMPLETE)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+            pool.close().await;
+            complete
         }
     }
 

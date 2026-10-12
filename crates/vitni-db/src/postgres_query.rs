@@ -461,6 +461,16 @@ pub(crate) async fn discard_all_events(pool: &Pool<Postgres>) -> Result<(), DbEr
     Ok(())
 }
 
+/// The id of every `aggregate_type` instance with an event, read in full before the caller writes,
+/// so it holds no connection an [`crate::exclusive::ExclusivePool`] needs.
+pub(crate) async fn aggregate_ids(pool: &Pool<Postgres>, aggregate_type: &str) -> Result<Vec<String>, DbError> {
+    sqlx::query_scalar("SELECT DISTINCT aggregate_id FROM events WHERE aggregate_type = $1 ORDER BY aggregate_id")
+        .bind(aggregate_type)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| DbError::Backend(format!("listing the {aggregate_type} aggregates: {e}")))
+}
+
 /// Counts every stored event row.
 pub(crate) async fn event_count(pool: &Pool<Postgres>) -> Result<u64, DbError> {
     count_rows(pool, "events").await

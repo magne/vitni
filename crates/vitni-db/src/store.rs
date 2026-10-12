@@ -8,7 +8,7 @@
 //! engine per workspace at runtime (ADR 0002). Its per-aggregate operations are generated from the
 //! [`registry`](crate::registry); the backend delegation pattern is identical for every aggregate.
 
-use crate::raw::{ProjectionRow, RawEvent, RawEventKey};
+use crate::raw::{ProjectionRow, RawEvent, RawEventKey, UnreadableEvent};
 use crate::registry::{
     for_each_db_aggregate, for_each_db_by_ids_aggregate, for_each_db_external_id_aggregate,
     for_each_db_human_id_aggregate,
@@ -199,11 +199,34 @@ impl Store {
         }
     }
 
+    /// The events the open found it cannot read, each naming its aggregate and sequence (ADR 0051).
+    ///
+    /// Their aggregates' projections hold the events before them. The list is as of the open: every
+    /// open replays those aggregates again, so a version that reads the events folds the rest.
+    #[must_use]
+    pub fn unreadable_events(&self) -> &[UnreadableEvent] {
+        #[cfg(any(feature = "sqlite", feature = "postgres"))]
+        {
+            match &self.backend {
+                #[cfg(feature = "sqlite")]
+                Backend::Sqlite(s) => s.unreadable_events(),
+                #[cfg(feature = "postgres")]
+                Backend::Postgres(p) => p.unreadable_events(),
+            }
+        }
+        #[cfg(not(any(feature = "sqlite", feature = "postgres")))]
+        {
+            &[]
+        }
+    }
+
     /// Rebuilds every projection from the event log, applying event upcasters (ADR 0010).
     ///
     /// Each read model is cleared and replayed from its aggregate's history, so a schema change or
-    /// a corrupted projection is recovered without touching the (immutable) event log. A
-    /// maintenance operation: the caller must ensure no commands run concurrently.
+    /// a corrupted projection is recovered without touching the (immutable) event log. An event that
+    /// does not decode stops its aggregate's replay there and is returned rather than failing the
+    /// rebuild (ADR 0051). A maintenance operation: the caller must ensure no commands run
+    /// concurrently.
     ///
     /// # Errors
     ///
@@ -212,7 +235,7 @@ impl Store {
         not(any(feature = "sqlite", feature = "postgres")),
         expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
     )]
-    pub async fn rebuild_projections(&self) -> Result<(), DbError> {
+    pub async fn rebuild_projections(&self) -> Result<Vec<UnreadableEvent>, DbError> {
         #[cfg(any(feature = "sqlite", feature = "postgres"))]
         {
             match &self.backend {
@@ -374,7 +397,7 @@ impl Store {
                 #[cfg(feature = "postgres")]
                 Backend::Postgres(p) => p.discard_all_events().await?,
             }
-            self.rebuild_projections().await
+            self.rebuild_projections().await.map(|_empty_log| ())
         }
         #[cfg(not(any(feature = "sqlite", feature = "postgres")))]
         {
