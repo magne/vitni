@@ -113,6 +113,12 @@ kbd-nothing-to-save = Nothing to save
 save-run-incomplete = Some records are still unsaved — the app stayed open.
 notice-dismiss = Dismiss
 
+# The shell banner while the workspace holds events this version cannot read (ADR 0051)
+unreadable-events-banner = { $count ->
+        [one] One event in this workspace could not be read, so its record shows only what came before it.
+       *[other] { $count } events in this workspace could not be read, so their records show only what came before them.
+    } If the workspace was last used with a newer version of vitni, update vitni; otherwise restore an earlier backup.
+
 help-title = Keyboard shortcuts
 help-col-global = Global
 help-col-goto = Go to

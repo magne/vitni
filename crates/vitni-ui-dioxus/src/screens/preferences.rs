@@ -188,7 +188,11 @@ pub fn PreferencesScreen() -> Element {
             let outcome = rebuild_projections(services).await;
             maintenance_running.set(false);
             match outcome {
-                Ok(()) => nav.notify(chrome.prefs_rebuild_success()),
+                Ok(()) => {
+                    // The projections were rewritten: every list, count and the banner reads them again.
+                    nav.mark_changed();
+                    nav.notify(chrome.prefs_rebuild_success());
+                }
                 Err(message) => nav.notify(message),
             }
         });

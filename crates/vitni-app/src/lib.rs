@@ -318,7 +318,7 @@ pub use vitni_core::source::SourceError;
 pub use vitni_core::tag::TagError;
 pub use vitni_core::temporal::resolve_as_of;
 pub use vitni_core::text::{Attribute, ExternalId, Rect, Url};
-pub use vitni_db::DbError;
+pub use vitni_db::{DbError, UnreadableEvent};
 pub use workspace::{
     BackupSettings, IdFormatLayers, LayerKind, LocaleOverrides, OperatorRecord, PluginPreferences, PreferenceLayers,
     RECENT_LIMIT, RecentItem, ResolvedLocale, ResolvedUiPreferences, SuretyLayers, ThemeLayers, UiPreferences,

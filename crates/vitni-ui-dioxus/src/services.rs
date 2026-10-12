@@ -280,11 +280,25 @@ pub async fn load_data_quality(services: Services, data_version: u32) -> ScreenD
     screen
 }
 
-/// Loads the per-aggregate record counts for the rail badges and dashboard, or `None` if the
-/// workspace cannot be opened (the rail then shows no counts rather than an error).
-pub async fn load_counts(services: Services) -> Option<WorkspaceCounts> {
+/// What the shell shows about the open workspace, read in one open: the rail badges' counts and the
+/// banner's unreadable events.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ShellStatus {
+    /// The per-aggregate record counts, or `None` if they could not be read (no badges shown).
+    pub counts: Option<WorkspaceCounts>,
+    /// How many events the workspace holds that this version cannot read, as its open found them
+    /// (ADR 0051).
+    pub unreadable: usize,
+}
+
+/// Loads the [`ShellStatus`], or `None` if the workspace cannot be opened (the rail then shows no
+/// counts and the shell no banner, rather than an error).
+pub async fn load_shell_status(services: Services) -> Option<ShellStatus> {
     let workspace = services.open().await.ok()?;
-    workspace_counts(&workspace).await.ok()
+    Some(ShellStatus {
+        counts: workspace_counts(&workspace).await.ok(),
+        unreadable: workspace.unreadable_events().len(),
+    })
 }
 
 /// Resolves the current display name of the record `(category, human_id)` for a record link, or
@@ -1748,11 +1762,16 @@ pub async fn replace_backup(services: Services, archive: PathBuf) -> Result<Repl
 /// Rebuilds every projection from the event log for the open workspace, returning a localized error
 /// on failure. The Preferences Maintenance card's counterpart to the CLI's `vitni rebuild`
 /// (`Workspace::rebuild_projections`, an ADR 0010 maintenance op) — the tool for recovering after a
-/// `vitni-db` schema change.
+/// `vitni-db` schema change. An event it cannot read is journalled, so the next open — the shell's
+/// banner reload after the rebuild — reports it (ADR 0051).
 pub async fn rebuild_projections(services: Services) -> Result<(), String> {
     let loc = services.localizer();
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
-    workspace.rebuild_projections().await.map_err(|error| loc.error(&error))
+    workspace
+        .rebuild_projections()
+        .await
+        .map(|_journalled| ())
+        .map_err(|error| loc.error(&error))
 }
 
 #[cfg(test)]

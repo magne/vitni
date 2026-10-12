@@ -8,7 +8,7 @@
 
 use std::time::Duration;
 
-use cqrs_es::persist::{EventUpcaster, PersistedEventStore, QueryReplay};
+use cqrs_es::persist::PersistedEventStore;
 use cqrs_es::{Aggregate, AggregateContext as _, CqrsFramework, EventStore as _, Query, View};
 use postgres_es::{PostgresEventRepository, postgres_cqrs};
 use sqlx::postgres::PgPoolOptions;
@@ -198,6 +198,8 @@ macro_rules! postgres_store {
                 $snake: CqrsFramework<$State, PersistedEventStore<PostgresEventRepository, $State>>,
             )+
             pool: Pool<Postgres>,
+            /// The unreadable events the open found, each in a journalled aggregate (ADR 0051).
+            unreadable: Vec<crate::raw::UnreadableEvent>,
         }
 
         impl PostgresStore {
@@ -252,13 +254,14 @@ macro_rules! postgres_store {
                             table = $table_const,
                             "projection table predated the human_id or sequence column; rebuilding from the event log"
                         );
-                        rebuild_view::<$State, $View>(&pool, $table_const, || $upcasters, crate::exclusive::SHARED_REPLAY_BUFFER).await?;
+                        // An unreadable event it meets is journalled, and reported by the catch-up below.
+                        let _journalled = rebuild_view::<$State, $View>(&pool, $table_const, || $upcasters).await?;
                     }
                 )+
                 if origins_need_backfill {
                     Self::backfill_record_origins(&pool).await?;
                 }
-                Self::catch_up_journal(&pool).await?;
+                let unreadable = Self::catch_up_journal(&pool).await?;
                 if identity_is_new {
                     crate::identity_links::postgres::rebuild_index(&pool).await?;
                 }
@@ -266,7 +269,7 @@ macro_rules! postgres_store {
                 // citation projections hold; its `Query` is appended to those frameworks above, and a
                 // workspace that predates it gets it created and filled from the open projections.
                 crate::record_links::postgres::create_filled(&pool).await?;
-                Ok(Self { $($snake,)+ pool })
+                Ok(Self { $($snake,)+ pool, unreadable })
             }
 
             $(
@@ -322,19 +325,26 @@ macro_rules! postgres_store {
                 }
             )+
 
+            /// The unreadable events the open found (ADR 0051).
+            pub(crate) fn unreadable_events(&self) -> &[crate::raw::UnreadableEvent] {
+                &self.unreadable
+            }
+
             /// Rebuilds every projection from the event log (ADR 0010): each view table is cleared,
             /// then its aggregate's full history is replayed back into it through the same
             /// projection query the live store uses (ADR 0050), with the Event aggregate's upcasters
-            /// applied. A maintenance operation — the caller must ensure no commands run concurrently.
-            pub(crate) async fn rebuild_projections(&self) -> Result<(), DbError> {
-                Self::rebuild_projections_on(&self.pool, crate::exclusive::SHARED_REPLAY_BUFFER).await
+            /// applied. Returns the unreadable events it met, journalled (ADR 0051). A maintenance
+            /// operation — the caller must ensure no commands run concurrently.
+            pub(crate) async fn rebuild_projections(&self) -> Result<Vec<crate::raw::UnreadableEvent>, DbError> {
+                Self::rebuild_projections_on(&self.pool).await
             }
 
             /// [`Self::rebuild_projections`] over `pool`, which [`Self::replace_all_events`] points at
             /// its exclusive transaction.
-            async fn rebuild_projections_on(pool: &Pool<Postgres>, replay_buffer: usize) -> Result<(), DbError> {
+            async fn rebuild_projections_on(pool: &Pool<Postgres>) -> Result<Vec<crate::raw::UnreadableEvent>, DbError> {
+                let mut unreadable = Vec::new();
                 $(
-                    rebuild_view::<$State, $View>(pool, $table_const, || $upcasters, replay_buffer).await?;
+                    unreadable.extend(rebuild_view::<$State, $View>(pool, $table_const, || $upcasters).await?);
                 )+
                 // Place's succession cross-reference index (ADR 0026 §4) is derived from the (now
                 // freshly rebuilt) Place projection above, not replayed from raw events itself.
@@ -353,7 +363,10 @@ macro_rules! postgres_store {
                 // its `live` flags are read from. Unmarked first, so a rebuild cut short is redone by
                 // the next open.
                 crate::record_origins::postgres::mark_incomplete(pool).await?;
-                Self::refill_record_origins_on(pool, replay_buffer).await
+                unreadable.extend(Self::refill_record_origins_on(pool).await?);
+                unreadable.sort();
+                unreadable.dedup();
+                Ok(unreadable)
             }
 
             /// Fills the record origins index from the log in one transaction, so an open cut short
@@ -364,7 +377,8 @@ macro_rules! postgres_store {
                     if crate::record_origins::postgres::lock_for_refill(exclusive.pool()).await? {
                         return Ok(());
                     }
-                    Self::refill_record_origins_on(exclusive.pool(), crate::exclusive::EXCLUSIVE_REPLAY_BUFFER).await
+                    // An unreadable event it meets is journalled, and reported by the catch-up after it.
+                    Self::refill_record_origins_on(exclusive.pool()).await.map(|_journalled| ())
                 }
                 .await;
                 exclusive.finish(outcome).await
@@ -376,10 +390,26 @@ macro_rules! postgres_store {
             /// holds: the projection folds only the events after its last, the indexes are keyed by
             /// event or re-derived from the projection. An aggregate that cannot be replayed is logged
             /// and stays journalled, so the workspace still opens and a rebuild can repair it.
-            async fn catch_up_journal(pool: &Pool<Postgres>) -> Result<(), DbError> {
+            ///
+            /// An aggregate holding an unreadable event is folded up to it and stays journalled too,
+            /// so every open reports it until a version that reads it folds the rest (ADR 0051).
+            /// Returns those events. The entry records the event its prefix was replayed up to, so a
+            /// later open that finds the same one dispatches nothing.
+            async fn catch_up_journal(pool: &Pool<Postgres>) -> Result<Vec<crate::raw::UnreadableEvent>, DbError> {
+                let mut unreadable = Vec::new();
                 for write in crate::record_origins::postgres::pending_writes(pool).await? {
-                    match Self::replay_journalled(pool, &write.aggregate_type, &write.aggregate_id).await {
-                        Ok(()) => crate::record_origins::postgres::end_write(pool, write.entry).await?,
+                    let replayed_to = write.replayed_to.and_then(|sequence| usize::try_from(sequence).ok());
+                    match Self::replay_journalled(pool, &write.aggregate_type, &write.aggregate_id, replayed_to).await {
+                        Ok(None) => crate::record_origins::postgres::end_write(pool, write.entry).await?,
+                        Ok(Some(event)) => {
+                            tracing::warn!(%event, "a journalled aggregate holds an unreadable event; it stays journalled");
+                            if replayed_to != Some(event.sequence) {
+                                let sequence = i64::try_from(event.sequence)
+                                    .map_err(|_| DbError::Backend(format!("sequence {} does not fit the journal", event.sequence)))?;
+                                crate::record_origins::postgres::mark_replayed(pool, write.entry, sequence).await?;
+                            }
+                            unreadable.push(event);
+                        }
                         Err(error) => tracing::error!(
                             aggregate_type = write.aggregate_type,
                             aggregate_id = write.aggregate_id,
@@ -388,29 +418,41 @@ macro_rules! postgres_store {
                         ),
                     }
                 }
-                Ok(())
+                unreadable.sort();
+                unreadable.dedup();
+                Ok(unreadable)
             }
 
-            /// Replays one journalled aggregate's log through its queries.
-            async fn replay_journalled(pool: &Pool<Postgres>, aggregate_type: &str, aggregate_id: &str) -> Result<(), DbError> {
+            /// Replays one journalled aggregate's log through its queries — unless `replayed_to` says an
+            /// earlier open already did, up to the same unreadable event — returning the unreadable
+            /// event that stops it, if any.
+            async fn replay_journalled(
+                pool: &Pool<Postgres>,
+                aggregate_type: &str,
+                aggregate_id: &str,
+                replayed_to: Option<usize>,
+            ) -> Result<Option<crate::raw::UnreadableEvent>, DbError> {
                 $(
                     if aggregate_type == <$State as Aggregate>::TYPE {
                         let log = crate::projection::EventLog::new(PostgresEventRepository::new(pool.clone()), || $upcasters);
                         let queries = crate::projection::QueryChain(postgres_queries!($snake, pool, $State, $View, $table_const, $upcasters));
-                        return crate::projection::replay_aggregate(&log, &queries, aggregate_id).await;
+                        let context = format!("replaying {aggregate_type} {aggregate_id}");
+                        return crate::projection::catch_up(&log, &queries, aggregate_id, replayed_to, &context).await;
                     }
                 )+
                 Err(DbError::Backend(format!("the write journal names an unknown aggregate type {aggregate_type}")))
             }
 
             /// Clears the record origins index, replays every aggregate's log into it, and marks it
-            /// complete.
-            async fn refill_record_origins_on(pool: &Pool<Postgres>, replay_buffer: usize) -> Result<(), DbError> {
+            /// complete. Returns the unreadable events it met, journalled (ADR 0051).
+            async fn refill_record_origins_on(pool: &Pool<Postgres>) -> Result<Vec<crate::raw::UnreadableEvent>, DbError> {
                 crate::record_origins::postgres::clear_table(pool).await?;
+                let mut unreadable = Vec::new();
                 $(
-                    replay_record_origins::<$State>(pool, $table_const, $upcasters, replay_buffer).await?;
+                    unreadable.extend(replay_record_origins::<$State>(pool, $table_const, || $upcasters).await?);
                 )+
-                crate::record_origins::postgres::mark_complete(pool).await
+                crate::record_origins::postgres::mark_complete(pool).await?;
+                Ok(unreadable)
             }
         }
     };
@@ -503,7 +545,8 @@ impl PostgresStore {
         let outcome = async {
             postgres_query::discard_all_events(exclusive.pool()).await?;
             let inserted = postgres_query::insert_raw_events(exclusive.pool(), rows).await?;
-            Self::rebuild_projections_on(exclusive.pool(), crate::exclusive::EXCLUSIVE_REPLAY_BUFFER).await?;
+            // A restore decodes every row before it gets here (ADR 0041), so no event is unreadable.
+            Self::rebuild_projections_on(exclusive.pool()).await?;
             Ok(inserted)
         }
         .await;
@@ -791,39 +834,36 @@ async fn migrate_postgres_view_tables(pool: &Pool<Postgres>) -> Result<Vec<&'sta
 
 /// Replays aggregate `A`'s full event log through the record origins index (ADR 0037 §4), whose
 /// rows are derived from the events themselves; `view_table` is `A`'s projection, which the index
-/// reads `live` flags from.
+/// reads `live` flags from. Returns the unreadable events it met, journalled (ADR 0051).
 async fn replay_record_origins<A>(
     pool: &Pool<Postgres>,
     view_table: &'static str,
-    upcasters: Vec<Box<dyn EventUpcaster>>,
-    replay_buffer: usize,
-) -> Result<(), DbError>
+    upcasters: crate::projection::Upcasters,
+) -> Result<Vec<crate::raw::UnreadableEvent>, DbError>
 where
     A: Aggregate,
     crate::record_origins::postgres::RecordOriginsQuery: cqrs_es::Query<A>,
 {
     let query = crate::record_origins::postgres::RecordOriginsQuery::new(pool.clone(), view_table);
-    let mut replay = QueryReplay::new(
-        PostgresEventRepository::new(pool.clone()).with_streaming_channel_size(replay_buffer),
-        query,
+    replay_all::<A>(
+        pool,
+        &query,
+        upcasters,
+        &format!("rebuilding record origins from {view_table}"),
     )
-    .with_upcasters(upcasters);
-    replay.use_error_handler(crate::projection_failures::handler(view_table));
-    let context = format!("rebuilding record origins from {view_table}");
-    crate::projection_failures::watch_replay(replay.replay_all(), &context).await
+    .await
 }
 
 /// Clears one view table and replays its aggregate's full event log back into it (ADR 0010, 0050).
+/// Returns the unreadable events it met, journalled (ADR 0051).
 ///
 /// `upcasters` migrate historical payloads during the replay; pass an empty vec for aggregates
-/// whose schema has not evolved. `stream_all_events::<A>()` binds the aggregate type, so each
-/// replay sees only its own events.
+/// whose schema has not evolved.
 async fn rebuild_view<A, V>(
     pool: &Pool<Postgres>,
     table: &'static str,
     upcasters: crate::projection::Upcasters,
-    replay_buffer: usize,
-) -> Result<(), DbError>
+) -> Result<Vec<crate::raw::UnreadableEvent>, DbError>
 where
     A: Aggregate,
     V: View<A>,
@@ -831,13 +871,25 @@ where
     schema::clear_postgres_view_table(pool, table)
         .await
         .map_err(|e| DbError::Backend(format!("clearing projection {table}: {e}")))?;
-    let mut replay = QueryReplay::new(
-        PostgresEventRepository::new(pool.clone()).with_streaming_channel_size(replay_buffer),
-        projection_query::<V, A>(pool, table, upcasters),
-    )
-    .with_upcasters(upcasters());
-    replay.use_error_handler(crate::projection_failures::handler(table));
-    crate::projection_failures::watch_replay(replay.replay_all(), &format!("rebuilding projection {table}")).await
+    let query = projection_query::<V, A>(pool, table, upcasters);
+    replay_all::<A>(pool, &query, upcasters, &format!("rebuilding projection {table}")).await
+}
+
+/// Replays every aggregate `A` instance's log through `query`, journalling each one holding an
+/// unreadable event so every open replays it until it reads (ADR 0051), and returns those events.
+async fn replay_all<A: Aggregate>(
+    pool: &Pool<Postgres>,
+    query: &impl Query<A>,
+    upcasters: crate::projection::Upcasters,
+    context: &str,
+) -> Result<Vec<crate::raw::UnreadableEvent>, DbError> {
+    let aggregate_ids = postgres_query::aggregate_ids(pool, A::TYPE).await?;
+    let log = crate::projection::EventLog::new(PostgresEventRepository::new(pool.clone()), upcasters);
+    let unreadable = crate::projection::replay(&log, query, &aggregate_ids, context).await?;
+    for event in &unreadable {
+        crate::record_origins::postgres::journal_once(pool, &event.aggregate_type, &event.aggregate_id).await?;
+    }
+    Ok(unreadable)
 }
 
 /// The query writing aggregate `A`'s projection into `table` (ADR 0050), its failures reported

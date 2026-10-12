@@ -126,7 +126,7 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
   display: grid;
   /* The work-area row is `minmax(0, 1fr)` (not `1fr`) for the same reason as `.app`: the `0` floor
      lets it shrink below content so the work area scrolls internally rather than growing the shell. */
-  grid-template-rows: var(--topbar-h) auto minmax(0, 1fr) var(--statusbar-h);
+  grid-template-rows: var(--topbar-h) auto auto minmax(0, 1fr) var(--statusbar-h);
   /* Bound the single column to the shell width (an implicit `auto` column would grow to its widest
      child — the tabstrip or a wide table — and overflow the window horizontally). */
   grid-template-columns: minmax(0, 1fr);
@@ -134,12 +134,23 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
   min-width: 0;
 }
 /* Pin each region to its row so an empty tabstrip (the dashboard has no open
-   records) cannot let the remaining children auto-place into the wrong tracks
-   and float the status bar off the bottom. */
+   records) or an absent banner cannot let the remaining children auto-place into
+   the wrong tracks and float the status bar off the bottom. */
 .shell > .topbar { grid-row: 1; }
-.shell > .tabstrip { grid-row: 2; }
-.shell > .workarea { grid-row: 3; }
-.shell > .statusbar { grid-row: 4; }
+.shell > .shell-banner { grid-row: 2; }
+.shell > .tabstrip { grid-row: 3; }
+.shell > .workarea { grid-row: 4; }
+.shell > .statusbar { grid-row: 5; }
+
+/* ---- Shell banner: a persistent workspace warning under the top bar (ADR 0051) ---- */
+.shell-banner {
+  display: flex; align-items: baseline; gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-4);
+  border-bottom: 1px solid var(--warn);
+  background: color-mix(in srgb, var(--warn) 8%, transparent);
+  font-size: var(--fs-sm);
+}
+.shell-banner-icon { color: var(--warn); flex: none; }
 
 /* ---- Topbar: breadcrumb + search + actions ---- */
 .topbar {

@@ -1,5 +1,5 @@
-//! The application shell (ADR 0008 §5): the navigation rail, top bar, record tabstrip, work area,
-//! status bar, and the keyboard layer (central dispatcher, `g`-prefix nav, `⌘K` palette, `?` help).
+//! The application shell (ADR 0008 §5): the navigation rail, top bar, banner, record tabstrip, work
+//! area, status bar, and the keyboard layer (central dispatcher, `g`-prefix nav, `⌘K` palette, `?` help).
 //!
 //! Shell regions share one [`NavState`](nav_state::NavState) via context and read localized chrome
 //! through [`ChromeCtx`] (provided by the root [`App`](crate::app::App), or by tests directly), so
@@ -10,11 +10,13 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use dioxus::prelude::{ReadableExt, Resource, Signal, try_consume_context};
-use vitni_app::{ShortcutConfig, WorkspaceCounts};
+use vitni_app::ShortcutConfig;
 use vitni_ui::Localizer;
 
 use crate::i18n::Chrome;
+use crate::services::ShellStatus;
 
+pub mod banner;
 pub mod close_confirm;
 pub mod explorer;
 pub mod focus_trap;
@@ -59,11 +61,11 @@ pub fn data_loc() -> Rc<Localizer> {
     }
 }
 
-/// The workspace per-aggregate counts, provided as context for the rail count badges. The resource
+/// The workspace's [`ShellStatus`], provided as context for the rail count badges. The resource
 /// refetches when [`NavState::data_version`](nav_state::NavState::data_version) bumps; the outer
-/// `None` is "still loading", the inner `None` is "could not load" (no badges shown).
+/// `None` is "still loading", the inner `None` is "could not open" (no badges shown).
 #[derive(Clone, Copy)]
-pub struct CountsCtx(pub Resource<Option<WorkspaceCounts>>);
+pub struct ShellStatusCtx(pub Resource<Option<ShellStatus>>);
 
 /// The resolution state of a record link's current name.
 #[derive(Clone, PartialEq, Eq)]

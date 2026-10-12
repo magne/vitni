@@ -53,6 +53,7 @@ mod research_note;
 mod similar;
 mod source;
 mod tag;
+mod workspace;
 
 /// The embedded baseline catalogue (compiled into the binary; complete fallback language).
 #[derive(RustEmbed)]

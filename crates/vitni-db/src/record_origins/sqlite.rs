@@ -46,7 +46,8 @@ const CREATE_RECORD_ORIGINS_PENDING_TABLE: &str = "
 CREATE TABLE IF NOT EXISTS record_origins_pending (
     id             INTEGER PRIMARY KEY,
     aggregate_type TEXT    NOT NULL,
-    aggregate_id   TEXT    NOT NULL
+    aggregate_id   TEXT    NOT NULL,
+    replayed_to    INTEGER
 )";
 
 const CREATE_RECORD_ORIGINS_STATE_TABLE: &str = "
@@ -64,6 +65,18 @@ CREATE TABLE IF NOT EXISTS record_origins_state (
 pub(crate) async fn create_tables(pool: &Pool<Sqlite>) -> Result<bool, sqlx::Error> {
     sqlx::query(CREATE_RECORD_ORIGINS_STATE_TABLE).execute(pool).await?;
     sqlx::query(CREATE_RECORD_ORIGINS_PENDING_TABLE).execute(pool).await?;
+    // A journal from before it recorded how far an unreadable aggregate was replayed (ADR 0051).
+    let replayed = sqlx::query("SELECT 1 FROM pragma_table_info('record_origins_pending') WHERE name = 'replayed_to'")
+        .fetch_optional(pool)
+        .await?
+        .is_some();
+    if !replayed {
+        sqlx::query(&format!(
+            "ALTER TABLE {RECORD_ORIGINS_PENDING_TABLE} ADD COLUMN replayed_to INTEGER"
+        ))
+        .execute(pool)
+        .await?;
+    }
     sqlx::query(CREATE_RECORD_ORIGINS_TABLE).execute(pool).await?;
     let keyed = sqlx::query("SELECT 1 FROM pragma_table_info('record_origins') WHERE name = 'event_key'")
         .fetch_optional(pool)
@@ -156,6 +169,43 @@ pub(crate) async fn begin_write(pool: &Pool<Sqlite>, aggregate_type: &str, aggre
     .map_err(|e| DbError::Backend(format!("journalling a write to {aggregate_type} {aggregate_id}: {e}")))
 }
 
+/// Journals the aggregate unless an entry already names it: one whose log holds an unreadable event,
+/// so every open replays it until it reads (ADR 0051).
+///
+/// # Errors
+///
+/// A [`DbError`] if the statement fails.
+pub(crate) async fn journal_once(pool: &Pool<Sqlite>, aggregate_type: &str, aggregate_id: &str) -> Result<(), DbError> {
+    sqlx::query(&format!(
+        "INSERT INTO {RECORD_ORIGINS_PENDING_TABLE} (aggregate_type, aggregate_id) SELECT ?1, ?2 \
+         WHERE NOT EXISTS (SELECT 1 FROM {RECORD_ORIGINS_PENDING_TABLE} WHERE aggregate_type = ?1 AND aggregate_id = ?2)"
+    ))
+    .bind(aggregate_type)
+    .bind(aggregate_id)
+    .execute(pool)
+    .await
+    .map_err(|e| DbError::Backend(format!("journalling {aggregate_type} {aggregate_id}: {e}")))?;
+    Ok(())
+}
+
+/// Records that journal `entry`'s aggregate was replayed through every query up to its unreadable
+/// event at `sequence` (ADR 0051).
+///
+/// # Errors
+///
+/// A [`DbError`] if the statement fails.
+pub(crate) async fn mark_replayed(pool: &Pool<Sqlite>, entry: i64, sequence: i64) -> Result<(), DbError> {
+    sqlx::query(&format!(
+        "UPDATE {RECORD_ORIGINS_PENDING_TABLE} SET replayed_to = ? WHERE id = ?"
+    ))
+    .bind(sequence)
+    .bind(entry)
+    .execute(pool)
+    .await
+    .map_err(|e| DbError::Backend(format!("recording a journalled replay: {e}")))?;
+    Ok(())
+}
+
 /// Withdraws a [`begin_write`] entry once its command's events are committed and every query has run.
 ///
 /// # Errors
@@ -177,7 +227,7 @@ pub(crate) async fn end_write(pool: &Pool<Sqlite>, entry: i64) -> Result<(), DbE
 /// A [`DbError`] if the query fails.
 pub(crate) async fn pending_writes(pool: &Pool<Sqlite>) -> Result<Vec<PendingWrite>, DbError> {
     let rows = sqlx::query(&format!(
-        "SELECT id, aggregate_type, aggregate_id FROM {RECORD_ORIGINS_PENDING_TABLE} ORDER BY id"
+        "SELECT id, aggregate_type, aggregate_id, replayed_to FROM {RECORD_ORIGINS_PENDING_TABLE} ORDER BY id"
     ))
     .fetch_all(pool)
     .await
@@ -188,6 +238,7 @@ pub(crate) async fn pending_writes(pool: &Pool<Sqlite>) -> Result<Vec<PendingWri
             entry: row.get("id"),
             aggregate_type: row.get("aggregate_type"),
             aggregate_id: row.get("aggregate_id"),
+            replayed_to: row.get("replayed_to"),
         });
     }
     Ok(writes)

@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use unic_langid::LanguageIdentifier;
 use uuid::Uuid;
 use vitni_core::id_format::IdFormat;
-use vitni_db::Store;
+use vitni_db::{Store, UnreadableEvent};
 
 use crate::aggregates::for_each_human_id_aggregate;
 use crate::config::{
@@ -895,13 +895,21 @@ impl Workspace {
         self.dir.join("media")
     }
 
+    /// The events this workspace holds that this version cannot read, as found when it was opened
+    /// (ADR 0051). Each one's record shows the events before it; a frontend warns while any remain.
+    #[must_use]
+    pub fn unreadable_events(&self) -> &[UnreadableEvent] {
+        self.store.unreadable_events()
+    }
+
     /// Rebuilds every projection from the event log (ADR 0010): a maintenance operation backing the
     /// `vitni rebuild` command. Engine-neutral — works for whichever backend this workspace uses.
+    /// Returns the events it could not read, whose records it rebuilt up to them (ADR 0051).
     ///
     /// # Errors
     ///
     /// [`AppError::Db`] if clearing or replaying a projection fails.
-    pub async fn rebuild_projections(&self) -> Result<(), AppError> {
+    pub async fn rebuild_projections(&self) -> Result<Vec<UnreadableEvent>, AppError> {
         self.store.rebuild_projections().await.map_err(AppError::Db)
     }
 }

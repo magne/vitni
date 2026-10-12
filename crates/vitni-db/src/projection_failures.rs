@@ -1,5 +1,6 @@
-//! Collects the errors `cqrs-es` hands a query's error handler instead of returning them (#486): a
-//! failed projection load or write, and an event that fails to read or upcast during a replay.
+//! Collects the errors a query reports instead of returning them (#486): `cqrs-es` dispatches to a
+//! query without a result, so a failed projection load or write is recorded here for the command or
+//! replay that caused it.
 //!
 //! A framework's queries are shared by every command it runs, so a failure is recorded in a slot
 //! local to the task that is awaiting [`watch`] — `cqrs-es` dispatches each query in the caller's
@@ -7,8 +8,6 @@
 
 use std::cell::RefCell;
 use std::future::Future;
-
-use cqrs_es::persist::{PersistenceError, QueryErrorHandler};
 
 use crate::store::DbError;
 
@@ -47,14 +46,8 @@ impl Failures {
     }
 }
 
-/// An error handler for a query or replay over `table`. Inside [`watch`] it records the failure for
-/// the watcher to report; outside one it logs it, so no failure is ever dropped.
-pub(crate) fn handler(table: &'static str) -> Box<QueryErrorHandler> {
-    Box::new(move |error: PersistenceError| report(table, &error))
-}
-
-/// Records that `table` failed to update with `error` — for a derived index whose query reports its own
-/// failures. Inside [`watch`] the watcher reports it; outside one it is logged.
+/// Records that `table` failed to update with `error`. Inside [`watch`] the watcher reports it; outside
+/// one it is logged, so no failure is ever dropped.
 pub(crate) fn report(table: &str, error: &dyn std::fmt::Display) {
     let failure = format!("{table}: {error}");
     let recorded = FAILURES.try_with(|slot| Failures::record(&mut slot.borrow_mut(), failure.clone()));
@@ -63,7 +56,7 @@ pub(crate) fn report(table: &str, error: &dyn std::fmt::Display) {
     }
 }
 
-/// Runs `future`, returning its output and whatever the [`handler`]s it reached recorded.
+/// Runs `future`, returning its output and whatever the [`report`]s it reached recorded.
 pub(crate) async fn watch<F: Future>(future: F) -> (F::Output, Option<Failures>) {
     // On the heap: held inline, a command's future would grow every caller's past the stack.
     let future = Box::pin(future);
@@ -75,25 +68,11 @@ pub(crate) async fn watch<F: Future>(future: F) -> (F::Output, Option<Failures>)
         .await
 }
 
-/// Awaits `replay`, failing it with `context` when it errs or when any event it replayed failed to
-/// read or to update its query.
-pub(crate) async fn watch_replay<E: std::error::Error>(
-    replay: impl Future<Output = Result<(), cqrs_es::AggregateError<E>>>,
-    context: &str,
-) -> Result<(), DbError> {
-    let (result, failures) = watch(replay).await;
-    result.map_err(|e| DbError::Backend(format!("{context}: {e}")))?;
-    failures.map_or(Ok(()), |failures| Err(failures.into_error(context)))
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{handler, watch};
-    use cqrs_es::persist::PersistenceError;
+    use super::{report, watch};
 
-    fn failure() -> PersistenceError {
-        PersistenceError::UnknownError("disk full".into())
-    }
+    const FAILURE: &str = "disk full";
 
     #[tokio::test]
     async fn nothing_recorded_watches_as_none() {
@@ -103,11 +82,10 @@ mod tests {
 
     #[tokio::test]
     async fn the_first_failure_is_kept_and_the_rest_counted() {
-        let handle = handler("person_view");
         let ((), failures) = watch(async {
-            handle(failure());
-            handle(failure());
-            handle(failure());
+            report("person_view", &FAILURE);
+            report("person_view", &FAILURE);
+            report("person_view", &FAILURE);
         })
         .await;
         let error = failures.expect("recorded").into_error("rebuilding");
@@ -119,8 +97,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_single_failure_reads_without_a_count() {
-        let handle = handler("tag_view");
-        let ((), failures) = watch(async { handle(failure()) }).await;
+        let ((), failures) = watch(async { report("tag_view", &FAILURE) }).await;
         let error = failures.expect("recorded").into_error("committing");
         assert_eq!(
             error.to_string(),
@@ -130,9 +107,10 @@ mod tests {
 
     #[tokio::test]
     async fn a_watch_records_only_its_own_task() {
-        let handle = handler("person_view");
         let ((), failures) = watch(async {
-            tokio::spawn(async move { handle(failure()) }).await.expect("joined");
+            tokio::spawn(async { report("person_view", &FAILURE) })
+                .await
+                .expect("joined");
         })
         .await;
         assert_eq!(

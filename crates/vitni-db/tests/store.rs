@@ -439,7 +439,7 @@ async fn a_replace_that_fails_keeps_the_previous_log_and_projections() {
 }
 
 #[tokio::test]
-async fn a_replace_rebuilds_a_log_longer_than_the_replay_read_ahead() {
+async fn a_replace_of_a_long_log_finishes_on_its_one_connection() {
     let (source, _source_dir) = store().await;
     for n in 1..=250_u128 {
         create(&source, n, &format!("I{n:04}")).await;

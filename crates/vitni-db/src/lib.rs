@@ -58,7 +58,7 @@ mod tables;
 pub use match_keys::{DirtyRecord, KeyedRecord};
 #[cfg(any(feature = "sqlite", feature = "postgres"))]
 pub use match_pairs::{MatchPair, PairRefresh, PairScope};
-pub use raw::{ProjectionRow, RawEvent, RawEventKey, decode_raw_event, event_variants};
+pub use raw::{ProjectionRow, RawEvent, RawEventKey, UnreadableEvent, decode_raw_event, event_variants};
 #[cfg(any(feature = "sqlite", feature = "postgres"))]
 pub use record_links::RecordLink;
 #[cfg(any(feature = "sqlite", feature = "postgres"))]

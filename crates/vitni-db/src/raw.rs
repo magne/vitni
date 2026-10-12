@@ -3,10 +3,10 @@
 //!
 //! A [`RawEvent`] is one `events` row exactly as stored, all seven columns, so a restore can insert
 //! it without re-deciding any command. [`decode_raw_event`] proves a row decodes as its aggregate's
-//! event before it is inserted, because a projection rebuild skips an undecodable row silently.
+//! event before it is inserted, because a replay folds no event after an unreadable one (ADR 0051).
 //! [`ProjectionRow`] is one `*_view` row, the unit two stores are compared by.
 
-use cqrs_es::persist::SerializedEvent;
+use cqrs_es::persist::{EventUpcaster, SerializedEvent};
 use cqrs_es::{Aggregate, EventEnvelope};
 
 use crate::registry::for_each_db_aggregate;
@@ -55,6 +55,50 @@ pub struct RawEventKey {
     pub sequence: i64,
 }
 
+/// A stored event that does not decode as its aggregate's event, named by its key (ADR 0051): a
+/// corrupt payload, or one a newer version of vitni wrote.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, thiserror::Error)]
+#[error("{aggregate_type} event {aggregate_id} #{sequence} ({event_type}): {reason}")]
+pub struct UnreadableEvent {
+    /// The aggregate kind (the stored `Aggregate::TYPE`, e.g. `person`).
+    pub aggregate_type: String,
+    /// The aggregate instance id.
+    pub aggregate_id: String,
+    /// The event's position in the aggregate's stream (1-based).
+    pub sequence: usize,
+    /// The stored event variant name.
+    pub event_type: String,
+    /// Why it does not decode, as the decoder reports it.
+    pub reason: String,
+}
+
+/// Upcasts `serialized` with `upcasters` and decodes it as `A`'s event.
+///
+/// # Errors
+///
+/// The [`UnreadableEvent`] naming it when its payload or metadata does not decode.
+pub(crate) fn decode_event<A: Aggregate>(
+    mut serialized: SerializedEvent,
+    upcasters: &[Box<dyn EventUpcaster>],
+) -> Result<EventEnvelope<A>, UnreadableEvent> {
+    let aggregate_type = serialized.aggregate_type.clone();
+    let aggregate_id = serialized.aggregate_id.clone();
+    let sequence = serialized.sequence;
+    let event_type = serialized.event_type.clone();
+    for upcaster in upcasters {
+        if upcaster.can_upcast(&serialized.event_type, &serialized.event_version) {
+            serialized = upcaster.upcast(serialized);
+        }
+    }
+    EventEnvelope::<A>::try_from(serialized).map_err(|error| UnreadableEvent {
+        aggregate_type,
+        aggregate_id,
+        sequence,
+        event_type,
+        reason: error.to_string(),
+    })
+}
+
 /// One projection row: which view table, which instance, the sequence of its last event and payload.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectionRow {
@@ -100,20 +144,14 @@ fn malformed(row: &RawEvent, reason: &str) -> DbError {
     ))
 }
 
-/// Upcasts `serialized` with its aggregate's upcasters and decodes it as that aggregate's event.
+/// Decodes `serialized` as `A`'s event, with `A`'s upcasters.
 fn upcast_and_decode<A: Aggregate>(
-    row: &RawEvent,
-    mut serialized: SerializedEvent,
-    upcasters: &[Box<dyn cqrs_es::persist::EventUpcaster>],
+    serialized: SerializedEvent,
+    upcasters: &[Box<dyn EventUpcaster>],
 ) -> Result<(), DbError> {
-    for upcaster in upcasters {
-        if upcaster.can_upcast(&serialized.event_type, &serialized.event_version) {
-            serialized = upcaster.upcast(serialized);
-        }
-    }
-    EventEnvelope::<A>::try_from(serialized)
+    decode_event::<A>(serialized, upcasters)
         .map(|_| ())
-        .map_err(|error| malformed(row, &error.to_string()))
+        .map_err(|unreadable| DbError::Malformed(unreadable.to_string()))
 }
 
 /// Generates [`decode_serialized`] and [`event_variants`] from the registry: the `snake` column is
@@ -123,7 +161,7 @@ macro_rules! raw_event_registry {
         /// Dispatches `serialized` to its aggregate's decoder by `aggregate_type`.
         fn decode_serialized(row: &RawEvent, serialized: SerializedEvent) -> Result<(), DbError> {
             match row.aggregate_type.as_str() {
-                $(stringify!($snake) => upcast_and_decode::<$State>(row, serialized, &$upcasters),)+
+                $(stringify!($snake) => upcast_and_decode::<$State>(serialized, &$upcasters),)+
                 _ => Err(malformed(row, "the aggregate type is not one of the 14 aggregates")),
             }
         }

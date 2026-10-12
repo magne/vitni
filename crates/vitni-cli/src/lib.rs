@@ -29,7 +29,8 @@ use std::process::ExitCode;
 use clap::{Parser, Subcommand};
 use vitni_app::config;
 use vitni_app::{
-    AppError, Config, ConfigStore, DatasetChoice, FileConfigStore, Session, Workspace, read_resolved_locale,
+    AppError, Config, ConfigStore, DatasetChoice, FileConfigStore, Session, UnreadableEvent, Workspace,
+    read_resolved_locale,
 };
 
 use crate::commands::backup::BackupCmd;
@@ -340,25 +341,41 @@ async fn run_command(cli: Cli) -> ExitCode {
         localizer,
     } = context;
     let result = match cli.command {
+        // A rebuild reads every event, so it warns about what it found rather than what the open did.
         Command::Rebuild => rebuild(&workspace, &localizer).await,
-        Command::Backup { command } => {
-            return commands::backup::run_on_open(command, &workspace, &session, &name, &localizer).await;
+        command => {
+            warn_unreadable(&localizer, workspace.unreadable_events());
+            match command {
+                Command::Backup { command } => {
+                    return commands::backup::run_on_open(command, &workspace, &session, &name, &localizer).await;
+                }
+                // The plugin-host future is large (Wasmtime store + workspace); box it so the top-level
+                // command future stays small.
+                Command::Export { plugin, output } => {
+                    Box::pin(commands::io::export(workspace, &dir, &localizer, &plugin, output)).await
+                }
+                other => dispatch(other, &workspace, &session, &localizer).await,
+            }
         }
-        // The plugin-host future is large (Wasmtime store + workspace); box it so the top-level
-        // command future stays small.
-        Command::Export { plugin, output } => {
-            Box::pin(commands::io::export(workspace, &dir, &localizer, &plugin, output)).await
-        }
-        other => dispatch(other, &workspace, &session, &localizer).await,
     };
     report(&localizer, result)
 }
 
-/// Rebuilds every projection from the open workspace's event log and reports success (ADR 0010).
+/// Rebuilds every projection from the open workspace's event log and reports success (ADR 0010),
+/// warning about any event it could not read (ADR 0051).
 async fn rebuild(workspace: &Workspace, localizer: &Localizer) -> Result<(), AppError> {
-    workspace.rebuild_projections().await?;
+    let unreadable = workspace.rebuild_projections().await?;
+    warn_unreadable(localizer, &unreadable);
     println!("{}", localizer.rebuild_success());
     Ok(())
+}
+
+/// Warns on stderr that the workspace holds events this version cannot read, naming each (ADR 0051);
+/// prints nothing when it holds none. The command still runs: their records show what came before.
+fn warn_unreadable(localizer: &Localizer, events: &[UnreadableEvent]) {
+    if !events.is_empty() {
+        eprintln!("{}", localizer.unreadable_events(events));
+    }
 }
 
 /// Resolves and opens the workspace, returning the [`Context`] every non-`init` command needs.
@@ -544,6 +561,7 @@ async fn prepare_import_target(new: Option<Vec<String>>, into: Option<String>) -
     let localizer = Localizer::for_workspace(&dir, config_ui_language.as_ref());
     let workspace = Workspace::open(&dir, &config.operator, &config.workspace_defaults).await?;
     let localizer = localizer.with_surety_overrides(workspace.surety_labels().clone());
+    warn_unreadable(&localizer, workspace.unreadable_events());
     Ok(ImportTarget {
         workspace,
         localizer,
