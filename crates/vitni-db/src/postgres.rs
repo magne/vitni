@@ -6,12 +6,11 @@
 //! SQLite backend. Everything here (`sqlx`, `postgres-es`, `cqrs-es`) is an implementation detail;
 //! only [`crate::store`] re-exposes it, in engine-neutral terms.
 
-use std::sync::Arc;
 use std::time::Duration;
 
-use cqrs_es::persist::{EventUpcaster, GenericQuery, PersistedEventStore, QueryReplay};
-use cqrs_es::{Aggregate, AggregateContext as _, CqrsFramework, EventStore as _, View};
-use postgres_es::{PostgresEventRepository, PostgresViewRepository, postgres_cqrs};
+use cqrs_es::persist::{EventUpcaster, PersistedEventStore, QueryReplay};
+use cqrs_es::{Aggregate, AggregateContext as _, CqrsFramework, EventStore as _, Query, View};
+use postgres_es::{PostgresEventRepository, postgres_cqrs};
 use sqlx::postgres::PgPoolOptions;
 use sqlx::{Pool, Postgres};
 
@@ -38,115 +37,126 @@ const MAX_CONNECTIONS: u32 = 10;
 /// short so a misconfigured `database_url` fails fast rather than hanging on the 30 s pool default.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 
-/// Builds one aggregate's `CqrsFramework` in `open()`, matching the registry `wiring` column: a
-/// plain unit `Services`, a projection-reading resolver (the §9 aggregate tax), or the
-/// hand-assembled Event store that carries upcasters at load (ADR 0010).
+/// Builds one aggregate's `CqrsFramework` in `open()` over its `$queries`, matching the registry
+/// `wiring` column: a plain unit `Services`, a projection-reading resolver (the §9 aggregate tax), or
+/// the hand-assembled Event store that carries upcasters at load (ADR 0010).
 macro_rules! postgres_open_cqrs {
-    ($pool:ident, $query:ident, (plain)) => {
-        postgres_cqrs($pool.clone(), vec![Box::new($query)], ())
+    ($pool:ident, $queries:expr, (plain)) => {
+        postgres_cqrs($pool.clone(), $queries, ())
     };
-    ($pool:ident, $query:ident, (resolver $resolver:path)) => {
+    ($pool:ident, $queries:expr, (resolver $resolver:path)) => {
         postgres_cqrs(
             $pool.clone(),
-            vec![Box::new($query)],
+            $queries,
             <$resolver>::new(PostgresRefStore::shared($pool.clone())),
         )
     };
-    ($pool:ident, $query:ident, (event $resolver:path)) => {{
+    ($pool:ident, $queries:expr, (event $resolver:path)) => {{
         let store = PersistedEventStore::new_event_store(PostgresEventRepository::new($pool.clone()))
             .with_upcasters(vitni_core::event::upcasters());
         CqrsFramework::new(
             store,
-            vec![Box::new($query)],
+            $queries,
             <$resolver>::new(PostgresRefStore::shared($pool.clone())),
         )
     }};
 }
 
-/// Appends the derived side indexes to the one framework each is fed by: the identity cluster index
-/// (ADR 0039 §4) to every matchable kind but `tag`, and the succession index (ADR 0026 §4) to `place`,
-/// leaving every other aggregate's framework untouched. Dispatches on the registry's literal `$snake`
-/// token — the same "wiring by tag" shape as [`postgres_open_cqrs!`] — rather than naming the aggregate
-/// after the per-aggregate repetition, which a plain `let` can't see across macro hygiene.
+/// Every query one aggregate's commits dispatch to, in order — the twin of the SQLite backend's
+/// `sqlite_queries!`.
+macro_rules! postgres_queries {
+    ($snake:ident, $pool:expr, $State:ty, $View:ty, $table_const:ident, $upcasters:expr) => {{
+        let mut queries: Vec<Box<dyn Query<$State>>> =
+            vec![Box::new(projection_query::<$View, $State>($pool, $table_const, || {
+                $upcasters
+            }))];
+        postgres_side_indexes!($snake, $pool, queries);
+        queries.push(Box::new(crate::record_origins::postgres::RecordOriginsQuery::new(
+            $pool.clone(),
+            $table_const,
+        )));
+        queries.push(Box::new(crate::match_keys::postgres::MatchDirtyQuery::new(
+            $pool.clone(),
+        )));
+        queries
+    }};
+}
+
+/// Pushes the derived side indexes onto the queries of the one aggregate each is fed by: the identity
+/// cluster index (ADR 0039 §4) for every matchable kind but `tag`, the record links index (ADR 0047)
+/// for the linking kinds, and the succession index (ADR 0026 §4) for `place`. Dispatches on the
+/// registry's literal `$snake` token — the same "wiring by tag" shape as [`postgres_open_cqrs!`].
 ///
-/// The SQLite twin also appends a geometry index; that one is `geo-types`/`geozero`-backed and
+/// The SQLite twin also pushes a geometry index; that one is `geo-types`/`geozero`-backed and
 /// sqlite-only, so the Postgres mirror is a separate follow-up (ADR 0024 §3).
-macro_rules! postgres_wire_side_indexes {
-    (person, $pool:expr, $framework:expr) => {
-        $framework
-            .append_query(Box::new(crate::identity_links::postgres::IdentityLinksQuery::<
-                vitni_core::person::PersonView,
-            >::new($pool.clone())))
-            .append_query(Box::new(crate::record_links::postgres::RecordLinksQuery::<
-                vitni_core::person::PersonView,
-            >::new($pool.clone())))
+macro_rules! postgres_side_indexes {
+    (person, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::identity_links::postgres::IdentityLinksQuery::<
+            vitni_core::person::PersonView,
+        >::new($pool.clone())));
+        $queries.push(Box::new(crate::record_links::postgres::RecordLinksQuery::<
+            vitni_core::person::PersonView,
+        >::new($pool.clone())));
     };
-    (event, $pool:expr, $framework:expr) => {
-        $framework
-            .append_query(Box::new(crate::identity_links::postgres::IdentityLinksQuery::<
-                vitni_core::event::EventView,
-            >::new($pool.clone())))
-            .append_query(Box::new(crate::record_links::postgres::RecordLinksQuery::<
-                vitni_core::event::EventView,
-            >::new($pool.clone())))
+    (event, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::identity_links::postgres::IdentityLinksQuery::<
+            vitni_core::event::EventView,
+        >::new($pool.clone())));
+        $queries.push(Box::new(crate::record_links::postgres::RecordLinksQuery::<
+            vitni_core::event::EventView,
+        >::new($pool.clone())));
     };
-    (family, $pool:expr, $framework:expr) => {
-        $framework
-            .append_query(Box::new(crate::identity_links::postgres::IdentityLinksQuery::<
-                vitni_core::family::FamilyView,
-            >::new($pool.clone())))
-            .append_query(Box::new(crate::record_links::postgres::RecordLinksQuery::<
-                vitni_core::family::FamilyView,
-            >::new($pool.clone())))
+    (family, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::identity_links::postgres::IdentityLinksQuery::<
+            vitni_core::family::FamilyView,
+        >::new($pool.clone())));
+        $queries.push(Box::new(crate::record_links::postgres::RecordLinksQuery::<
+            vitni_core::family::FamilyView,
+        >::new($pool.clone())));
     };
-    (place, $pool:expr, $framework:expr) => {
-        $framework
-            .append_query(Box::new(
-                place_succession_index::postgres::PlaceSuccessionIndexQuery::new($pool.clone()),
-            ))
-            .append_query(Box::new(crate::identity_links::postgres::IdentityLinksQuery::<
-                vitni_core::place::PlaceView,
-            >::new($pool.clone())))
-            .append_query(Box::new(crate::record_links::postgres::RecordLinksQuery::<
-                vitni_core::place::PlaceView,
-            >::new($pool.clone())))
+    (place, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(
+            place_succession_index::postgres::PlaceSuccessionIndexQuery::new($pool.clone()),
+        ));
+        $queries.push(Box::new(crate::identity_links::postgres::IdentityLinksQuery::<
+            vitni_core::place::PlaceView,
+        >::new($pool.clone())));
+        $queries.push(Box::new(crate::record_links::postgres::RecordLinksQuery::<
+            vitni_core::place::PlaceView,
+        >::new($pool.clone())));
     };
-    (source, $pool:expr, $framework:expr) => {
-        $framework
-            .append_query(Box::new(crate::identity_links::postgres::IdentityLinksQuery::<
-                vitni_core::source::SourceView,
-            >::new($pool.clone())))
-            .append_query(Box::new(crate::record_links::postgres::RecordLinksQuery::<
-                vitni_core::source::SourceView,
-            >::new($pool.clone())))
+    (source, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::identity_links::postgres::IdentityLinksQuery::<
+            vitni_core::source::SourceView,
+        >::new($pool.clone())));
+        $queries.push(Box::new(crate::record_links::postgres::RecordLinksQuery::<
+            vitni_core::source::SourceView,
+        >::new($pool.clone())));
     };
-    (citation, $pool:expr, $framework:expr) => {
-        $framework
-            .append_query(Box::new(crate::identity_links::postgres::IdentityLinksQuery::<
-                vitni_core::citation::CitationView,
-            >::new($pool.clone())))
-            .append_query(Box::new(crate::record_links::postgres::RecordLinksQuery::<
-                vitni_core::citation::CitationView,
-            >::new($pool.clone())))
+    (citation, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::identity_links::postgres::IdentityLinksQuery::<
+            vitni_core::citation::CitationView,
+        >::new($pool.clone())));
+        $queries.push(Box::new(crate::record_links::postgres::RecordLinksQuery::<
+            vitni_core::citation::CitationView,
+        >::new($pool.clone())));
     };
-    (repository, $pool:expr, $framework:expr) => {
-        $framework.append_query(Box::new(crate::identity_links::postgres::IdentityLinksQuery::<
+    (repository, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::identity_links::postgres::IdentityLinksQuery::<
             vitni_core::repository::RepositoryView,
-        >::new($pool.clone())))
+        >::new($pool.clone())));
     };
-    (note, $pool:expr, $framework:expr) => {
-        $framework.append_query(Box::new(crate::identity_links::postgres::IdentityLinksQuery::<
+    (note, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::identity_links::postgres::IdentityLinksQuery::<
             vitni_core::note::NoteView,
-        >::new($pool.clone())))
+        >::new($pool.clone())));
     };
-    (media, $pool:expr, $framework:expr) => {
-        $framework.append_query(Box::new(crate::identity_links::postgres::IdentityLinksQuery::<
+    (media, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::identity_links::postgres::IdentityLinksQuery::<
             vitni_core::media::MediaView,
-        >::new($pool.clone())))
+        >::new($pool.clone())));
     };
-    ($other:ident, $pool:expr, $framework:expr) => {
-        $framework
-    };
+    ($other:ident, $pool:expr, $queries:ident) => {};
 }
 
 /// The `Services` an aggregate's `handle` needs outside its framework, matching the registry
@@ -202,11 +212,11 @@ macro_rules! postgres_store {
                 schema::init_postgres(&pool)
                     .await
                     .map_err(|e| DbError::Backend(format!("initializing event store: {e}")))?;
-                // Drops and recreates any view table left over from before the `human_id` column
-                // existed (ADR 0032), creates every table fresh, and indexes the human-id-bearing
-                // ones; returns which tables were dropped, so their aggregate's event log can be
-                // replayed to repopulate them below (rebuilding needs the aggregate's `State`/`View`
-                // types, which this untyped helper does not have).
+                // Drops and recreates any view table left over from before the `human_id` (ADR 0032)
+                // or `sequence` (ADR 0050) column existed, creates every table fresh, and indexes the
+                // human-id-bearing ones; returns which tables were dropped, so their aggregate's event log
+                // can be replayed to repopulate them below (rebuilding needs the aggregate's
+                // `State`/`View` types, which this untyped helper does not have).
                 let stale_tables = migrate_postgres_view_tables(&pool).await?;
                 // The Place succession cross-reference index (ADR 0026 §4) is not one of the generic
                 // per-aggregate projections: it is derived from the Place projection and keyed by its
@@ -236,23 +246,19 @@ macro_rules! postgres_store {
                     .await
                     .map_err(|e| DbError::Backend(format!("creating record origins index: {e}")))?;
                 $(
-                    let query = projection_query::<$View, $State>(&pool, $table_const);
-                    let $snake = postgres_open_cqrs!(pool, query, $wiring);
-                    let $snake = postgres_wire_side_indexes!($snake, pool, $snake).append_query(Box::new(
-                        crate::record_origins::postgres::RecordOriginsQuery::new(pool.clone(), $table_const),
-                    )).append_query(Box::new(crate::match_keys::postgres::MatchDirtyQuery::new(pool.clone())));
+                    let $snake = postgres_open_cqrs!(pool, postgres_queries!($snake, &pool, $State, $View, $table_const, $upcasters), $wiring);
                     if stale_tables.contains(&$table_const) {
                         tracing::info!(
                             table = $table_const,
-                            "projection table predated the human_id column; rebuilding from the event log"
+                            "projection table predated the human_id or sequence column; rebuilding from the event log"
                         );
-                        rebuild_view::<$State, $View>(&pool, $table_const, $upcasters, crate::exclusive::SHARED_REPLAY_BUFFER).await?;
+                        rebuild_view::<$State, $View>(&pool, $table_const, || $upcasters, crate::exclusive::SHARED_REPLAY_BUFFER).await?;
                     }
                 )+
                 if origins_need_backfill {
                     Self::backfill_record_origins(&pool).await?;
                 }
-                Self::catch_up_record_origins(&pool).await?;
+                Self::catch_up_journal(&pool).await?;
                 if identity_is_new {
                     crate::identity_links::postgres::rebuild_index(&pool).await?;
                 }
@@ -269,22 +275,22 @@ macro_rules! postgres_store {
                     aggregate_id: &str,
                     command: $Cmd,
                 ) -> Result<(), CommandError<$Err>> {
-                    // Journalled until its index rows are written: the events commit first, so a
-                    // process killed in between leaves the entry for the next open to index again.
+                    // Journalled until every query has run: the events commit first, so a process
+                    // killed in between leaves the entry for the next open to replay (ADR 0050).
                     let entry = crate::record_origins::postgres::begin_write(&self.pool, <$State as Aggregate>::TYPE, aggregate_id)
                         .await
                         .map_err(CommandError::Store)?;
                     let (result, failures) = crate::projection_failures::watch(self.$snake.execute(aggregate_id, command)).await;
-                    let result = match (result.map_err(map_aggregate_error), failures) {
-                        (Ok(()), Some(failures)) => Err(CommandError::Store(failures.into_error(
-                            "the events were committed, but their projection failed to update (a rebuild repairs it)",
-                        ))),
-                        (result, _) => result,
-                    };
-                    if let Err(error) = crate::record_origins::postgres::end_write(&self.pool, entry).await {
-                        tracing::warn!(%error, aggregate_id, "a write stays journalled; the next open indexes it again");
+                    if let (Ok(()), Some(failures)) = (&result, failures) {
+                        // Left journalled, so the next open replays the aggregate into what failed.
+                        return Err(CommandError::Store(failures.into_error(
+                            "the events were committed, but their projection failed to update (reopening the workspace repairs it)",
+                        )));
                     }
-                    result
+                    if let Err(error) = crate::record_origins::postgres::end_write(&self.pool, entry).await {
+                        tracing::warn!(%error, aggregate_id, "a write stays journalled; the next open replays it again");
+                    }
+                    result.map_err(map_aggregate_error)
                 }
 
                 pub(crate) async fn $find(&self, $find_param: &str) -> Result<Option<$View>, DbError> {
@@ -318,8 +324,8 @@ macro_rules! postgres_store {
 
             /// Rebuilds every projection from the event log (ADR 0010): each view table is cleared,
             /// then its aggregate's full history is replayed back into it through the same
-            /// `GenericQuery` the live store uses, with the Event aggregate's upcasters applied. A
-            /// maintenance operation — the caller must ensure no commands run concurrently.
+            /// projection query the live store uses (ADR 0050), with the Event aggregate's upcasters
+            /// applied. A maintenance operation — the caller must ensure no commands run concurrently.
             pub(crate) async fn rebuild_projections(&self) -> Result<(), DbError> {
                 Self::rebuild_projections_on(&self.pool, crate::exclusive::SHARED_REPLAY_BUFFER).await
             }
@@ -328,7 +334,7 @@ macro_rules! postgres_store {
             /// its exclusive transaction.
             async fn rebuild_projections_on(pool: &Pool<Postgres>, replay_buffer: usize) -> Result<(), DbError> {
                 $(
-                    rebuild_view::<$State, $View>(pool, $table_const, $upcasters, replay_buffer).await?;
+                    rebuild_view::<$State, $View>(pool, $table_const, || $upcasters, replay_buffer).await?;
                 )+
                 // Place's succession cross-reference index (ADR 0026 §4) is derived from the (now
                 // freshly rebuilt) Place projection above, not replayed from raw events itself.
@@ -364,22 +370,37 @@ macro_rules! postgres_store {
                 exclusive.finish(outcome).await
             }
 
-            /// Indexes again every aggregate a command left journalled — one whose process was killed
-            /// after its events committed and before their index rows were written. Rows are keyed by
-            /// their event, so the events already indexed add nothing.
-            async fn catch_up_record_origins(pool: &Pool<Postgres>) -> Result<(), DbError> {
-                let pending = crate::record_origins::postgres::pending_writes(pool).await?;
-                $(
-                    for write in &pending {
-                        if write.aggregate_type == <$State as Aggregate>::TYPE {
-                            replay_record_origins_of::<$State>(pool, $table_const, $upcasters, &write.aggregate_id).await?;
-                        }
+            /// Replays every aggregate a command left journalled through all of its queries, as one
+            /// batch — one whose process was killed after its events committed and before every query
+            /// ran, or whose projection failed to update (ADR 0050). Each query skips what it already
+            /// holds: the projection folds only the events after its last, the indexes are keyed by
+            /// event or re-derived from the projection. An aggregate that cannot be replayed is logged
+            /// and stays journalled, so the workspace still opens and a rebuild can repair it.
+            async fn catch_up_journal(pool: &Pool<Postgres>) -> Result<(), DbError> {
+                for write in crate::record_origins::postgres::pending_writes(pool).await? {
+                    match Self::replay_journalled(pool, &write.aggregate_type, &write.aggregate_id).await {
+                        Ok(()) => crate::record_origins::postgres::end_write(pool, write.entry).await?,
+                        Err(error) => tracing::error!(
+                            aggregate_type = write.aggregate_type,
+                            aggregate_id = write.aggregate_id,
+                            %error,
+                            "a journalled aggregate could not be replayed; it stays journalled"
+                        ),
                     }
-                )+
-                for write in &pending {
-                    crate::record_origins::postgres::end_write(pool, write.entry).await?;
                 }
                 Ok(())
+            }
+
+            /// Replays one journalled aggregate's log through its queries.
+            async fn replay_journalled(pool: &Pool<Postgres>, aggregate_type: &str, aggregate_id: &str) -> Result<(), DbError> {
+                $(
+                    if aggregate_type == <$State as Aggregate>::TYPE {
+                        let log = crate::projection::EventLog::new(PostgresEventRepository::new(pool.clone()), || $upcasters);
+                        let queries = crate::projection::QueryChain(postgres_queries!($snake, pool, $State, $View, $table_const, $upcasters));
+                        return crate::projection::replay_aggregate(&log, &queries, aggregate_id).await;
+                    }
+                )+
+                Err(DbError::Backend(format!("the write journal names an unknown aggregate type {aggregate_type}")))
             }
 
             /// Clears the record origins index, replays every aggregate's log into it, and marks it
@@ -792,26 +813,7 @@ where
     crate::projection_failures::watch_replay(replay.replay_all(), &context).await
 }
 
-/// Replays one aggregate's event log through the record origins index (ADR 0037 §4); see
-/// [`replay_record_origins`].
-async fn replay_record_origins_of<A>(
-    pool: &Pool<Postgres>,
-    view_table: &'static str,
-    upcasters: Vec<Box<dyn EventUpcaster>>,
-    aggregate_id: &str,
-) -> Result<(), DbError>
-where
-    A: Aggregate,
-    crate::record_origins::postgres::RecordOriginsQuery: cqrs_es::Query<A>,
-{
-    let query = crate::record_origins::postgres::RecordOriginsQuery::new(pool.clone(), view_table);
-    let mut replay = QueryReplay::new(PostgresEventRepository::new(pool.clone()), query).with_upcasters(upcasters);
-    replay.use_error_handler(crate::projection_failures::handler(view_table));
-    let context = format!("indexing {view_table} {aggregate_id} again");
-    crate::projection_failures::watch_replay(replay.replay(aggregate_id), &context).await
-}
-
-/// Clears one view table and replays its aggregate's full event log back into it (ADR 0010).
+/// Clears one view table and replays its aggregate's full event log back into it (ADR 0010, 0050).
 ///
 /// `upcasters` migrate historical payloads during the replay; pass an empty vec for aggregates
 /// whose schema has not evolved. `stream_all_events::<A>()` binds the aggregate type, so each
@@ -819,7 +821,7 @@ where
 async fn rebuild_view<A, V>(
     pool: &Pool<Postgres>,
     table: &'static str,
-    upcasters: Vec<Box<dyn EventUpcaster>>,
+    upcasters: crate::projection::Upcasters,
     replay_buffer: usize,
 ) -> Result<(), DbError>
 where
@@ -831,24 +833,24 @@ where
         .map_err(|e| DbError::Backend(format!("clearing projection {table}: {e}")))?;
     let mut replay = QueryReplay::new(
         PostgresEventRepository::new(pool.clone()).with_streaming_channel_size(replay_buffer),
-        projection_query::<V, A>(pool, table),
+        projection_query::<V, A>(pool, table, upcasters),
     )
-    .with_upcasters(upcasters);
+    .with_upcasters(upcasters());
     replay.use_error_handler(crate::projection_failures::handler(table));
     crate::projection_failures::watch_replay(replay.replay_all(), &format!("rebuilding projection {table}")).await
 }
 
-/// The `GenericQuery` writing aggregate `A`'s projection into `table`, its failures reported through
-/// [`crate::projection_failures`] rather than dropped.
+/// The query writing aggregate `A`'s projection into `table` (ADR 0050), its failures reported
+/// through [`crate::projection_failures`] rather than dropped.
 fn projection_query<V, A>(
     pool: &Pool<Postgres>,
     table: &'static str,
-) -> GenericQuery<PostgresViewRepository<V, A>, V, A>
+    upcasters: crate::projection::Upcasters,
+) -> crate::projection::ProjectionQuery<V, A, Pool<Postgres>, PostgresEventRepository>
 where
     A: Aggregate,
     V: View<A>,
 {
-    let mut query = GenericQuery::new(Arc::new(PostgresViewRepository::<V, A>::new(table, pool.clone())));
-    query.use_error_handler(crate::projection_failures::handler(table));
-    query
+    let log = crate::projection::EventLog::new(PostgresEventRepository::new(pool.clone()), upcasters);
+    crate::projection::ProjectionQuery::new(pool.clone(), log, table)
 }

@@ -469,7 +469,7 @@ pub(crate) async fn event_count(pool: &Pool<Postgres>) -> Result<u64, DbError> {
 /// Reads every row of `table` as a [`ProjectionRow`] — the Postgres twin of
 /// [`crate::sqlite_query::projection_rows`].
 pub(crate) async fn projection_rows(pool: &Pool<Postgres>, table: &str) -> Result<Vec<ProjectionRow>, DbError> {
-    let sql = format!("SELECT view_id, version, payload::text AS payload FROM {table}");
+    let sql = format!("SELECT view_id, sequence, payload::text AS payload FROM {table}");
     let rows = sqlx::query(&sql)
         .fetch_all(pool)
         .await
@@ -479,7 +479,7 @@ pub(crate) async fn projection_rows(pool: &Pool<Postgres>, table: &str) -> Resul
         projections.push(ProjectionRow {
             table: table.to_owned(),
             view_id: row.get("view_id"),
-            version: row.get("version"),
+            sequence: row.get("sequence"),
             payload: parse_json(table, row.get("payload"))?,
         });
     }

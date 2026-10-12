@@ -74,7 +74,7 @@ pub(crate) async fn create_tables(pool: &Pool<Postgres>) -> Result<bool, sqlx::E
 }
 
 /// A `cqrs-es` query that keeps one kind's edges, clusters and distinctions in step with its projection. Must be
-/// appended *after* that aggregate's `GenericQuery`, so the projection it reads is already up to date.
+/// appended *after* that aggregate's projection query, so the projection it reads is already up to date.
 pub(crate) struct IdentityLinksQuery<V> {
     pool: Pool<Postgres>,
     view: PhantomData<fn() -> V>,

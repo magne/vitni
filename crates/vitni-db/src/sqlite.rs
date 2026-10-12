@@ -5,11 +5,9 @@
 //! [`registry`](crate::registry). Everything here (`sqlx`, `sqlite-es`, `cqrs-es`) is an
 //! implementation detail; only [`crate::store`] re-exposes it, in engine-neutral terms.
 
-use std::sync::Arc;
-
-use cqrs_es::persist::{EventUpcaster, GenericQuery, PersistedEventStore, QueryReplay};
-use cqrs_es::{Aggregate, AggregateContext as _, CqrsFramework, EventStore as _, View};
-use sqlite_es::{SqliteEventRepository, SqliteViewRepository, default_sqlite_pool, sqlite_cqrs};
+use cqrs_es::persist::{EventUpcaster, PersistedEventStore, QueryReplay};
+use cqrs_es::{Aggregate, AggregateContext as _, CqrsFramework, EventStore as _, Query, View};
+use sqlite_es::{SqliteEventRepository, default_sqlite_pool, sqlite_cqrs};
 use sqlx::{Pool, Sqlite};
 
 use crate::registry::{
@@ -27,114 +25,121 @@ use crate::tables::{
     TAG_VIEW_TABLE,
 };
 
-/// Builds one aggregate's `CqrsFramework` in `open()`, matching the registry `wiring` column: a
-/// plain unit `Services`, a projection-reading resolver (the §9 aggregate tax), or the
-/// hand-assembled Event store that carries upcasters at load (ADR 0010).
+/// Builds one aggregate's `CqrsFramework` in `open()` over its `$queries`, matching the registry
+/// `wiring` column: a plain unit `Services`, a projection-reading resolver (the §9 aggregate tax), or
+/// the hand-assembled Event store that carries upcasters at load (ADR 0010).
 macro_rules! sqlite_open_cqrs {
-    ($pool:ident, $query:ident, (plain)) => {
-        sqlite_cqrs($pool.clone(), vec![Box::new($query)], ())
+    ($pool:ident, $queries:expr, (plain)) => {
+        sqlite_cqrs($pool.clone(), $queries, ())
     };
-    ($pool:ident, $query:ident, (resolver $resolver:path)) => {
+    ($pool:ident, $queries:expr, (resolver $resolver:path)) => {
         sqlite_cqrs(
             $pool.clone(),
-            vec![Box::new($query)],
+            $queries,
             <$resolver>::new(SqliteRefStore::shared($pool.clone())),
         )
     };
-    ($pool:ident, $query:ident, (event $resolver:path)) => {{
+    ($pool:ident, $queries:expr, (event $resolver:path)) => {{
         let store = PersistedEventStore::new_event_store(SqliteEventRepository::new($pool.clone()))
             .with_upcasters(vitni_core::event::upcasters());
-        CqrsFramework::new(
-            store,
-            vec![Box::new($query)],
-            <$resolver>::new(SqliteRefStore::shared($pool.clone())),
-        )
+        CqrsFramework::new(store, $queries, <$resolver>::new(SqliteRefStore::shared($pool.clone())))
     }};
 }
 
-/// Appends the derived side indexes to the one framework each is fed by: the identity cluster index
-/// (ADR 0039 §4) to every matchable kind but `tag`, and the geometry index (ADR 0024 §3) and succession index
-/// (ADR 0026 §4) to `place`, leaving every other aggregate's framework untouched. Dispatches on the registry's
-/// literal `$snake` token — the same "wiring by tag" shape as [`sqlite_open_cqrs!`] — rather than
-/// naming the aggregate after the per-aggregate repetition, which a plain `let` can't see across
-/// macro hygiene.
-macro_rules! sqlite_wire_side_indexes {
-    (person, $pool:expr, $framework:expr) => {
-        $framework
-            .append_query(Box::new(crate::identity_links::sqlite::IdentityLinksQuery::<
-                vitni_core::person::PersonView,
-            >::new($pool.clone())))
-            .append_query(Box::new(crate::record_links::sqlite::RecordLinksQuery::<
-                vitni_core::person::PersonView,
-            >::new($pool.clone())))
+/// Every query one aggregate's commits dispatch to, in order: its projection first, then the derived
+/// side indexes that read it, the record origins index and the match dirty marks. A command's
+/// framework and the open-time replay of a journalled aggregate both run exactly these.
+macro_rules! sqlite_queries {
+    ($snake:ident, $pool:expr, $State:ty, $View:ty, $table_const:ident, $upcasters:expr) => {{
+        let mut queries: Vec<Box<dyn Query<$State>>> =
+            vec![Box::new(projection_query::<$View, $State>($pool, $table_const, || {
+                $upcasters
+            }))];
+        sqlite_side_indexes!($snake, $pool, queries);
+        queries.push(Box::new(crate::record_origins::sqlite::RecordOriginsQuery::new(
+            $pool.clone(),
+            $table_const,
+        )));
+        queries.push(Box::new(crate::match_keys::sqlite::MatchDirtyQuery::new($pool.clone())));
+        queries
+    }};
+}
+
+/// Pushes the derived side indexes onto the queries of the one aggregate each is fed by: the identity
+/// cluster index (ADR 0039 §4) for every matchable kind but `tag`, the record links index (ADR 0047)
+/// for the linking kinds, and the geometry index (ADR 0024 §3) and succession index (ADR 0026 §4) for
+/// `place`, leaving every other aggregate's queries untouched. Dispatches on the registry's literal
+/// `$snake` token — the same "wiring by tag" shape as [`sqlite_open_cqrs!`] — rather than naming the
+/// aggregate after the per-aggregate repetition, which a plain `let` can't see across macro hygiene.
+macro_rules! sqlite_side_indexes {
+    (person, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::identity_links::sqlite::IdentityLinksQuery::<
+            vitni_core::person::PersonView,
+        >::new($pool.clone())));
+        $queries.push(Box::new(crate::record_links::sqlite::RecordLinksQuery::<
+            vitni_core::person::PersonView,
+        >::new($pool.clone())));
     };
-    (event, $pool:expr, $framework:expr) => {
-        $framework
-            .append_query(Box::new(crate::identity_links::sqlite::IdentityLinksQuery::<
-                vitni_core::event::EventView,
-            >::new($pool.clone())))
-            .append_query(Box::new(crate::record_links::sqlite::RecordLinksQuery::<
-                vitni_core::event::EventView,
-            >::new($pool.clone())))
+    (event, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::identity_links::sqlite::IdentityLinksQuery::<
+            vitni_core::event::EventView,
+        >::new($pool.clone())));
+        $queries.push(Box::new(crate::record_links::sqlite::RecordLinksQuery::<
+            vitni_core::event::EventView,
+        >::new($pool.clone())));
     };
-    (family, $pool:expr, $framework:expr) => {
-        $framework
-            .append_query(Box::new(crate::identity_links::sqlite::IdentityLinksQuery::<
-                vitni_core::family::FamilyView,
-            >::new($pool.clone())))
-            .append_query(Box::new(crate::record_links::sqlite::RecordLinksQuery::<
-                vitni_core::family::FamilyView,
-            >::new($pool.clone())))
+    (family, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::identity_links::sqlite::IdentityLinksQuery::<
+            vitni_core::family::FamilyView,
+        >::new($pool.clone())));
+        $queries.push(Box::new(crate::record_links::sqlite::RecordLinksQuery::<
+            vitni_core::family::FamilyView,
+        >::new($pool.clone())));
     };
-    (place, $pool:expr, $framework:expr) => {
-        $framework
-            .append_query(Box::new(crate::geo_index::PlaceGeometryIndexQuery::new($pool.clone())))
-            .append_query(Box::new(
-                crate::place_succession_index::sqlite::PlaceSuccessionIndexQuery::new($pool.clone()),
-            ))
-            .append_query(Box::new(crate::identity_links::sqlite::IdentityLinksQuery::<
-                vitni_core::place::PlaceView,
-            >::new($pool.clone())))
-            .append_query(Box::new(crate::record_links::sqlite::RecordLinksQuery::<
-                vitni_core::place::PlaceView,
-            >::new($pool.clone())))
+    (place, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::geo_index::PlaceGeometryIndexQuery::new($pool.clone())));
+        $queries.push(Box::new(
+            crate::place_succession_index::sqlite::PlaceSuccessionIndexQuery::new($pool.clone()),
+        ));
+        $queries.push(Box::new(crate::identity_links::sqlite::IdentityLinksQuery::<
+            vitni_core::place::PlaceView,
+        >::new($pool.clone())));
+        $queries.push(Box::new(crate::record_links::sqlite::RecordLinksQuery::<
+            vitni_core::place::PlaceView,
+        >::new($pool.clone())));
     };
-    (source, $pool:expr, $framework:expr) => {
-        $framework
-            .append_query(Box::new(crate::identity_links::sqlite::IdentityLinksQuery::<
-                vitni_core::source::SourceView,
-            >::new($pool.clone())))
-            .append_query(Box::new(crate::record_links::sqlite::RecordLinksQuery::<
-                vitni_core::source::SourceView,
-            >::new($pool.clone())))
+    (source, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::identity_links::sqlite::IdentityLinksQuery::<
+            vitni_core::source::SourceView,
+        >::new($pool.clone())));
+        $queries.push(Box::new(crate::record_links::sqlite::RecordLinksQuery::<
+            vitni_core::source::SourceView,
+        >::new($pool.clone())));
     };
-    (citation, $pool:expr, $framework:expr) => {
-        $framework
-            .append_query(Box::new(crate::identity_links::sqlite::IdentityLinksQuery::<
-                vitni_core::citation::CitationView,
-            >::new($pool.clone())))
-            .append_query(Box::new(crate::record_links::sqlite::RecordLinksQuery::<
-                vitni_core::citation::CitationView,
-            >::new($pool.clone())))
+    (citation, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::identity_links::sqlite::IdentityLinksQuery::<
+            vitni_core::citation::CitationView,
+        >::new($pool.clone())));
+        $queries.push(Box::new(crate::record_links::sqlite::RecordLinksQuery::<
+            vitni_core::citation::CitationView,
+        >::new($pool.clone())));
     };
-    (repository, $pool:expr, $framework:expr) => {
-        $framework.append_query(Box::new(crate::identity_links::sqlite::IdentityLinksQuery::<
+    (repository, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::identity_links::sqlite::IdentityLinksQuery::<
             vitni_core::repository::RepositoryView,
-        >::new($pool.clone())))
+        >::new($pool.clone())));
     };
-    (note, $pool:expr, $framework:expr) => {
-        $framework.append_query(Box::new(crate::identity_links::sqlite::IdentityLinksQuery::<
+    (note, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::identity_links::sqlite::IdentityLinksQuery::<
             vitni_core::note::NoteView,
-        >::new($pool.clone())))
+        >::new($pool.clone())));
     };
-    (media, $pool:expr, $framework:expr) => {
-        $framework.append_query(Box::new(crate::identity_links::sqlite::IdentityLinksQuery::<
+    (media, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::identity_links::sqlite::IdentityLinksQuery::<
             vitni_core::media::MediaView,
-        >::new($pool.clone())))
+        >::new($pool.clone())));
     };
-    ($other:ident, $pool:expr, $framework:expr) => {
-        $framework
-    };
+    ($other:ident, $pool:expr, $queries:ident) => {};
 }
 
 /// The `Services` an aggregate's `handle` needs outside its framework, matching the registry
@@ -185,11 +190,11 @@ macro_rules! sqlite_store {
                 schema::init_sqlite(&pool)
                     .await
                     .map_err(|e| DbError::Backend(format!("initializing event store: {e}")))?;
-                // Drops and recreates any view table left over from before the `human_id` column
-                // existed (ADR 0032), creates every table fresh, and indexes the human-id-bearing
-                // ones; returns which tables were dropped, so their aggregate's event log can be
-                // replayed to repopulate them below (rebuilding needs the aggregate's `State`/`View`
-                // types, which this untyped helper does not have).
+                // Drops and recreates any view table left over from before the `human_id` (ADR 0032)
+                // or `sequence` (ADR 0050) column existed, creates every table fresh, and indexes the
+                // human-id-bearing ones; returns which tables were dropped, so their aggregate's event log
+                // can be replayed to repopulate them below (rebuilding needs the aggregate's
+                // `State`/`View` types, which this untyped helper does not have).
                 let stale_tables = migrate_sqlite_view_tables(&pool).await?;
                 // The Place geometry spatial index (ADR 0024 §3) is not one of the generic
                 // per-aggregate projections: it is derived from the Place projection, keyed by its
@@ -225,23 +230,19 @@ macro_rules! sqlite_store {
                     .await
                     .map_err(|e| DbError::Backend(format!("creating record origins index: {e}")))?;
                 $(
-                    let query = projection_query::<$View, $State>(&pool, $table_const);
-                    let $snake = sqlite_open_cqrs!(pool, query, $wiring);
-                    let $snake = sqlite_wire_side_indexes!($snake, pool, $snake).append_query(Box::new(
-                        crate::record_origins::sqlite::RecordOriginsQuery::new(pool.clone(), $table_const),
-                    )).append_query(Box::new(crate::match_keys::sqlite::MatchDirtyQuery::new(pool.clone())));
+                    let $snake = sqlite_open_cqrs!(pool, sqlite_queries!($snake, &pool, $State, $View, $table_const, $upcasters), $wiring);
                     if stale_tables.contains(&$table_const) {
                         tracing::info!(
                             table = $table_const,
-                            "projection table predated the human_id column; rebuilding from the event log"
+                            "projection table predated the human_id or sequence column; rebuilding from the event log"
                         );
-                        rebuild_view::<$State, $View>(&pool, $table_const, $upcasters, crate::exclusive::SHARED_REPLAY_BUFFER).await?;
+                        rebuild_view::<$State, $View>(&pool, $table_const, || $upcasters, crate::exclusive::SHARED_REPLAY_BUFFER).await?;
                     }
                 )+
                 if origins_need_backfill {
                     Self::backfill_record_origins(&pool).await?;
                 }
-                Self::catch_up_record_origins(&pool).await?;
+                Self::catch_up_journal(&pool).await?;
                 if identity_is_new {
                     crate::identity_links::sqlite::rebuild_index(&pool).await?;
                 }
@@ -258,22 +259,22 @@ macro_rules! sqlite_store {
                     aggregate_id: &str,
                     command: $Cmd,
                 ) -> Result<(), CommandError<$Err>> {
-                    // Journalled until its index rows are written: the events commit first, so a
-                    // process killed in between leaves the entry for the next open to index again.
+                    // Journalled until every query has run: the events commit first, so a process
+                    // killed in between leaves the entry for the next open to replay (ADR 0050).
                     let entry = crate::record_origins::sqlite::begin_write(&self.pool, <$State as Aggregate>::TYPE, aggregate_id)
                         .await
                         .map_err(CommandError::Store)?;
                     let (result, failures) = crate::projection_failures::watch(self.$snake.execute(aggregate_id, command)).await;
-                    let result = match (result.map_err(map_aggregate_error), failures) {
-                        (Ok(()), Some(failures)) => Err(CommandError::Store(failures.into_error(
-                            "the events were committed, but their projection failed to update (a rebuild repairs it)",
-                        ))),
-                        (result, _) => result,
-                    };
-                    if let Err(error) = crate::record_origins::sqlite::end_write(&self.pool, entry).await {
-                        tracing::warn!(%error, aggregate_id, "a write stays journalled; the next open indexes it again");
+                    if let (Ok(()), Some(failures)) = (&result, failures) {
+                        // Left journalled, so the next open replays the aggregate into what failed.
+                        return Err(CommandError::Store(failures.into_error(
+                            "the events were committed, but their projection failed to update (reopening the workspace repairs it)",
+                        )));
                     }
-                    result
+                    if let Err(error) = crate::record_origins::sqlite::end_write(&self.pool, entry).await {
+                        tracing::warn!(%error, aggregate_id, "a write stays journalled; the next open replays it again");
+                    }
+                    result.map_err(map_aggregate_error)
                 }
 
                 pub(crate) async fn $find(&self, $find_param: &str) -> Result<Option<$View>, DbError> {
@@ -307,8 +308,8 @@ macro_rules! sqlite_store {
 
             /// Rebuilds every projection from the event log (ADR 0010): each view table is cleared,
             /// then its aggregate's full history is replayed back into it through the same
-            /// `GenericQuery` the live store uses, with the Event aggregate's upcasters applied. A
-            /// maintenance operation — the caller must ensure no commands run concurrently.
+            /// projection query the live store uses (ADR 0050), with the Event aggregate's upcasters
+            /// applied. A maintenance operation — the caller must ensure no commands run concurrently.
             pub(crate) async fn rebuild_projections(&self) -> Result<(), DbError> {
                 Self::rebuild_projections_on(&self.pool, crate::exclusive::SHARED_REPLAY_BUFFER).await
             }
@@ -317,7 +318,7 @@ macro_rules! sqlite_store {
             /// its exclusive transaction.
             async fn rebuild_projections_on(pool: &Pool<Sqlite>, replay_buffer: usize) -> Result<(), DbError> {
                 $(
-                    rebuild_view::<$State, $View>(pool, $table_const, $upcasters, replay_buffer).await?;
+                    rebuild_view::<$State, $View>(pool, $table_const, || $upcasters, replay_buffer).await?;
                 )+
                 // Place's geometry spatial index (ADR 0024 §3) and succession cross-reference
                 // index (ADR 0026 §4) are derived from the (now freshly rebuilt) Place projection
@@ -355,22 +356,37 @@ macro_rules! sqlite_store {
                 exclusive.finish(outcome).await
             }
 
-            /// Indexes again every aggregate a command left journalled — one whose process was killed
-            /// after its events committed and before their index rows were written. Rows are keyed by
-            /// their event, so the events already indexed add nothing.
-            async fn catch_up_record_origins(pool: &Pool<Sqlite>) -> Result<(), DbError> {
-                let pending = crate::record_origins::sqlite::pending_writes(pool).await?;
-                $(
-                    for write in &pending {
-                        if write.aggregate_type == <$State as Aggregate>::TYPE {
-                            replay_record_origins_of::<$State>(pool, $table_const, $upcasters, &write.aggregate_id).await?;
-                        }
+            /// Replays every aggregate a command left journalled through all of its queries, as one
+            /// batch — one whose process was killed after its events committed and before every query
+            /// ran, or whose projection failed to update (ADR 0050). Each query skips what it already
+            /// holds: the projection folds only the events after its last, the indexes are keyed by
+            /// event or re-derived from the projection. An aggregate that cannot be replayed is logged
+            /// and stays journalled, so the workspace still opens and a rebuild can repair it.
+            async fn catch_up_journal(pool: &Pool<Sqlite>) -> Result<(), DbError> {
+                for write in crate::record_origins::sqlite::pending_writes(pool).await? {
+                    match Self::replay_journalled(pool, &write.aggregate_type, &write.aggregate_id).await {
+                        Ok(()) => crate::record_origins::sqlite::end_write(pool, write.entry).await?,
+                        Err(error) => tracing::error!(
+                            aggregate_type = write.aggregate_type,
+                            aggregate_id = write.aggregate_id,
+                            %error,
+                            "a journalled aggregate could not be replayed; it stays journalled"
+                        ),
                     }
-                )+
-                for write in &pending {
-                    crate::record_origins::sqlite::end_write(pool, write.entry).await?;
                 }
                 Ok(())
+            }
+
+            /// Replays one journalled aggregate's log through its queries.
+            async fn replay_journalled(pool: &Pool<Sqlite>, aggregate_type: &str, aggregate_id: &str) -> Result<(), DbError> {
+                $(
+                    if aggregate_type == <$State as Aggregate>::TYPE {
+                        let log = crate::projection::EventLog::new(SqliteEventRepository::new(pool.clone()), || $upcasters);
+                        let queries = crate::projection::QueryChain(sqlite_queries!($snake, pool, $State, $View, $table_const, $upcasters));
+                        return crate::projection::replay_aggregate(&log, &queries, aggregate_id).await;
+                    }
+                )+
+                Err(DbError::Backend(format!("the write journal names an unknown aggregate type {aggregate_type}")))
             }
 
             /// Clears the record origins index, replays every aggregate's log into it, and marks it
@@ -793,26 +809,7 @@ where
     crate::projection_failures::watch_replay(replay.replay_all(), &context).await
 }
 
-/// Replays one aggregate's event log through the record origins index (ADR 0037 §4); see
-/// [`replay_record_origins`].
-async fn replay_record_origins_of<A>(
-    pool: &Pool<Sqlite>,
-    view_table: &'static str,
-    upcasters: Vec<Box<dyn EventUpcaster>>,
-    aggregate_id: &str,
-) -> Result<(), DbError>
-where
-    A: Aggregate,
-    crate::record_origins::sqlite::RecordOriginsQuery: cqrs_es::Query<A>,
-{
-    let query = crate::record_origins::sqlite::RecordOriginsQuery::new(pool.clone(), view_table);
-    let mut replay = QueryReplay::new(SqliteEventRepository::new(pool.clone()), query).with_upcasters(upcasters);
-    replay.use_error_handler(crate::projection_failures::handler(view_table));
-    let context = format!("indexing {view_table} {aggregate_id} again");
-    crate::projection_failures::watch_replay(replay.replay(aggregate_id), &context).await
-}
-
-/// Clears one view table and replays its aggregate's full event log back into it (ADR 0010).
+/// Clears one view table and replays its aggregate's full event log back into it (ADR 0010, 0050).
 ///
 /// `upcasters` migrate historical payloads during the replay; pass an empty vec for aggregates
 /// whose schema has not evolved. `stream_all_events::<A>()` binds the aggregate type, so each
@@ -820,7 +817,7 @@ where
 async fn rebuild_view<A, V>(
     pool: &Pool<Sqlite>,
     table: &'static str,
-    upcasters: Vec<Box<dyn EventUpcaster>>,
+    upcasters: crate::projection::Upcasters,
     replay_buffer: usize,
 ) -> Result<(), DbError>
 where
@@ -832,23 +829,26 @@ where
         .map_err(|e| DbError::Backend(format!("clearing projection {table}: {e}")))?;
     let mut replay = QueryReplay::new(
         SqliteEventRepository::new(pool.clone()).with_streaming_channel_size(replay_buffer),
-        projection_query::<V, A>(pool, table),
+        projection_query::<V, A>(pool, table, upcasters),
     )
-    .with_upcasters(upcasters);
+    .with_upcasters(upcasters());
     replay.use_error_handler(crate::projection_failures::handler(table));
     crate::projection_failures::watch_replay(replay.replay_all(), &format!("rebuilding projection {table}")).await
 }
 
-/// The `GenericQuery` writing aggregate `A`'s projection into `table`, its failures reported through
-/// [`crate::projection_failures`] rather than dropped.
-fn projection_query<V, A>(pool: &Pool<Sqlite>, table: &'static str) -> GenericQuery<SqliteViewRepository<V, A>, V, A>
+/// The query writing aggregate `A`'s projection into `table` (ADR 0050), its failures reported
+/// through [`crate::projection_failures`] rather than dropped.
+fn projection_query<V, A>(
+    pool: &Pool<Sqlite>,
+    table: &'static str,
+    upcasters: crate::projection::Upcasters,
+) -> crate::projection::ProjectionQuery<V, A, Pool<Sqlite>, SqliteEventRepository>
 where
     A: Aggregate,
     V: View<A>,
 {
-    let mut query = GenericQuery::new(Arc::new(SqliteViewRepository::<V, A>::new(table, pool.clone())));
-    query.use_error_handler(crate::projection_failures::handler(table));
-    query
+    let log = crate::projection::EventLog::new(SqliteEventRepository::new(pool.clone()), upcasters);
+    crate::projection::ProjectionQuery::new(pool.clone(), log, table)
 }
 
 #[cfg(test)]
@@ -1402,13 +1402,13 @@ mod tests {
         assert_eq!(view.source_id(), Some(source_id));
     }
 
-    /// Snapshots every projection table as ordered `(table, view_id, version, payload)` rows, so two
+    /// Snapshots every projection table as ordered `(table, view_id, sequence, payload)` rows, so two
     /// snapshots can be compared for byte-exact equality.
     async fn dump_all_views(store: &SqliteStore) -> Vec<(String, String, i64, String)> {
         let mut rows = Vec::new();
         for &table in super::ALL_VIEW_TABLES {
             let fetched = sqlx::query(&format!(
-                "SELECT view_id, version, payload FROM {table} ORDER BY view_id"
+                "SELECT view_id, sequence, payload FROM {table} ORDER BY view_id"
             ))
             .fetch_all(&store.pool)
             .await
@@ -1417,7 +1417,7 @@ mod tests {
                 rows.push((
                     table.to_owned(),
                     row.get("view_id"),
-                    row.get("version"),
+                    row.get("sequence"),
                     row.get("payload"),
                 ));
             }

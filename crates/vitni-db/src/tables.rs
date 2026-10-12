@@ -11,7 +11,7 @@ use crate::registry::{for_each_db_aggregate, for_each_db_human_id_aggregate};
 macro_rules! db_view_tables {
     ($(($snake:ident, $State:ty, $View:ty, $Cmd:ty, $Err:ty, $table_const:ident, $table_str:literal, $($rest:tt)*)),+ $(,)?) => {
         $(
-            #[doc = concat!("The ", stringify!($snake), " conclusion projection table written by the `GenericQuery`.")]
+            #[doc = concat!("The ", stringify!($snake), " conclusion projection table written by the projection query (ADR 0050).")]
             pub(crate) const $table_const: &str = $table_str;
         )+
 

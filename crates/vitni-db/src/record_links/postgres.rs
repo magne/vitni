@@ -88,7 +88,7 @@ async fn links_of<V: LinkingRecord>(pool: &Pool<Postgres>) -> Result<Vec<(Record
 }
 
 /// A `cqrs-es` query that keeps one kind's references in step with its projection. Must be appended
-/// *after* that aggregate's `GenericQuery`, so the projection it reads is already up to date.
+/// *after* that aggregate's projection query, so the projection it reads is already up to date.
 pub(crate) struct RecordLinksQuery<V> {
     pool: Pool<Postgres>,
     view: PhantomData<fn() -> V>,

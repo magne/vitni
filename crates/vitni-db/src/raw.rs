@@ -55,15 +55,15 @@ pub struct RawEventKey {
     pub sequence: i64,
 }
 
-/// One projection row: which view table, which instance, its replayed event count and payload.
+/// One projection row: which view table, which instance, the sequence of its last event and payload.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectionRow {
     /// The `*_view` table.
     pub table: String,
     /// The aggregate instance id.
     pub view_id: String,
-    /// The number of events applied to the view.
-    pub version: i64,
+    /// The sequence of the last event folded into the view (ADR 0050).
+    pub sequence: i64,
     /// The serialized view.
     pub payload: serde_json::Value,
 }

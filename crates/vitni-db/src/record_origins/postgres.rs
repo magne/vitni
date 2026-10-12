@@ -169,7 +169,7 @@ pub(crate) async fn begin_write(
     .map_err(|e| DbError::Backend(format!("journalling a write to {aggregate_type} {aggregate_id}: {e}")))
 }
 
-/// Withdraws a [`begin_write`] entry once its command's events and index rows are written.
+/// Withdraws a [`begin_write`] entry once its command's events are committed and every query has run.
 ///
 /// # Errors
 ///
@@ -221,7 +221,7 @@ pub(crate) async fn clear_table(pool: &Pool<Postgres>) -> Result<(), DbError> {
 
 /// A `cqrs-es` query that records every originated event of one aggregate kind, and re-reads the
 /// aggregate's live assertions from its projection after a correction. Must be appended *after* the
-/// aggregate's `GenericQuery`, so the projection it reads is already up to date.
+/// aggregate's projection query, so the projection it reads is already up to date.
 pub(crate) struct RecordOriginsQuery {
     pool: Pool<Postgres>,
     view_table: &'static str,

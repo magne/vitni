@@ -1,7 +1,7 @@
 //! Read-model queries over the conclusion projections — private SQLite internals.
 //!
 //! Each aggregate's projection is one row per instance in its `*_view` table
-//! (`view_id, version, payload, human_id`), where `payload` is the serialized view and `human_id`
+//! (`view_id, sequence, payload, human_id`), where `payload` is the serialized view and `human_id`
 //! is a `GENERATED ALWAYS ... STORED` column mirroring the JSON path `$.state.human_id` (ADR 0032,
 //! superseding the `json_extract` scans ADR 0009 originally fixed), indexed for every aggregate
 //! but Tag (`HUMAN_ID_VIEW_TABLES`). The queries are generic over the view type and parameterized
@@ -493,7 +493,7 @@ pub(crate) async fn event_count(pool: &Pool<Sqlite>) -> Result<u64, DbError> {
 
 /// Reads every row of `table` as a [`ProjectionRow`].
 pub(crate) async fn projection_rows(pool: &Pool<Sqlite>, table: &str) -> Result<Vec<ProjectionRow>, DbError> {
-    let sql = format!("SELECT view_id, version, payload FROM {table}");
+    let sql = format!("SELECT view_id, sequence, payload FROM {table}");
     let rows = sqlx::query(&sql)
         .fetch_all(pool)
         .await
@@ -503,7 +503,7 @@ pub(crate) async fn projection_rows(pool: &Pool<Sqlite>, table: &str) -> Result<
         projections.push(ProjectionRow {
             table: table.to_owned(),
             view_id: row.get("view_id"),
-            version: row.get("version"),
+            sequence: row.get("sequence"),
             payload: parse_json(table, row.get("payload"))?,
         });
     }
