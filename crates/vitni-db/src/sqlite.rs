@@ -379,18 +379,22 @@ macro_rules! sqlite_store {
             ///
             /// An aggregate holding an unreadable event is folded up to it and stays journalled too,
             /// so every open reports it until a version that reads it folds the rest (ADR 0051).
-            /// Returns those events. Its replay marks the aggregate for matching again on each open,
-            /// a cheap rekey of the few records concerned.
+            /// Returns those events. The entry records the event its prefix was replayed up to, so a
+            /// later open that finds the same one dispatches nothing.
             async fn catch_up_journal(pool: &Pool<Sqlite>) -> Result<Vec<crate::raw::UnreadableEvent>, DbError> {
                 let mut unreadable = Vec::new();
                 for write in crate::record_origins::sqlite::pending_writes(pool).await? {
-                    match Self::replay_journalled(pool, &write.aggregate_type, &write.aggregate_id).await {
-                        Ok(found) if found.is_empty() => crate::record_origins::sqlite::end_write(pool, write.entry).await?,
-                        Ok(found) => {
-                            for event in &found {
-                                tracing::warn!(%event, "a journalled aggregate holds an unreadable event; it stays journalled");
+                    let replayed_to = write.replayed_to.and_then(|sequence| usize::try_from(sequence).ok());
+                    match Self::replay_journalled(pool, &write.aggregate_type, &write.aggregate_id, replayed_to).await {
+                        Ok(None) => crate::record_origins::sqlite::end_write(pool, write.entry).await?,
+                        Ok(Some(event)) => {
+                            tracing::warn!(%event, "a journalled aggregate holds an unreadable event; it stays journalled");
+                            if replayed_to != Some(event.sequence) {
+                                let sequence = i64::try_from(event.sequence)
+                                    .map_err(|_| DbError::Backend(format!("sequence {} does not fit the journal", event.sequence)))?;
+                                crate::record_origins::sqlite::mark_replayed(pool, write.entry, sequence).await?;
                             }
-                            unreadable.extend(found);
+                            unreadable.push(event);
                         }
                         Err(error) => tracing::error!(
                             aggregate_type = write.aggregate_type,
@@ -405,19 +409,21 @@ macro_rules! sqlite_store {
                 Ok(unreadable)
             }
 
-            /// Replays one journalled aggregate's log through its queries, returning the unreadable
-            /// event that stopped it, if any.
+            /// Replays one journalled aggregate's log through its queries — unless `replayed_to` says an
+            /// earlier open already did, up to the same unreadable event — returning the unreadable
+            /// event that stops it, if any.
             async fn replay_journalled(
                 pool: &Pool<Sqlite>,
                 aggregate_type: &str,
                 aggregate_id: &str,
-            ) -> Result<Vec<crate::raw::UnreadableEvent>, DbError> {
+                replayed_to: Option<usize>,
+            ) -> Result<Option<crate::raw::UnreadableEvent>, DbError> {
                 $(
                     if aggregate_type == <$State as Aggregate>::TYPE {
                         let log = crate::projection::EventLog::new(SqliteEventRepository::new(pool.clone()), || $upcasters);
                         let queries = crate::projection::QueryChain(sqlite_queries!($snake, pool, $State, $View, $table_const, $upcasters));
                         let context = format!("replaying {aggregate_type} {aggregate_id}");
-                        return crate::projection::replay(&log, &queries, &[aggregate_id.to_owned()], &context).await;
+                        return crate::projection::catch_up(&log, &queries, aggregate_id, replayed_to, &context).await;
                     }
                 )+
                 Err(DbError::Backend(format!("the write journal names an unknown aggregate type {aggregate_type}")))

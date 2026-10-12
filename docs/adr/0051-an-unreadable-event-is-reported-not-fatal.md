@@ -32,10 +32,13 @@ sequence.
 
 3. **An aggregate holding an unreadable event stays in the write journal.** A replay that meets one
    journals the aggregate, unless an entry already names it. The journal already means "this
-   aggregate's projection may be behind" (ADR 0050 §3). The open-time catch-up replays it like any
-   journalled aggregate, folds the prefix again — which writes nothing — and keeps the entry,
-   collecting the event. So every open finds the unreadable events again without decoding the whole
-   log, and a version that reads them folds the rest on its next open with no rebuild.
+   aggregate's projection may be behind" (ADR 0050 §3). The open-time catch-up reads it like any
+   journalled aggregate, keeps the entry and collects the event. The first catch-up dispatches the
+   readable prefix through every query and records in the entry the sequence of the unreadable event
+   it stopped at (`replayed_to`). A later open that finds the same one dispatches nothing, so an open
+   over an unreadable aggregate writes nothing. Every open finds the unreadable events again without
+   decoding the whole log, and a version that reads them folds the rest on its next open with no
+   rebuild.
 
 4. **Neither open nor rebuild fails on an unreadable event.** The stale-table rebuild and the record
    origins fill complete for everything readable, and the fill is marked complete. A rebuild returns
@@ -61,8 +64,8 @@ sequence.
 
 - An unreadable event in an aggregate no replay touches is not seen until something replays it — a
   rebuild, or a command on that aggregate, which fails to load it as before.
-- Each open replays the journalled unreadable aggregates and marks them for matching again: a cheap
-  rekey of the few records concerned.
+- Each open reads the journalled unreadable aggregates' logs: one read per aggregate, no writes.
+- The write journal gains a nullable `replayed_to` column, added to an existing journal on open.
 - ADR 0050 §5 (a journalled aggregate that cannot be replayed is logged and stays journalled) is
   unchanged; an aggregate with an unreadable event is not a failed replay.
 

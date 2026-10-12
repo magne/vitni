@@ -110,6 +110,12 @@ const JOURNAL_PERSON: &str = "INSERT INTO record_origins_pending (aggregate_type
 /// How many writes the journal holds.
 const PENDING: &str = "SELECT COUNT(*) FROM record_origins_pending";
 
+/// Forgets every record marked for matching.
+const CLEAR_MATCH_DIRTY: &str = "DELETE FROM match_dirty";
+
+/// How many records are marked for matching.
+const MATCH_DIRTY: &str = "SELECT COUNT(*) FROM match_dirty";
+
 /// Whether the record origins index is marked complete: the number of marker rows.
 const ORIGINS_COMPLETE: &str = "SELECT COUNT(*) FROM record_origins_state";
 
@@ -344,6 +350,27 @@ macro_rules! journal_tests {
         }
 
         #[tokio::test]
+        async fn an_open_that_finds_the_same_unreadable_event_writes_nothing() {
+            let workspace = $new;
+            seed_and_take_part(&workspace).await;
+            workspace
+                .run(&[
+                    "DROP TABLE kept_view",
+                    super::UNREADABLE,
+                    super::STALE_PERSON_VIEW,
+                ])
+                .await;
+            super::unreadable_participation(workspace.open().await.unreadable_events());
+            workspace.run(&[super::CLEAR_MATCH_DIRTY]).await;
+            super::unreadable_participation(workspace.open().await.unreadable_events());
+            assert_eq!(
+                workspace.count(super::MATCH_DIRTY).await,
+                0,
+                "the readable prefix already went through every query"
+            );
+        }
+
+        #[tokio::test]
         async fn an_event_that_reads_again_is_folded_on_the_next_open() {
             let workspace = $new;
             let whole = seed_and_take_part(&workspace).await;
@@ -444,6 +471,13 @@ mod sqlite {
             pool.close().await;
             complete
         }
+
+        async fn count(&self, query: &str) -> i64 {
+            let pool = sqlx::SqlitePool::connect(&self.url).await.unwrap();
+            let count = sqlx::query_scalar(query).fetch_one(&pool).await.unwrap();
+            pool.close().await;
+            count
+        }
     }
 
     journal_tests!(Workspace::new());
@@ -495,6 +529,13 @@ mod postgres {
                 .unwrap();
             pool.close().await;
             complete
+        }
+
+        async fn count(&self, query: &str) -> i64 {
+            let pool = sqlx::PgPool::connect(self.db.dsn()).await.unwrap();
+            let count = sqlx::query_scalar(query).fetch_one(&pool).await.unwrap();
+            pool.close().await;
+            count
         }
     }
 

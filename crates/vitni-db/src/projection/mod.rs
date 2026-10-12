@@ -201,6 +201,31 @@ pub(crate) async fn replay<A: Aggregate, E: PersistedEventRepository>(
     failures.map_or(Ok(unreadable), |failures| Err(failures.into_error(context)))
 }
 
+/// Replays journalled `aggregate_id`'s readable prefix through `queries` as one batch, as its commits
+/// dispatched it (ADR 0050), and returns its first unreadable event, if any (ADR 0051). When that is
+/// still the one at `replayed_to`, an earlier open already replayed this prefix through every query,
+/// so nothing is dispatched: an open over an unreadable aggregate writes nothing.
+///
+/// # Errors
+///
+/// [`DbError::Backend`] when the log cannot be read, or reading `{context}: …` when a query reports a
+/// failure.
+pub(crate) async fn catch_up<A: Aggregate, E: PersistedEventRepository>(
+    log: &EventLog<E>,
+    queries: &impl Query<A>,
+    aggregate_id: &str,
+    replayed_to: Option<usize>,
+    context: &str,
+) -> Result<Option<UnreadableEvent>, DbError> {
+    let Readable { events, unreadable } = log.read::<A>(aggregate_id).await?;
+    let replayed = replayed_to.is_some() && unreadable.as_ref().map(|event| event.sequence) == replayed_to;
+    if replayed || events.is_empty() {
+        return Ok(unreadable);
+    }
+    let ((), failures) = crate::projection_failures::watch(queries.dispatch(aggregate_id, &events)).await;
+    failures.map_or(Ok(unreadable), |failures| Err(failures.into_error(context)))
+}
+
 /// An engine's view table rows, read and written by [`ProjectionQuery`].
 #[async_trait]
 pub(crate) trait ViewRows: Send + Sync {

@@ -105,12 +105,16 @@ pub(crate) struct RowValues {
     pub(crate) event_key: String,
 }
 
-/// A [`RECORD_ORIGINS_PENDING_TABLE`] entry: a command on this aggregate began and never finished.
+/// A [`RECORD_ORIGINS_PENDING_TABLE`] entry: a command on this aggregate began and never finished, or
+/// its log holds an unreadable event (ADR 0051).
 #[derive(Debug)]
 pub(crate) struct PendingWrite {
     pub(crate) entry: i64,
     pub(crate) aggregate_type: String,
     pub(crate) aggregate_id: String,
+    /// The sequence of the unreadable event the aggregate's readable prefix was last replayed up to,
+    /// through every query; an open that finds the same one has nothing to dispatch.
+    pub(crate) replayed_to: Option<i64>,
 }
 
 /// What one committed event means for the index: the row it adds, if any, and whether it is a
