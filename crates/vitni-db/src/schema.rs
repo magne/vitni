@@ -6,11 +6,12 @@
 //! event_type, event_version, payload, metadata)` keyed by `(aggregate_type, aggregate_id,
 //! sequence)` — the `UNIQUE` key that *is* the optimistic-concurrency guard.
 //!
-//! Every view table also carries a fourth, `GENERATED ALWAYS ... STORED` `human_id` column
-//! (ADR 0032) mirroring `payload->state->human_id`, plus two indexes over it for the human-id
-//! aggregates (`HUMAN_ID_VIEW_TABLES`). SQLite cannot `ALTER TABLE ADD COLUMN ... STORED`, so a
-//! view table created before this column existed is dropped and rebuilt on open, not migrated in
-//! place — [`sqlite_view_table_is_stale`]/[`postgres_view_table_is_stale`] detect that case.
+//! A view table holds `(view_id, sequence, payload)` — `sequence` is that of the last event folded
+//! into the view (ADR 0050) — plus a `GENERATED ALWAYS ... STORED` `human_id` column (ADR 0032)
+//! mirroring `payload->state->human_id`, and two indexes over it for the human-id aggregates
+//! (`HUMAN_ID_VIEW_TABLES`). SQLite cannot `ALTER TABLE ADD COLUMN ... STORED`, so a view table
+//! created before either column existed is dropped and rebuilt on open, not migrated in place —
+//! [`sqlite_view_table_is_stale`]/[`postgres_view_table_is_stale`] detect that case.
 
 #[cfg(feature = "postgres")]
 use sqlx::Postgres;
@@ -66,10 +67,9 @@ pub async fn init_sqlite(pool: &Pool<Sqlite>) -> Result<(), sqlx::Error> {
     Ok(())
 }
 
-/// Creates a `cqrs-es` view (read-model) table with the layout `SqliteViewRepository` expects:
-/// `(view_id PRIMARY KEY, version, payload)`, plus the generated `human_id` column (ADR 0032)
-/// every view table carries; `sqlite-es` writes explicit column lists, so the extra column is
-/// invisible to it.
+/// Creates a view (read-model) table: `(view_id PRIMARY KEY, sequence, payload)`, the layout the
+/// projection writer reads and writes (ADR 0050), plus the generated `human_id` column (ADR 0032)
+/// every view table carries.
 ///
 /// `view_name` must be a trusted, code-supplied identifier (it is interpolated into the DDL).
 ///
@@ -81,7 +81,7 @@ pub async fn create_sqlite_view_table(pool: &Pool<Sqlite>, view_name: &str) -> R
     let ddl = format!(
         "CREATE TABLE IF NOT EXISTS {view_name} (
             view_id  TEXT    NOT NULL PRIMARY KEY,
-            version  INTEGER NOT NULL,
+            sequence INTEGER NOT NULL,
             payload  TEXT    NOT NULL,
             human_id TEXT GENERATED ALWAYS AS (json_extract(payload, '$.state.human_id')) STORED
         )"
@@ -91,7 +91,7 @@ pub async fn create_sqlite_view_table(pool: &Pool<Sqlite>, view_name: &str) -> R
 }
 
 /// Returns whether `view_name` exists in SQLite but predates the generated `human_id` column
-/// (ADR 0032) — the signal that it must be dropped and rebuilt rather than left in place. A
+/// (ADR 0032) or the `sequence` column (ADR 0050) — the signal that it must be dropped and rebuilt rather than left in place. A
 /// nonexistent table (nothing to migrate; the caller creates it fresh) is not stale.
 ///
 /// Uses `PRAGMA table_xinfo`, not `table_info`: SQLite reports a `GENERATED ALWAYS ... STORED`
@@ -109,8 +109,8 @@ pub async fn sqlite_view_table_is_stale(pool: &Pool<Sqlite>, view_name: &str) ->
     if rows.is_empty() {
         return Ok(false);
     }
-    let has_human_id = rows.iter().any(|row| row.get::<String, _>("name") == "human_id");
-    Ok(!has_human_id)
+    let has = |column: &str| rows.iter().any(|row| row.get::<String, _>("name") == column);
+    Ok(!has("human_id") || !has("sequence"))
 }
 
 /// Drops a SQLite view (read-model) table outright — the migration path for a shape change SQLite
@@ -216,10 +216,8 @@ pub async fn init_postgres(pool: &Pool<Postgres>) -> Result<(), sqlx::Error> {
     Ok(())
 }
 
-/// Creates a `cqrs-es` view (read-model) table with the layout `PostgresViewRepository` expects:
-/// `(view_id PRIMARY KEY, version, payload)` with a `json` payload, plus the generated `human_id`
-/// column (ADR 0032) every view table carries; `postgres-es` writes explicit column lists, so the
-/// extra column is invisible to it. `json_object_field_text` (what `->>` compiles to) is
+/// Creates a view (read-model) table — the twin of [`create_sqlite_view_table`], with a `json`
+/// payload. `json_object_field_text` (what `->>` compiles to) is
 /// `IMMUTABLE`, so no `::jsonb` cast is needed to make it a valid generated-column expression.
 ///
 /// `view_name` must be a trusted, code-supplied identifier (it is interpolated into the DDL).
@@ -232,7 +230,7 @@ pub async fn create_postgres_view_table(pool: &Pool<Postgres>, view_name: &str) 
     let ddl = format!(
         "CREATE TABLE IF NOT EXISTS {view_name} (
             view_id  TEXT   NOT NULL PRIMARY KEY,
-            version  BIGINT NOT NULL,
+            sequence BIGINT NOT NULL,
             payload  JSON   NOT NULL,
             human_id text GENERATED ALWAYS AS (payload->'state'->>'human_id') STORED
         )"
@@ -242,7 +240,7 @@ pub async fn create_postgres_view_table(pool: &Pool<Postgres>, view_name: &str) 
 }
 
 /// Returns whether `view_name` exists in Postgres but predates the generated `human_id` column
-/// (ADR 0032) — the twin of [`sqlite_view_table_is_stale`]. A nonexistent table (nothing to
+/// (ADR 0032) or the `sequence` column (ADR 0050) — the twin of [`sqlite_view_table_is_stale`]. A nonexistent table (nothing to
 /// migrate; the caller creates it fresh) is not stale.
 ///
 /// # Errors
@@ -253,14 +251,17 @@ pub async fn postgres_view_table_is_stale(pool: &Pool<Postgres>, view_name: &str
     let row = sqlx::query(
         "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = $1) AS table_exists, \
          EXISTS (SELECT 1 FROM information_schema.columns \
-         WHERE table_name = $1 AND column_name = 'human_id') AS has_human_id",
+         WHERE table_name = $1 AND column_name = 'human_id') AS has_human_id, \
+         EXISTS (SELECT 1 FROM information_schema.columns \
+         WHERE table_name = $1 AND column_name = 'sequence') AS has_sequence",
     )
     .bind(view_name)
     .fetch_one(pool)
     .await?;
     let table_exists: bool = row.get("table_exists");
     let has_human_id: bool = row.get("has_human_id");
-    Ok(table_exists && !has_human_id)
+    let has_sequence: bool = row.get("has_sequence");
+    Ok(table_exists && !(has_human_id && has_sequence))
 }
 
 /// Drops a Postgres view (read-model) table outright — the twin of [`drop_sqlite_view_table`].

@@ -315,7 +315,7 @@ async fn projection_rows_are_ordered_and_hold_every_view() {
     assert_eq!(rows.len(), 2);
     assert_eq!(rows[0].table, "person_view");
     assert!(rows[0].view_id < rows[1].view_id);
-    assert_eq!(rows[0].version, 1);
+    assert_eq!(rows[0].sequence, 1);
     assert_eq!(rows[0].payload["state"]["human_id"], "I0001");
 }
 

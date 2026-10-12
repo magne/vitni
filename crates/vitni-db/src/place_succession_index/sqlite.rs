@@ -51,7 +51,7 @@ async fn clear_tables(pool: &Pool<Sqlite>) -> Result<(), sqlx::Error> {
 
 /// A `cqrs-es` query that keeps the succession index in step with the Place projection: on every
 /// committed batch of Place events, recomputes that place's (anchor) rows from its current
-/// projection. Must be appended *after* the place `GenericQuery`, so the projection it reads is
+/// projection. Must be appended *after* the place projection query, so the projection it reads is
 /// already up to date.
 pub(crate) struct PlaceSuccessionIndexQuery {
     pool: Pool<Sqlite>,

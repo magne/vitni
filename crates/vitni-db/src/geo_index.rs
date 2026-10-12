@@ -63,7 +63,7 @@ async fn clear_tables(pool: &Pool<Sqlite>) -> Result<(), sqlx::Error> {
 
 /// A `cqrs-es` query that keeps the geometry index in step with the Place projection: on every
 /// committed batch of Place events, recomputes that place's rows from its current projection. Must
-/// be appended *after* the place `GenericQuery` in the framework's query list, so the projection it
+/// be appended *after* the place projection query in the framework's query list, so the projection it
 /// reads is already up to date.
 pub(crate) struct PlaceGeometryIndexQuery {
     pool: Pool<Sqlite>,

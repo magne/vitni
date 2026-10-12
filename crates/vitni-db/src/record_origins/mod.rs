@@ -43,8 +43,9 @@ const RECORD_ORIGINS_TABLE: &str = "record_origins";
 const RECORD_ORIGINS_STATE_TABLE: &str = "record_origins_state";
 
 /// The write journal: one row per command in flight, naming its aggregate. A command's events commit
-/// before their index rows are written, so a row left by a process killed in between names an
-/// aggregate whose newest events the next open indexes again.
+/// before its queries run — the projection, the indexes read from it and this index — so a row left
+/// by a process killed in between, or by a projection that failed to update, names an aggregate the
+/// next open replays through all of them (ADR 0050).
 const RECORD_ORIGINS_PENDING_TABLE: &str = "record_origins_pending";
 
 /// The two index columns an event's body determines.
