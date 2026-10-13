@@ -1,7 +1,7 @@
 # Remaining work (archived)
 
 - **Status:** **Superseded 2026-07-17** — the live outstanding-work items moved to
-  [`docs/issues.md`](../issues.md); phase-owned work is tracked in
+  `docs/issues.md` (retired in #615); phase-owned work is tracked in
   [`roadmap.md`](../roadmap.md). Retained here as a historical record; claims below were
   corrected against the code at archive time.
 - **Purpose (historical):** was the single index of work planned, deferred, or unfinished after the
@@ -56,7 +56,7 @@ long-running / streaming actions; multi-panel pages.
 
 The 2026-07 re-review shipped as PRs 39–45 (all merged); findings and plan are archived at
 [`phase5/ui-review.md`](phase5/ui-review.md) and [`phase5/ui-review-plan.md`](phase5/ui-review-plan.md).
-Its deferred/decision residue lives in [`docs/issues.md`](../issues.md).
+Its deferred/decision residue lives in `docs/issues.md` (retired in #615).
 
 ## Performance — deferred
 
@@ -68,7 +68,7 @@ Its deferred/decision residue lives in [`docs/issues.md`](../issues.md).
   roving-focus `nodes` bookkeeping window-aware. If server-side windowing is chosen instead of the
   current client-side search/sort over the full cached row set, add `list_view_page(table, offset,
   limit)` (+ Postgres mirror) and a generated column + index on `$.state.human_id` in
-  `crates/vitni-db`. *(Now tracked in [`docs/issues.md`](../issues.md).)*
+  `crates/vitni-db`. *(Now tracked in `docs/issues.md` (retired in #615).)*
 
 ## Phase 4 import/export — remaining (tracked in roadmap)
 

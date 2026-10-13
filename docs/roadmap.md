@@ -417,8 +417,9 @@ Plan: [`docs/archive/plans/places-geography-temporal.md`](archive/plans/places-g
   Postgres mirror — whose succession half turns out to be a functional break of `show_place` rather than a
   performance follow-up. The research also surfaced model gaps this phase did not anticipate: parallel
   civil/ecclesiastical/judicial hierarchies that do not nest, positional accuracy as a concept distinct
-  from `Confidence`, and cessation. All are additive; the itemization lives in
-  the [place issues](https://github.com/magne/vitni/issues?q=is%3Aopen+label%3Aarea%2Frecords%2Fplaces). The import itself is deliberately unmilestoned — see
+  from `Confidence`, and cessation. All are additive; the itemization lives in the
+  [place issues](https://github.com/magne/vitni/issues?q=is%3Aopen+label%3Aarea%2Frecords%2Fplaces).
+  The import itself is deliberately unmilestoned — see
   [`issue-tracking.md`](issue-tracking.md) §3.
 
 ## Phase 10 — Research rigor & import sync ✅ done
@@ -462,7 +463,9 @@ Research: [`surety-schemes.md`](research/surety-schemes.md),
 [`proof-argument-modelling.md`](research/proof-argument-modelling.md),
 [`merge-sync-conflict-resolution.md`](research/merge-sync-conflict-resolution.md); plan (archivable):
 [`docs/archive/plans/phase-10-research-rigor.md`](archive/plans/phase-10-research-rigor.md). Scoped residuals are
-tracked as issues — chiefly [bulk sync](https://github.com/magne/vitni/issues?q=is%3Aopen+label%3Aarea%2Fimport%2Fbulk), [round-trip gaps](https://github.com/magne/vitni/issues?q=is%3Aopen+label%3Aarea%2Fimport%2Fround-trip)
+tracked as issues — chiefly
+[bulk sync](https://github.com/magne/vitni/issues?q=is%3Aopen+label%3Aarea%2Fimport%2Fbulk),
+[round-trip gaps](https://github.com/magne/vitni/issues?q=is%3Aopen+label%3Aarea%2Fimport%2Fround-trip)
 and surety-scheme cardinality (#627).
 
 ## Phase 11 — 1.0 hardening ✅ done
@@ -501,7 +504,8 @@ app. Gated by **ADR 0014** (the last deferred plugin-system decision).
 Research: [`research/plugin-signing-and-trust.md`](research/plugin-signing-and-trust.md),
 [`research/performance-profiling.md`](research/performance-profiling.md); plan:
 [`archive/plans/phase-11-hardening.md`](archive/plans/phase-11-hardening.md). Scoped residuals are tracked as issues —
-[packaging & release](https://github.com/magne/vitni/issues?q=is%3Aopen+label%3Aarea%2Fplatform%2Fpackaging), [performance](https://github.com/magne/vitni/issues?q=is%3Aopen+label%3Aarea%2Fplatform%2Fperf) and
+[packaging & release](https://github.com/magne/vitni/issues?q=is%3Aopen+label%3Aarea%2Fplatform%2Fpackaging),
+[performance](https://github.com/magne/vitni/issues?q=is%3Aopen+label%3Aarea%2Fplatform%2Fperf) and
 [plugin trust & capabilities](https://github.com/magne/vitni/issues?q=is%3Aopen+label%3Aarea%2Fplugins%2Ftrust).
 
 ## Phase 12 — DNA breadth & depth
