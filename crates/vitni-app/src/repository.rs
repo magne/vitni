@@ -22,7 +22,7 @@ use crate::dto::{AggRef, AttachedRef, SourceLinkRef, tag_refs};
 use crate::error::AppError;
 use crate::identity::{self, IdentityDecision, PairDecision, RepositoryClusters};
 use crate::session::Session;
-use crate::use_case::{self, MutationMeta, Provenance};
+use crate::use_case::{self, MutationMeta, Provenance, resolve_note_id};
 use crate::workspace::Workspace;
 
 /// An address recorded on a repository, with the `AssertionId` that introduced it — the target a
@@ -261,20 +261,22 @@ pub async fn add_repository_url(
     .await
 }
 
-/// Attaches a note (by note aggregate id) to a repository, identified by `human_id`.
+/// Attaches the note named by `note_human_id` to the repository identified by `human_id`.
 ///
 /// # Errors
 ///
-/// [`AppError::RepositoryNotFound`] if no such repository exists, or a workspace/store error.
+/// [`AppError::RepositoryNotFound`] / [`AppError::NoteNotFound`] if either does not exist, or a
+/// workspace/store error.
 pub async fn attach_repository_note(
     workspace: &Workspace,
     session: &Session,
     human_id: &str,
-    note_id: NoteId,
+    note_human_id: &str,
     meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let repository_id = resolve_repository_id(store, human_id).await?;
+    let note_id = resolve_note_id(store, note_human_id).await?;
     execute_repository_mutation(
         store,
         session,
@@ -782,28 +784,6 @@ fn summarize(view: &RepositoryView, lookups: &RepositoryLookups) -> RepositorySu
         merged: Vec::new(),
         claim_owners: BTreeMap::new(),
     }
-}
-
-/// Attaches a note (by its `human_id`) to a repository — the frontend/importer-facing wrapper.
-///
-/// # Errors
-///
-/// [`AppError::RepositoryNotFound`] / [`AppError::NoteNotFound`] if either does not exist, or a
-/// workspace/store error.
-pub async fn import_attach_repository_note(
-    workspace: &Workspace,
-    session: &Session,
-    repository_human_id: &str,
-    note_human_id: &str,
-    meta: MutationMeta<'_>,
-) -> Result<(), AppError> {
-    let store = workspace.store();
-    let note_id = use_case::resolve_id(
-        store.find_note(note_human_id).await?,
-        vitni_core::note::NoteView::note_id,
-        || AppError::NoteNotFound(note_human_id.to_owned()),
-    )?;
-    attach_repository_note(workspace, session, repository_human_id, note_id, meta).await
 }
 
 /// Summarises a cluster — its root first, then its members — as one repository (ADR 0039 §5): the root's

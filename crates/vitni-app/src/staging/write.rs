@@ -16,7 +16,7 @@ use vitni_core::origin::{DatasetId, RecordOrigin};
 use vitni_core::provenance::Timestamp;
 
 use crate::error::AppError;
-use crate::event::{ImportedMediaRef, NewEvent};
+use crate::event::NewEvent;
 use crate::import::ImportedChild;
 use crate::person::{NewParticipation, NewPerson};
 use crate::session::Session;
@@ -697,13 +697,7 @@ impl Writer<'_> {
                 };
                 match owner_of(of, resolve)? {
                     Owner::Family => family::attach_family_media(ws, session, owner, &media, input, meta()).await?,
-                    Owner::Event => {
-                        let media = ImportedMediaRef {
-                            media_human_id: media,
-                            input,
-                        };
-                        event::import_attach_event_media(ws, session, owner, media, meta()).await?;
-                    }
+                    Owner::Event => event::attach_event_media(ws, session, owner, &media, input, meta()).await?,
                     Owner::Person => person::attach_person_media(ws, session, owner, &media, input, meta()).await?,
                     Owner::Citation => return Err(LinkError::Dangling),
                 }
@@ -712,7 +706,7 @@ impl Writer<'_> {
                 let note = end(note)?;
                 match owner_of(of, resolve)? {
                     Owner::Family => family::attach_family_note(ws, session, owner, &note, meta()).await?,
-                    Owner::Event => event::import_attach_event_note(ws, session, owner, &note, meta()).await?,
+                    Owner::Event => event::attach_event_note(ws, session, owner, &note, meta()).await?,
                     Owner::Citation => citation::attach_citation_note(ws, session, owner, &note, meta()).await?,
                     Owner::Person => person::attach_person_note(ws, session, owner, &note, meta()).await?,
                 }

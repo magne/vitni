@@ -172,7 +172,7 @@ pub async fn citation_profile(workspace: &Workspace, human_id: &str) -> Result<C
 pub async fn media_profile(workspace: &Workspace, human_id: &str) -> Result<MediaProfile, AppError> {
     let store = workspace.store();
     let not_found = || AppError::MediaNotFound(human_id.to_owned());
-    let media_id = use_case::resolve_id(store.find_media(human_id).await?, MediaView::media_id, not_found)?;
+    let media_id = use_case::resolve_media_id(store, human_id).await?;
     let profiles = Profiles::of_record(store, MatchableKind::Media, media_id).await?;
     profiles.media(media_id).ok_or_else(not_found)
 }
@@ -185,7 +185,7 @@ pub async fn media_profile(workspace: &Workspace, human_id: &str) -> Result<Medi
 pub async fn note_profile(workspace: &Workspace, human_id: &str) -> Result<NoteProfile, AppError> {
     let store = workspace.store();
     let not_found = || AppError::NoteNotFound(human_id.to_owned());
-    let note_id = use_case::resolve_id(store.find_note(human_id).await?, NoteView::note_id, not_found)?;
+    let note_id = use_case::resolve_note_id(store, human_id).await?;
     let profiles = Profiles::of_record(store, MatchableKind::Note, note_id).await?;
     profiles.note(note_id).ok_or_else(not_found)
 }

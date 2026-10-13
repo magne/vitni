@@ -17,7 +17,7 @@ use crate::error::AppError;
 use crate::identity::{self, IdentityDecision, NoteClusters, PairDecision};
 use crate::note_usage::NoteUsage;
 use crate::session::Session;
-use crate::use_case::{self, MutationMeta, Provenance};
+use crate::use_case::{self, MutationMeta, Provenance, resolve_note_id};
 use crate::workspace::Workspace;
 
 /// A frontend-neutral summary of a note (the DTO the CLI renders), carrying its stable id and the
@@ -618,13 +618,6 @@ fn superseded(note_id: NoteId, command: NoteCommand, target: Option<AssertionId>
         },
         None => command,
     }
-}
-
-/// Resolves a `human_id` to its aggregate [`NoteId`], or [`AppError::NoteNotFound`].
-async fn resolve_note_id(store: &Store, human_id: &str) -> Result<NoteId, AppError> {
-    use_case::resolve_id(store.find_note(human_id).await?, NoteView::note_id, || {
-        AppError::NoteNotFound(human_id.to_owned())
-    })
 }
 
 /// Builds a Markdown [`RichText`] from plain text (language is not collected by the CLI yet).

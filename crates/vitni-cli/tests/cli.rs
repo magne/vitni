@@ -1390,3 +1390,52 @@ fn restrictions_render_in_the_workspace_language() {
         stdout(&shown)
     );
 }
+
+#[test]
+fn every_attach_verb_takes_the_human_id_the_cli_printed() {
+    let verbs = [
+        ("event", "attach-note", "--note"),
+        ("event", "attach-media", "--media"),
+        ("place", "attach-note", "--note"),
+        ("place", "attach-media", "--media"),
+        ("source", "attach-note", "--note"),
+        ("source", "attach-media", "--media"),
+        ("repository", "attach-note", "--note"),
+        ("media", "attach-note", "--note"),
+        ("dna-test", "attach-note", "--note"),
+        ("dna-match", "attach-note", "--note"),
+    ];
+    for (aggregate, verb, flag) in verbs {
+        let dir = TempDir::new().unwrap();
+        init(dir.path());
+        let owner = create_restrictable(dir.path(), aggregate);
+        let attached = match flag {
+            "--note" => create_record(dir.path(), &["note", "create", "--text", "Banns read"]),
+            _ => create_record(dir.path(), &["media", "create", "--path", "register.png"]),
+        };
+
+        vitni(dir.path())
+            .args([aggregate, verb, flag, &attached, &owner])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains(format!("Updated {owner}")));
+    }
+}
+
+#[test]
+fn an_attach_verb_naming_an_unknown_note_or_media_fails() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    let event = create_record(dir.path(), &["event", "create", "--type", "birth"]);
+
+    vitni(dir.path())
+        .args(["event", "attach-note", "--note", "N9999", &event])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("no note with human_id \"N9999\""));
+    vitni(dir.path())
+        .args(["event", "attach-media", "--media", "O9999", &event])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("no media with human_id \"O9999\""));
+}

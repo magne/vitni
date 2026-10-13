@@ -9,7 +9,9 @@ use std::collections::HashMap;
 use uuid::Uuid;
 use vitni_core::assertions::Attributed;
 use vitni_core::enums::NoteType;
-use vitni_core::ids::{AssertionId, NoteId};
+use vitni_core::ids::{AssertionId, MediaId, NoteId};
+use vitni_core::media::MediaView;
+use vitni_core::note::NoteView;
 use vitni_core::origin::RecordOrigin;
 use vitni_core::provenance::{Confidence, EvidenceAnalysis, EvidenceRef};
 use vitni_core::text::Rect;
@@ -225,4 +227,18 @@ pub(crate) fn resolve_id<V, Id>(
         return Err(not_found());
     };
     extract(&view).ok_or_else(not_found)
+}
+
+/// Resolves a media `human_id` to its aggregate [`MediaId`], or [`AppError::MediaNotFound`].
+pub(crate) async fn resolve_media_id(store: &Store, human_id: &str) -> Result<MediaId, AppError> {
+    resolve_id(store.find_media(human_id).await?, MediaView::media_id, || {
+        AppError::MediaNotFound(human_id.to_owned())
+    })
+}
+
+/// Resolves a note `human_id` to its aggregate [`NoteId`], or [`AppError::NoteNotFound`].
+pub(crate) async fn resolve_note_id(store: &Store, human_id: &str) -> Result<NoteId, AppError> {
+    resolve_id(store.find_note(human_id).await?, NoteView::note_id, || {
+        AppError::NoteNotFound(human_id.to_owned())
+    })
 }

@@ -179,14 +179,7 @@ async fn fixture() -> Fixture {
         .await
         .expect("cite");
     let event_note = note(&ws, "Banns read three Sundays").await;
-    let note_id = ws
-        .store()
-        .find_note(&event_note)
-        .await
-        .expect("find")
-        .and_then(|view| view.note_id())
-        .expect("note id");
-    attach_event_note(&ws, &s, &member_event, note_id, meta())
+    attach_event_note(&ws, &s, &member_event, &event_note, meta())
         .await
         .expect("note");
 

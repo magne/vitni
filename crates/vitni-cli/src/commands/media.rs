@@ -7,7 +7,6 @@ use vitni_app::{
     add_media_citation, assert_media_date, attach_media_note, create_media, list_media, set_media_checksum,
     set_media_file_path, set_media_restrictions, set_media_web_path, show_media, tag_media,
 };
-use vitni_core::ids::NoteId;
 
 use crate::args::RestrictionsArgs;
 use crate::commands::similar::hint_similar;
@@ -81,9 +80,9 @@ pub enum MediaCmd {
     AttachNote {
         /// The media's human id (e.g. `O0001`).
         human_id: String,
-        /// The note aggregate id (UUID).
+        /// The note's human id (e.g. `N0001`).
         #[arg(long)]
-        note: Uuid,
+        note: String,
     },
     /// Apply a tag to a media object.
     Tag {
@@ -179,7 +178,7 @@ pub async fn run(
             Ok(())
         }
         MediaCmd::AttachNote { human_id, note } => {
-            attach_media_note(workspace, session, &human_id, NoteId::from_uuid(note), meta).await?;
+            attach_media_note(workspace, session, &human_id, &note, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }

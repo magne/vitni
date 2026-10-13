@@ -31,7 +31,7 @@ use crate::event::{DateParts, gregorian_date};
 use crate::identity::{self, IdentityDecision, MediaClusters, PairDecision};
 use crate::media_usage::MediaUsage;
 use crate::session::Session;
-use crate::use_case::{self, MutationMeta, Provenance};
+use crate::use_case::{self, MutationMeta, Provenance, resolve_media_id, resolve_note_id};
 use crate::workspace::Workspace;
 
 /// A frontend-neutral summary of a media object (the DTO the CLI renders), carrying its stable id and
@@ -352,20 +352,22 @@ pub async fn add_media_citation(
     .await
 }
 
-/// Attaches a note (by note aggregate id) to a media object, identified by `human_id`.
+/// Attaches the note named by `note_human_id` to the media object identified by `human_id`.
 ///
 /// # Errors
 ///
-/// [`AppError::MediaNotFound`] if no such media exists, or a workspace/store error.
+/// [`AppError::MediaNotFound`] / [`AppError::NoteNotFound`] if either does not exist, or a
+/// workspace/store error.
 pub async fn attach_media_note(
     workspace: &Workspace,
     session: &Session,
     human_id: &str,
-    note_id: NoteId,
+    note_human_id: &str,
     meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let media_id = resolve_media_id(store, human_id).await?;
+    let note_id = resolve_note_id(store, note_human_id).await?;
     execute_media_mutation(
         store,
         session,
@@ -422,28 +424,6 @@ fn parse_tag_id(id: &str) -> Result<TagId, AppError> {
     uuid::Uuid::parse_str(id)
         .map(TagId::from_uuid)
         .map_err(|_| AppError::TagNotFound(id.to_owned()))
-}
-
-/// Attaches a note (by its `human_id`) to a media object — the frontend/importer-facing wrapper.
-///
-/// # Errors
-///
-/// [`AppError::MediaNotFound`] / [`AppError::NoteNotFound`] if either does not exist, or a
-/// workspace/store error.
-pub async fn import_attach_media_note(
-    workspace: &Workspace,
-    session: &Session,
-    media_human_id: &str,
-    note_human_id: &str,
-    meta: MutationMeta<'_>,
-) -> Result<(), AppError> {
-    let store = workspace.store();
-    let note_id = use_case::resolve_id(
-        store.find_note(note_human_id).await?,
-        vitni_core::note::NoteView::note_id,
-        || AppError::NoteNotFound(note_human_id.to_owned()),
-    )?;
-    attach_media_note(workspace, session, media_human_id, note_id, meta).await
 }
 
 /// The outcome of [`merge_media`]: the survivor's refreshed summary and the merged media object's
@@ -848,13 +828,6 @@ fn superseded(media_id: MediaId, command: MediaCommand, target: Option<Assertion
         },
         None => command,
     }
-}
-
-/// Resolves a `human_id` to its aggregate [`MediaId`], or [`AppError::MediaNotFound`].
-async fn resolve_media_id(store: &Store, human_id: &str) -> Result<MediaId, AppError> {
-    use_case::resolve_id(store.find_media(human_id).await?, MediaView::media_id, || {
-        AppError::MediaNotFound(human_id.to_owned())
-    })
 }
 
 /// Resolves a citation `human_id` to its aggregate [`CitationId`], or [`AppError::CitationNotFound`].

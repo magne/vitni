@@ -7,7 +7,6 @@ use vitni_app::{
     add_repository_address, add_repository_url, attach_repository_note, create_repository, list_repositories,
     set_repository_name, set_repository_restrictions, set_repository_type, show_repository, tag_repository,
 };
-use vitni_core::ids::NoteId;
 
 use crate::args::{RepositoryTypeArg, RestrictionsArgs};
 use crate::commands::similar::hint_similar;
@@ -77,9 +76,9 @@ pub enum RepositoryCmd {
     AttachNote {
         /// The repository's human id (e.g. `R0001`).
         human_id: String,
-        /// The note aggregate id (UUID).
+        /// The note's human id (e.g. `N0001`).
         #[arg(long)]
-        note: Uuid,
+        note: String,
     },
     /// Apply a tag to a repository.
     Tag {
@@ -181,7 +180,7 @@ pub async fn run(
             Ok(())
         }
         RepositoryCmd::AttachNote { human_id, note } => {
-            attach_repository_note(workspace, session, &human_id, NoteId::from_uuid(note), meta).await?;
+            attach_repository_note(workspace, session, &human_id, &note, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }

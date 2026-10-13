@@ -7,7 +7,7 @@ use vitni_app::{
     Workspace, add_dna_match_segment, assert_dna_match_shared_ancestor, attach_dna_match_note, list_dna_matches,
     observe_dna_match, set_dna_match_restrictions, set_dna_match_status, show_dna_match, tag_dna_match,
 };
-use vitni_core::ids::{NoteId, PersonId};
+use vitni_core::ids::PersonId;
 
 use crate::args::{ChromosomeSideArg, DnaProviderArg, RestrictionsArgs};
 use crate::i18n::Localizer;
@@ -93,9 +93,9 @@ pub enum DnaMatchCmd {
     AttachNote {
         /// The match's human id (e.g. `X0001`).
         human_id: String,
-        /// The note aggregate id (UUID).
+        /// The note's human id (e.g. `N0001`).
         #[arg(long)]
-        note: Uuid,
+        note: String,
     },
     /// Apply a tag to a match.
     Tag {
@@ -211,7 +211,7 @@ pub async fn run(
             Ok(())
         }
         DnaMatchCmd::AttachNote { human_id, note } => {
-            attach_dna_match_note(workspace, session, &human_id, NoteId::from_uuid(note), meta).await?;
+            attach_dna_match_note(workspace, session, &human_id, &note, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }

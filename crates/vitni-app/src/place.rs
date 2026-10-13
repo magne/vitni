@@ -32,7 +32,7 @@ use crate::geography::{EventPin, build_event_pins, place_point};
 use crate::identity::{self, IdentityDecision, PairDecision, PlaceClusters};
 use crate::place_hierarchy::{HierarchyHop, generated_title, hierarchy_chain};
 use crate::session::Session;
-use crate::use_case::{self, MediaRefInput, MutationMeta, Provenance};
+use crate::use_case::{self, MediaRefInput, MutationMeta, Provenance, resolve_media_id, resolve_note_id};
 use crate::workspace::Workspace;
 
 /// An asserted place name, with its language/date metadata and the assertion's provenance (the
@@ -599,21 +599,23 @@ pub async fn add_place_citation(
     .await
 }
 
-/// Attaches a media reference (by media aggregate id) to a place, identified by `human_id`.
+/// Attaches the media object named by `media_human_id` to the place identified by `human_id`.
 ///
 /// # Errors
 ///
-/// [`AppError::PlaceNotFound`] if no such place exists, or a workspace/store error.
+/// [`AppError::PlaceNotFound`] / [`AppError::MediaNotFound`] if either does not exist, or a
+/// workspace/store error.
 pub async fn attach_place_media(
     workspace: &Workspace,
     session: &Session,
     human_id: &str,
-    media_id: MediaId,
+    media_human_id: &str,
     input: MediaRefInput,
     meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let place_id = resolve_place_id(store, human_id).await?;
+    let media_id = resolve_media_id(store, media_human_id).await?;
     execute_place_mutation(
         store,
         session,
@@ -680,20 +682,22 @@ pub async fn update_place_media_ref(
     .await
 }
 
-/// Attaches a note (by note aggregate id) to a place, identified by `human_id`.
+/// Attaches the note named by `note_human_id` to the place identified by `human_id`.
 ///
 /// # Errors
 ///
-/// [`AppError::PlaceNotFound`] if no such place exists, or a workspace/store error.
+/// [`AppError::PlaceNotFound`] / [`AppError::NoteNotFound`] if either does not exist, or a
+/// workspace/store error.
 pub async fn attach_place_note(
     workspace: &Workspace,
     session: &Session,
     human_id: &str,
-    note_id: NoteId,
+    note_human_id: &str,
     meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let place_id = resolve_place_id(store, human_id).await?;
+    let note_id = resolve_note_id(store, note_human_id).await?;
     execute_place_mutation(
         store,
         session,
@@ -702,59 +706,6 @@ pub async fn attach_place_note(
         meta,
     )
     .await
-}
-
-/// Attaches a media object (by its `human_id`) to a place — the frontend/importer-facing wrapper
-/// that resolves the media `human_id` to its id, so a caller never handles UUIDs.
-///
-/// # Errors
-///
-/// [`AppError::PlaceNotFound`] / [`AppError::MediaNotFound`] if either does not exist, or a
-/// workspace/store error.
-pub async fn import_attach_place_media(
-    workspace: &Workspace,
-    session: &Session,
-    place_human_id: &str,
-    media_human_id: &str,
-    meta: MutationMeta<'_>,
-) -> Result<(), AppError> {
-    let store = workspace.store();
-    let media_id = use_case::resolve_id(
-        store.find_media(media_human_id).await?,
-        vitni_core::media::MediaView::media_id,
-        || AppError::MediaNotFound(media_human_id.to_owned()),
-    )?;
-    attach_place_media(
-        workspace,
-        session,
-        place_human_id,
-        media_id,
-        MediaRefInput::default(),
-        meta,
-    )
-    .await
-}
-
-/// Attaches a note (by its `human_id`) to a place — the frontend/importer-facing wrapper.
-///
-/// # Errors
-///
-/// [`AppError::PlaceNotFound`] / [`AppError::NoteNotFound`] if either does not exist, or a
-/// workspace/store error.
-pub async fn import_attach_place_note(
-    workspace: &Workspace,
-    session: &Session,
-    place_human_id: &str,
-    note_human_id: &str,
-    meta: MutationMeta<'_>,
-) -> Result<(), AppError> {
-    let store = workspace.store();
-    let note_id = use_case::resolve_id(
-        store.find_note(note_human_id).await?,
-        vitni_core::note::NoteView::note_id,
-        || AppError::NoteNotFound(note_human_id.to_owned()),
-    )?;
-    attach_place_note(workspace, session, place_human_id, note_id, meta).await
 }
 
 /// Applies (or removes) a tag on a place, identified by `human_id`. A removed tag is untagged on

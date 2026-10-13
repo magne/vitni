@@ -9,7 +9,6 @@ use vitni_app::{
     set_place_code, set_place_restrictions, set_place_type, show_place, tag_place,
 };
 use vitni_core::geo::{GeoCoordinates, Microdegrees};
-use vitni_core::ids::{MediaId, NoteId};
 
 use crate::args::{PlaceTypeArg, RestrictionsArgs, SuccessionKindArg};
 use crate::commands::similar::hint_similar;
@@ -111,9 +110,9 @@ pub enum PlaceCmd {
     AttachMedia {
         /// The place's human id (e.g. `P0001`).
         human_id: String,
-        /// The media aggregate id (UUID).
+        /// The media object's human id (e.g. `O0001`).
         #[arg(long)]
-        media: Uuid,
+        media: String,
         /// A caption specific to this use.
         #[arg(long)]
         caption: Option<String>,
@@ -122,9 +121,9 @@ pub enum PlaceCmd {
     AttachNote {
         /// The place's human id (e.g. `P0001`).
         human_id: String,
-        /// The note aggregate id (UUID).
+        /// The note's human id (e.g. `N0001`).
         #[arg(long)]
-        note: Uuid,
+        note: String,
     },
     /// Apply a tag to a place.
     Tag {
@@ -238,12 +237,12 @@ pub async fn run(
             caption,
         } => {
             let input = MediaRefInput { crop: None, caption };
-            attach_place_media(workspace, session, &human_id, MediaId::from_uuid(media), input, meta).await?;
+            attach_place_media(workspace, session, &human_id, &media, input, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         PlaceCmd::AttachNote { human_id, note } => {
-            attach_place_note(workspace, session, &human_id, NoteId::from_uuid(note), meta).await?;
+            attach_place_note(workspace, session, &human_id, &note, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }

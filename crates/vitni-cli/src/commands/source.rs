@@ -8,7 +8,6 @@ use vitni_app::{
     set_source_abbrev, set_source_author, set_source_pub_info, set_source_restrictions, set_title, show_source,
     tag_source,
 };
-use vitni_core::ids::{MediaId, NoteId};
 
 use crate::args::{RestrictionsArgs, SourceMediaTypeArg};
 use crate::commands::similar::hint_similar;
@@ -83,9 +82,9 @@ pub enum SourceCmd {
     AttachMedia {
         /// The source's human id (e.g. `S0001`).
         human_id: String,
-        /// The media aggregate id (UUID).
+        /// The media object's human id (e.g. `O0001`).
         #[arg(long)]
-        media: Uuid,
+        media: String,
         /// A caption specific to this use.
         #[arg(long)]
         caption: Option<String>,
@@ -94,9 +93,9 @@ pub enum SourceCmd {
     AttachNote {
         /// The source's human id (e.g. `S0001`).
         human_id: String,
-        /// The note aggregate id (UUID).
+        /// The note's human id (e.g. `N0001`).
         #[arg(long)]
-        note: Uuid,
+        note: String,
     },
     /// Apply a tag to a source.
     Tag {
@@ -206,12 +205,12 @@ pub async fn run(
             caption,
         } => {
             let input = MediaRefInput { crop: None, caption };
-            attach_source_media(workspace, session, &human_id, MediaId::from_uuid(media), input, meta).await?;
+            attach_source_media(workspace, session, &human_id, &media, input, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         SourceCmd::AttachNote { human_id, note } => {
-            attach_source_note(workspace, session, &human_id, NoteId::from_uuid(note), meta).await?;
+            attach_source_note(workspace, session, &human_id, &note, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }

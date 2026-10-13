@@ -32,7 +32,7 @@ use crate::error::AppError;
 use crate::identity::{self, EventClusters, IdentityDecision, PairDecision};
 use crate::person::list_persons;
 use crate::session::Session;
-use crate::use_case::{self, MediaRefInput, MutationMeta, Provenance};
+use crate::use_case::{self, MediaRefInput, MutationMeta, Provenance, resolve_media_id, resolve_note_id};
 use crate::workspace::Workspace;
 
 /// A postal address recorded on an event, with the `AssertionId` that introduced it — the target a
@@ -453,21 +453,23 @@ pub async fn add_event_citation(
     .await
 }
 
-/// Attaches a media reference (by media aggregate id) to an event, identified by `human_id`.
+/// Attaches the media object named by `media_human_id` to the event identified by `human_id`.
 ///
 /// # Errors
 ///
-/// [`AppError::EventNotFound`] if no such event exists, or a workspace/store error.
+/// [`AppError::EventNotFound`] / [`AppError::MediaNotFound`] if either does not exist, or a
+/// workspace/store error.
 pub async fn attach_event_media(
     workspace: &Workspace,
     session: &Session,
     human_id: &str,
-    media_id: MediaId,
+    media_human_id: &str,
     input: MediaRefInput,
     meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let event_id = resolve_event_id(store, human_id).await?;
+    let media_id = resolve_media_id(store, media_human_id).await?;
     execute_event_mutation(
         store,
         session,
@@ -534,20 +536,22 @@ pub async fn update_event_media_ref(
     .await
 }
 
-/// Attaches a note (by note aggregate id) to an event, identified by `human_id`.
+/// Attaches the note named by `note_human_id` to the event identified by `human_id`.
 ///
 /// # Errors
 ///
-/// [`AppError::EventNotFound`] if no such event exists, or a workspace/store error.
+/// [`AppError::EventNotFound`] / [`AppError::NoteNotFound`] if either does not exist, or a
+/// workspace/store error.
 pub async fn attach_event_note(
     workspace: &Workspace,
     session: &Session,
     human_id: &str,
-    note_id: NoteId,
+    note_human_id: &str,
     meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let event_id = resolve_event_id(store, human_id).await?;
+    let note_id = resolve_note_id(store, note_human_id).await?;
     execute_event_mutation(
         store,
         session,
@@ -556,61 +560,6 @@ pub async fn attach_event_note(
         meta,
     )
     .await
-}
-
-/// A media reference an importer attaches: the media object's `human_id` and the region and caption
-/// the reference carries.
-#[derive(Debug, Clone)]
-pub struct ImportedMediaRef {
-    /// The media object's `human_id`.
-    pub media_human_id: String,
-    /// The crop region and caption of this reference.
-    pub input: MediaRefInput,
-}
-
-/// Attaches a media object (by its `human_id`) to an event — the frontend/importer-facing wrapper
-/// that resolves the media `human_id` to its id, so a caller never handles UUIDs.
-///
-/// # Errors
-///
-/// [`AppError::EventNotFound`] / [`AppError::MediaNotFound`] if either does not exist, or a
-/// workspace/store error.
-pub async fn import_attach_event_media(
-    workspace: &Workspace,
-    session: &Session,
-    event_human_id: &str,
-    media: ImportedMediaRef,
-    meta: MutationMeta<'_>,
-) -> Result<(), AppError> {
-    let store = workspace.store();
-    let media_id = use_case::resolve_id(
-        store.find_media(&media.media_human_id).await?,
-        vitni_core::media::MediaView::media_id,
-        || AppError::MediaNotFound(media.media_human_id.clone()),
-    )?;
-    attach_event_media(workspace, session, event_human_id, media_id, media.input, meta).await
-}
-
-/// Attaches a note (by its `human_id`) to an event — the frontend/importer-facing wrapper.
-///
-/// # Errors
-///
-/// [`AppError::EventNotFound`] / [`AppError::NoteNotFound`] if either does not exist, or a
-/// workspace/store error.
-pub async fn import_attach_event_note(
-    workspace: &Workspace,
-    session: &Session,
-    event_human_id: &str,
-    note_human_id: &str,
-    meta: MutationMeta<'_>,
-) -> Result<(), AppError> {
-    let store = workspace.store();
-    let note_id = use_case::resolve_id(
-        store.find_note(note_human_id).await?,
-        vitni_core::note::NoteView::note_id,
-        || AppError::NoteNotFound(note_human_id.to_owned()),
-    )?;
-    attach_event_note(workspace, session, event_human_id, note_id, meta).await
 }
 
 /// Applies (or removes) a tag on an event, identified by `human_id`. A removed tag is untagged on
