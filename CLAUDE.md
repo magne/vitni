@@ -32,9 +32,8 @@ These docs are the source of truth; read them before changing the core or its wi
   supersede it with a new one. Start from **`docs/adr/README.md`**, the index (one-line decision and
   keywords per ADR); a new ADR adds its row there (`cargo xtask adr-index` checks it).
 - **`docs/roadmap.md` (+ `roadmap.html`) owns phase/progress state** — read it rather than
-  tracking progress here. **Open work lives in GitHub Issues**; `docs/issues.md` is the legacy
-  backlog being moved there (#615), and its *Decided — no action needed* section records deliberate
-  non-tasks, so check there before "fixing" something. Completed work is in
+  tracking progress here. **Open work lives in GitHub Issues**, and `docs/decisions.md` records
+  deliberate non-tasks, so check there before "fixing" something. Completed work is in
   `docs/archive/completed-work.md`; how issues, labels and milestones work is in
   `docs/issue-tracking.md`. Also `release.md`, `second-renderer-checklist.md`,
   `mockups/`, `research/`.
@@ -125,7 +124,7 @@ prek run                                                             # run git h
 ```
 
 `cargo xtask` also runs the individual checks (`i18n-check`, `css-check`, `input-guard`,
-`licence-check`, `icons --check`, `backup-guard`, `fixture-guard`, `match-eval`, `adr-index`) plus `issue-sync`, `labels`, and
+`licence-check`, `icons --check`, `backup-guard`, `fixture-guard`, `match-eval`, `adr-index`) plus `labels` and
 `package` (Linux release tarball).
 
 The **app icon** lives in `crates/vitni-ui-dioxus/assets/icon/` (four SVG tiers — the seal on the V's

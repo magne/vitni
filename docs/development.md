@@ -87,7 +87,7 @@ The matching bench seeds a 100k-person workspace of several gigabytes under `tar
 out of `/tmp`, which may be RAM-backed.
 
 `cargo xtask` also exposes the individual checks (`i18n-check`, `css-check`, `input-guard`,
-`licence-check`, `icons --check`, `backup-guard`, `fixture-guard`, `match-eval`) plus `issue-sync`, `labels`,
+`licence-check`, `icons --check`, `backup-guard`, `fixture-guard`, `match-eval`, `adr-index`) plus `labels`,
 `package` (the Linux release tarball) and `screenshots` (the README images, below).
 
 ## The app icon and the brand art
@@ -560,10 +560,9 @@ The ones that will fail a review if missed:
   with `prek install`.
 
 Open work lives in [GitHub Issues](https://github.com/magne/vitni/issues).
-[`docs/issues.md`](issues.md) holds the legacy backlog and, in its *Decided — no action needed*
-section, deliberate non-tasks, so check there before "fixing" something.
-[`issue-tracking.md`](issue-tracking.md) explains the labels, milestones and the legacy doc ↔ tracker
-linkage that `cargo xtask issue-sync` enforces.
+[`docs/decisions.md`](decisions.md) records deliberate non-tasks, so check there before "fixing"
+something.
+[`issue-tracking.md`](issue-tracking.md) explains the labels, milestones, triage and closure.
 
 > **Note on CI.** `ci.yml` runs `fmt + clippy`, `test`, `postgres integration tests` and `cargo-deny`
 > on every push to `main` and every pull request — but it filters out `docs/**`, `*.md` and

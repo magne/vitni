@@ -148,9 +148,8 @@ pub struct MovedCamera {
 
 /// [`map_surface`]'s mount parameters, bundled so the function stays within the house limit of 5
 /// positional parameters instead of growing an `#[expect(clippy::too_many_arguments)]` every time the
-/// surface gains one more caller-supplied piece of state (`docs/issues.md`'s "one struct for the
-/// surface's mount parameters" bullet). [`mount_maplibre`] borrows the same struct — its own mount
-/// script only ever needs a subset of these fields.
+/// surface gains one more caller-supplied piece of state. [`mount_maplibre`] borrows the same struct —
+/// its own mount script only ever needs a subset of these fields.
 pub struct MapSurface {
     /// The mount `div`'s DOM id; distinguishes the two possible mounts (Geography's whole-atlas view,
     /// the Place screen's per-place Map tab) so both could coexist if ever shown together.

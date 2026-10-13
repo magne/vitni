@@ -15,7 +15,7 @@ use vitni_ui::Localizer;
 const OWN_WORDING: [(&str, &str); 1] = [(
     "tag.html",
     "a tag has no retraction, so its note says History is display-only (the app still shows the shared note: \
-     docs/issues.md, \"The Tag History tab says any entry can be undone\")",
+     #578, \"The Tag History tab says any entry can be undone\")",
 )];
 
 fn mockups_dir() -> PathBuf {

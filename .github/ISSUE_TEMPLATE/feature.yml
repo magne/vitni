@@ -5,9 +5,10 @@ body:
   - type: markdown
     attributes:
       value: |
-        Check [`docs/issues.md`](https://github.com/magne/vitni/blob/main/docs/issues.md) first —
-        most known gaps already have a bullet, and filing should usually *link* one rather than
-        duplicate it.
+        Search the [open issues](https://github.com/magne/vitni/issues) first — most known gaps
+        already have one — and check
+        [`docs/decisions.md`](https://github.com/magne/vitni/blob/main/docs/decisions.md) for gaps left
+        open on purpose.
 
   - type: dropdown
     id: area
@@ -22,6 +23,7 @@ body:
         - records/dna
         - records/cross-aggregate
         - frontend/shell
+        - frontend/records
         - frontend/lists
         - frontend/keyboard
         - frontend/pedigree
@@ -61,12 +63,6 @@ body:
         side, and the gap is only the frontend wiring.
     validations:
       required: true
-
-  - type: input
-    id: bullet
-    attributes:
-      label: Existing docs/issues.md bullet, if any
-      placeholder: "Records & data model → Places: \"Place succession can be read but never written\""
 
   - type: checkboxes
     id: gates

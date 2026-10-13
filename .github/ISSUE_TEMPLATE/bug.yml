@@ -5,15 +5,15 @@ body:
   - type: markdown
     attributes:
       value: |
-        Check [`docs/issues.md`](https://github.com/magne/vitni/blob/main/docs/issues.md) first —
-        including its **Decided — no action needed** section, which records deliberate behaviour that
-        looks like a defect but isn't.
+        Search the [open issues](https://github.com/magne/vitni/issues) first, and check
+        [`docs/decisions.md`](https://github.com/magne/vitni/blob/main/docs/decisions.md), which records
+        deliberate behaviour that looks like a defect but isn't.
 
   - type: dropdown
     id: area
     attributes:
       label: Area
-      description: Mirrors the `###` headings of `docs/issues.md`. Triage adds the matching `area/*` label.
+      description: Mirrors the `area/*` labels in `.github/labels.toml`. Triage adds the matching label.
       options:
         - records/person-family
         - records/places
@@ -23,6 +23,7 @@ body:
         - records/dna
         - records/cross-aggregate
         - frontend/shell
+        - frontend/records
         - frontend/lists
         - frontend/keyboard
         - frontend/pedigree

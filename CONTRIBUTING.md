@@ -13,8 +13,9 @@ Participation is under the [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) (Contribut
 - **The architecture is written down.** [`docs/data-model.md`](docs/data-model.md) is the domain
   vocabulary and [`docs/adr/`](docs/adr/) holds the decisions. A change that contradicts an accepted
   ADR needs a new ADR superseding it, not an edit — accepted ADRs are immutable.
-- **The backlog is [`docs/issues.md`](docs/issues.md)**, and its *Decided — no action needed* section
-  records deliberate non-tasks. Check there before fixing something that looks broken.
+- **Open work is in [GitHub Issues](https://github.com/magne/vitni/issues)**, and
+  [`docs/decisions.md`](docs/decisions.md) records deliberate non-tasks. Check both before fixing
+  something that looks broken.
 - **Discuss anything large first.** Open an issue. A rejected 2000-line pull request wastes your time
   more than a paragraph does.
 
