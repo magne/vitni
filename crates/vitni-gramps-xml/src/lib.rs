@@ -98,11 +98,7 @@ mod tests {
     fn sample() -> Database {
         Database {
             header: Header {
-                date: Some(DatePoint {
-                    year: Some(2019),
-                    month: Some(5),
-                    day: Some(4),
-                }),
+                created: Some("2019-05-04".to_owned()),
                 ..Header::default()
             },
             people: sample_people(),
@@ -554,7 +550,7 @@ mod tests {
 "#;
         let db = parse(xml).expect("parse");
         assert_eq!(
-            db.header.date,
+            db.header.date(),
             Some(DatePoint {
                 year: Some(2019),
                 month: Some(5),
@@ -574,7 +570,7 @@ mod tests {
 "#;
         let db = parse(xml).expect("parse");
         assert_eq!(
-            db.header.date,
+            db.header.date(),
             Some(DatePoint {
                 year: Some(2019),
                 month: Some(5),
@@ -593,7 +589,7 @@ mod tests {
 </database>
 "#;
         let db = parse(xml).expect("parse");
-        assert_eq!(db.header.date.and_then(|date| date.day), Some(4));
+        assert_eq!(db.header.date().and_then(|date| date.day), Some(4));
     }
 
     #[test]
@@ -640,6 +636,16 @@ mod tests {
     }
 
     #[test]
+    fn a_blank_created_date_is_no_export_date_and_padding_is_trimmed() {
+        let blank = br#"<database><header><created date="  "/></header></database>"#;
+        assert_eq!(parse(blank).expect("parse").header.created, None);
+        let padded = br#"<database><header><created date=" 2019-05-04 "/></header></database>"#;
+        let header = parse(padded).expect("parse").header;
+        assert_eq!(header.created.as_deref(), Some("2019-05-04"));
+        assert_eq!(header.date().and_then(|date| date.day), Some(4));
+    }
+
+    #[test]
     fn a_header_with_no_created_date_has_no_export_date() {
         let xml = br#"<?xml version="1.0" encoding="UTF-8"?>
 <database xmlns="http://gramps-project.org/xml/1.7.1/">
@@ -648,7 +654,29 @@ mod tests {
 </database>
 "#;
         let db = parse(xml).expect("parse");
-        assert_eq!(db.header.date, None);
+        assert_eq!(db.header.date(), None);
+        assert_eq!(db.header.created, None);
+    }
+
+    #[test]
+    fn a_header_export_date_naming_no_day_keeps_its_text() {
+        let xml = br#"<?xml version="1.0" encoding="UTF-8"?>
+<database xmlns="http://gramps-project.org/xml/1.7.1/">
+<header>
+<created date="2019-05"/>
+</header>
+</database>
+"#;
+        let db = parse(xml).expect("parse");
+        assert_eq!(db.header.created.as_deref(), Some("2019-05"));
+        assert_eq!(
+            db.header.date(),
+            Some(DatePoint {
+                year: Some(2019),
+                month: Some(5),
+                day: None,
+            })
+        );
     }
 
     #[test]
@@ -665,8 +693,14 @@ mod tests {
 "#;
         let db = parse(xml).expect("parse");
         assert_eq!(
-            db.header.date, None,
+            db.header.date(),
+            None,
             "an unparseable created date is None (ADR 0029 §3)"
+        );
+        assert_eq!(
+            db.header.created.as_deref(),
+            Some("not-a-date"),
+            "the header keeps the text it could not read"
         );
         assert_eq!(db.people.len(), 1, "the rest of the document still parses");
     }
@@ -675,11 +709,7 @@ mod tests {
     fn header_export_date_round_trips_through_emit_and_parse() {
         let db = Database {
             header: Header {
-                date: Some(DatePoint {
-                    year: Some(2019),
-                    month: Some(5),
-                    day: Some(4),
-                }),
+                created: Some("2019-05-04".to_owned()),
                 ..Header::default()
             },
             ..Database::default()

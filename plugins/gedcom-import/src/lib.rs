@@ -14,11 +14,11 @@ wit_bindgen::generate!({
     world: "bulk-import",
     path: "../../crates/vitni-plugin-host/wit",
     with: {
-        "vitni:host-api/types@0.31.0": vitni_plugin_api::types,
-        "vitni:host-api/log@0.31.0": vitni_plugin_api::log,
-        "vitni:host-api/staging@0.31.0": vitni_plugin_api::staging,
-        "vitni:host-api/progress@0.31.0": vitni_plugin_api::progress,
-        "vitni:host-api/import-source@0.31.0": vitni_plugin_api::import_source,
+        "vitni:host-api/types@0.32.0": vitni_plugin_api::types,
+        "vitni:host-api/log@0.32.0": vitni_plugin_api::log,
+        "vitni:host-api/staging@0.32.0": vitni_plugin_api::staging,
+        "vitni:host-api/progress@0.32.0": vitni_plugin_api::progress,
+        "vitni:host-api/import-source@0.32.0": vitni_plugin_api::import_source,
     },
 });
 
@@ -48,9 +48,14 @@ impl Guest for Importer {
 
         // Declare the header's fingerprint and the file's own export date once, before any record:
         // the host proposes the file's dataset by the one (ADR 0037 §3) and reconciles single-valued
-        // fields by the other (ADR 0029 §2).
-        let file_asserted_at = tree.header.date.as_ref().and_then(file_asserted_at_string);
-        vitni_plugin_api::begin_run(dataset_hint(&tree.header).as_deref(), file_asserted_at.as_deref())?;
+        // fields by the other (ADR 0029 §2), quoting the header's text when it names no day.
+        let date = tree.header.date.as_ref();
+        let file_asserted_at = date.and_then(file_asserted_at_string);
+        vitni_plugin_api::begin_run(
+            dataset_hint(&tree.header).as_deref(),
+            file_asserted_at.as_deref(),
+            date.map(|date| date.original.as_str()),
+        )?;
 
         let mut shared = Shared::new(&tree);
         let mut imported: u32 = 0;

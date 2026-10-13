@@ -1765,12 +1765,12 @@ fn undated_run(unreadable_file_date: Option<&str>) -> Vec<ChangeLogEntry> {
 #[test]
 fn a_run_whose_export_date_could_not_be_read_says_it_replaced_nothing() {
     let loc = Localizer::for_test("en");
-    let rows = collapse_history(&undated_run(Some("2100-02-30T00:00:00Z")), &loc);
+    let rows = collapse_history(&undated_run(Some("30 FEB 2100")), &loc);
 
     assert_eq!(
         rows[0].why.as_deref(),
         Some(
-            "tree.ged declares an export date that cannot be read (2100-02-30T00:00:00Z), so this import only added to records and replaced no value."
+            "tree.ged declares an export date that cannot be read (30 FEB 2100), so this import only added to records and replaced no value."
         )
     );
     assert_eq!(rows[0].children[0].why, None, "the note sits on the run row, once");

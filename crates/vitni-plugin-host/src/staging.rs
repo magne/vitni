@@ -31,18 +31,21 @@ use crate::{ProgressControl, ProgressStep, ProgressUpdate};
 /// How many writes pass between two progress reports of a bulk commit.
 const REPORT_EVERY: u32 = 10;
 
-/// Reads the export date a guest declared.
+/// Reads the export date a guest declared: `asserted` (RFC 3339) and the header's own `text`.
 ///
 /// A date that cannot be read degrades to no date — the conservative, additive-only default (ADR 0029
 /// §3): a malformed date is the guest's format-parsing problem, not a capability violation. It is
-/// logged and kept as declared, so the run can say why nothing was replaced.
-fn read_file_date(declared: Option<String>) -> FileDate {
-    let Some(declared) = declared else {
-        return FileDate::Undeclared;
-    };
-    if let Some(asserted_at) = Timestamp::parse_rfc3339(&declared) {
+/// logged and kept as the header writes it (as declared, when the guest sent no text), so the run can
+/// say why nothing was replaced. A blank date or text is no date: there is nothing to quote.
+fn read_file_date(asserted: Option<String>, text: Option<String>) -> FileDate {
+    let declared = |value: Option<String>| value.filter(|value| !value.trim().is_empty());
+    let (asserted, text) = (declared(asserted), declared(text));
+    if let Some(asserted_at) = asserted.as_deref().and_then(Timestamp::parse_rfc3339) {
         return FileDate::Read(asserted_at);
     }
+    let Some(declared) = text.or(asserted) else {
+        return FileDate::Undeclared;
+    };
     tracing::warn!(
         %declared,
         "the file's export date cannot be read, so the import replaces no single value (ADR 0029 §3)"
@@ -56,8 +59,14 @@ impl staging::Host for HostState {
         dataset_hint: Option<String>,
         source_label: Option<String>,
         file_asserted_at: Option<String>,
+        file_date_text: Option<String>,
     ) -> impl Future<Output = Result<(), types::CapabilityError>> {
-        std::future::ready(self.declare_run(dataset_hint.as_deref(), source_label.as_deref(), file_asserted_at))
+        std::future::ready(self.declare_run(
+            dataset_hint.as_deref(),
+            source_label.as_deref(),
+            file_asserted_at,
+            file_date_text,
+        ))
     }
 
     async fn submit(
@@ -99,13 +108,14 @@ impl HostState {
         dataset_hint: Option<&str>,
         source_label: Option<&str>,
         file_asserted_at: Option<String>,
+        file_date_text: Option<String>,
     ) -> Result<(), types::CapabilityError> {
         if !self.grants.allows(Capability::Commands) {
             return Err(types::CapabilityError::Denied);
         }
         tracing::debug!(?dataset_hint, ?source_label, "import declared");
         self.dataset_hint = dataset_hint.map(str::to_owned);
-        self.file_date = read_file_date(file_asserted_at);
+        self.file_date = read_file_date(file_asserted_at, file_date_text);
         if let Some(run) = &self.run {
             run.pending().set_file_date(self.file_date.clone());
         }
@@ -542,7 +552,7 @@ fn to_link(link: staging::StagedLink) -> StagedLink {
 
 #[cfg(test)]
 mod tests {
-    use super::to_code;
+    use super::{FileDate, Timestamp, read_file_date, to_code};
 
     #[test]
     fn a_staged_code_is_kept() {
@@ -553,5 +563,42 @@ mod tests {
     fn a_blank_staged_code_is_dropped() {
         assert_eq!(to_code("Norge", String::new()), None);
         assert_eq!(to_code("Norge", "  ".to_owned()), None);
+    }
+
+    #[test]
+    fn a_readable_export_date_is_read_whatever_the_header_writes() {
+        let date = read_file_date(Some("2006-03-27T00:00:00Z".to_owned()), Some("27 MAR 2006".to_owned()));
+        assert_eq!(
+            date,
+            FileDate::Read(Timestamp::parse_rfc3339("2006-03-27T00:00:00Z").expect("instant"))
+        );
+    }
+
+    #[test]
+    fn an_export_date_that_yields_no_instant_is_kept_as_the_header_writes_it() {
+        let impossible = read_file_date(Some("2100-02-30T00:00:00Z".to_owned()), Some("30 FEB 2100".to_owned()));
+        assert_eq!(impossible, FileDate::Unreadable("30 FEB 2100".to_owned()));
+        let partial = read_file_date(None, Some("2100".to_owned()));
+        assert_eq!(partial, FileDate::Unreadable("2100".to_owned()));
+    }
+
+    #[test]
+    fn an_unreadable_export_date_without_header_text_is_kept_as_declared() {
+        let date = read_file_date(Some("not a date".to_owned()), None);
+        assert_eq!(date, FileDate::Unreadable("not a date".to_owned()));
+    }
+
+    #[test]
+    fn no_export_date_is_undeclared() {
+        assert_eq!(read_file_date(None, None), FileDate::Undeclared);
+    }
+
+    #[test]
+    fn a_blank_export_date_is_undeclared() {
+        assert_eq!(read_file_date(None, Some(" ".to_owned())), FileDate::Undeclared);
+        assert_eq!(
+            read_file_date(Some(String::new()), Some(String::new())),
+            FileDate::Undeclared
+        );
     }
 }

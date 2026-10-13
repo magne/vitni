@@ -376,7 +376,7 @@
             <span class="mono grow" style="word-break:break-all">/home/ola/downloads/tree.ged</span>
           </div>
         </div>
-        <div class="section-note" style="margin-top:var(--sp-3);margin-bottom:0">tree.ged declares an export date that cannot be read (2100-02-30T00:00:00Z), so this import only added to records and replaced no value.</div>
+        <div class="section-note" style="margin-top:var(--sp-3);margin-bottom:0">tree.ged declares an export date that cannot be read (30 FEB 2100), so this import only added to records and replaced no value.</div>
         <div style="margin-top:var(--sp-3)">
           <button class="btn primary">Import another</button>
         </div>
@@ -392,7 +392,9 @@
         only when the file says it was exported no earlier than when the value it replaces was recorded,
         whoever recorded it (ADR 0029 §1). An older file, or one with no export date the importer can read,
         leaves the value as it is. A file that declares a date which cannot be read — an impossible day such
-        as <span class="mono">30 FEB 2100</span> — says so on its run's row, quoting the date as the importer read it (#528).
+        as <span class="mono">30 FEB 2100</span>, or one naming no day, such as <span class="mono">2100</span> or a Gramps
+        <span class="mono">2019-05</span> — says so on its run's row, quoting the date as the file's header writes it,
+        so the user can find it in the file (#528, #559).
         The wizard's <b>Summary</b> and the CLI's <span class="mono">vitni import</span> output say it too, in the same words,
         so a re-import that wrote nothing, and so left no run, is not a mystery (#558). Nothing asks: the replacement is an ordinary <b>supersession</b>, kept in
         the record's <b>History</b> like any correction and undone the same way. The run's row opens with
@@ -449,7 +451,7 @@
             <div class="tl-when">2026-06-24 16:40</div>
             <div class="tl-what">Imported from tree.ged<span class="muted tl-count">1 change</span></div>
             <div class="tl-who">gedcom-import (software agent)</div>
-            <div class="tl-why">tree.ged declares an export date that cannot be read (2100-02-30T00:00:00Z), so this import only added to records and replaced no value.</div>
+            <div class="tl-why">tree.ged declares an export date that cannot be read (30 FEB 2100), so this import only added to records and replaced no value.</div>
             <div class="row-actions" style="margin-top:4px">
               <button class="btn sm ghost" type="button" aria-expanded="false">▸ What it changed</button>
               <button class="btn sm ghost" type="button" aria-label="Undo: Imported from tree.ged">↩ Undo</button>

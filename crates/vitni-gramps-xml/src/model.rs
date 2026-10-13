@@ -5,7 +5,7 @@
 //! Gramps document holds them — the plugin glue resolves them to workspace human ids. Value types
 //! (names, dates, event/association kinds) come from [`vitni_interchange`].
 
-use vitni_interchange::{AssociationKind, Date, DatePoint, EventKind, Name, SourceMediaKind};
+use vitni_interchange::{AssociationKind, Date, EventKind, Name, SourceMediaKind};
 
 /// A parsed Gramps XML database: the records we model, each keyed by its `handle`.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -38,12 +38,11 @@ pub struct Database {
 /// researcher's name, which fingerprints the file's lineage (ADR 0037 §3).
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Header {
-    /// The file's own asserted-as-of date (`<header><created date="…">`, a plain `YYYY`/`YYYY-MM`/
-    /// `YYYY-MM-DD` string, any time after the day dropped — Gramps carries no calendar/modifier
-    /// grammar here, unlike an event date), when present and parseable — the input a re-import
-    /// reconciliation rule gates on (ADR 0029 §2). A missing or unparseable date is `None` (the
-    /// conservative, additive-only default — ADR 0029 §3), never a synthesized fallback.
-    pub date: Option<DatePoint>,
+    /// The file's own asserted-as-of date as the file writes it (`<header><created date="…">`, a
+    /// plain `YYYY`/`YYYY-MM`/`YYYY-MM-DD` string — Gramps carries no calendar/modifier grammar here,
+    /// unlike an event date), kept verbatim so an import can quote a date it cannot read (ADR 0029
+    /// §3). [`Header::date`] reads it.
+    pub created: Option<String>,
     /// The researcher's name (`<header><researcher><resname>`).
     pub researcher: Option<String>,
 }
