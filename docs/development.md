@@ -559,9 +559,10 @@ The ones that will fail a review if missed:
 - **Never commit to `main`.** Feature branches and pull requests, merged `--no-ff`. Install the hooks
   with `prek install`.
 
-[`docs/issues.md`](issues.md) is the backlog of record; its *Decided — no action needed* section
-records deliberate non-tasks, so check there before "fixing" something.
-[`issue-tracking.md`](issue-tracking.md) explains the labels, milestones and the doc ↔ tracker
+Open work lives in [GitHub Issues](https://github.com/magne/vitni/issues).
+[`docs/issues.md`](issues.md) holds the legacy backlog and, in its *Decided — no action needed*
+section, deliberate non-tasks, so check there before "fixing" something.
+[`issue-tracking.md`](issue-tracking.md) explains the labels, milestones and the legacy doc ↔ tracker
 linkage that `cargo xtask issue-sync` enforces.
 
 > **Note on CI.** `ci.yml` runs `fmt + clippy`, `test`, `postgres integration tests` and `cargo-deny`

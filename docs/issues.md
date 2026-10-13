@@ -1,14 +1,14 @@
 # Vitni Issues
 
-Outstanding work, grouped by **area**. [`roadmap.md`](roadmap.md) owns phase detail, sequencing, and
-progress state — this file owns open bugs, scoped residuals, and unscheduled backlog, and does not
-restate phases. Completed work lives in
-[`archive/completed-work.md`](archive/completed-work.md).
+The legacy backlog, grouped by **area**, and the record of decisions. **Open work now lives in
+[GitHub Issues](https://github.com/magne/vitni/issues)**: new work is filed there and gets no bullet
+here, and the bullets below are being moved there (#615). [`roadmap.md`](roadmap.md) owns phase
+detail; completed work lives in [`archive/completed-work.md`](archive/completed-work.md).
 
 Two conventions:
 
-- The `###` area names are the organizing unit; each maps to one `area/*` GitHub label. A bullet being
-  worked on carries its issue number (`— #142`); the rest are unfiled by design. See
+- The `###` area names are the organizing unit; each maps to one `area/*` GitHub label. A filed bullet
+  carries its issue number (`— #142`), and the issue is canonical. See
   [`issue-tracking.md`](issue-tracking.md) for the labels, milestones, triage loop, and what happens to
   a bullet when the work lands. `cargo xtask issue-sync` keeps the two honest.
 - [**Decided — no action needed**](#decided--no-action-needed) at the end collects deliberate
@@ -46,48 +46,48 @@ none needs an event rewrite — and the first three are gated by an unwritten **
   a dated hierarchy unwritable from the app layer at all: a county transfer or a 19th-century parish
   boundary can only be expressed today by building a raw `PlaceCommand` and calling
   `Store::execute_place`, which is what `crates/vitni-app/tests/place_temporal.rs` does and
-  documents as a gap.
+  documents as a gap. — #568
 - **`MultiPolygon` geometry variant** — `PlaceGeometry` is `Point`/`Polygon`, so a place whose area is
   topologically disconnected cannot be expressed: 280 of 357 Norwegian municipalities have coastline and
   Kvitsøy alone is 167 islands. Asserting several same-dated `Polygon`s does not substitute —
   `geometry_as_of` returns exactly one while `geo_index` indexes every part, so the rendered boundary and
-  the bbox query disagree. Reopened from *Decided* on the trigger ADR 0024 named for itself.
+  the bbox query disagree. Reopened from *Decided* on the trigger ADR 0024 named for itself. — #569
 - **Parallel hierarchies need a relation on `PlaceRef`** — a farm sits in a *kommune* **and** a *sokn*
   **and** a *prestegjeld*, and these do not nest. `PlaceRef` has no relation kind, so every parent lands
   in one undiscriminated `Vec`, `enclosed_by_as_of` returns whichever import order put first, and
   `hierarchy_chain`/`generated_title` can emit a factually mixed chain. `PlaceSummary` has no field for
   the live enclosure set either, so a second parent is invisible to the frontend and its `AssertionId`
-  never reaches the UI to be retracted.
+  never reaches the UI to be retracted. — #570
 - **Geometry accuracy and role** — `PlaceGeometryAssertion` carries only `{geometry, date}`, so nothing
   distinguishes a surveyed boundary from a reconstructed one, nor "this place **is** a point" from "this
   is the only locator we have for an area". Two same-dated geometries at different generalization levels
   are also indistinguishable, and `geometry_as_of` then picks by assertion order. `Confidence` is the
   wrong carrier — it is a surety scheme whose ordinals ADR 0027 §3 makes relabelable per workspace, so
-  metres would inherit a user-chosen label.
+  metres would inherit a user-chosen label. — #571
 - **Ecclesiastical `PlaceType` variants** — `Diocese`/`Deanery`/`District` are missing, which is the
   whole hierarchy above the parish and the one Norwegian genealogical sources are organised by.
   `Custom(String)` is not a substitute: `vitni-ui/src/i18n.rs` renders it verbatim, so a raw
-  Norwegian string reaches every list, breadcrumb, picker and map label, against data-model §14.
+  Norwegian string reaches every list, breadcrumb, picker and map label, against data-model §14. — #572
 - **Dissolved places resolve forever** — each dated assertion is read as effective-*from* with no way to
   say "ceased", so a municipality dissolved in 1964 still resolves a name, a parent and a geometry as of
   today, and `show_geography` plots it overlapping its own successors. `SuccessionAsserted` does not fix
   it: nothing in the resolution path reads successions. A read-side `existed_as_of` derived from the
   succession payload closes it with no event change; only cessation with *no* successor needs an
-  additive `AssertDissolution`, since `decide` rejects an empty `to`.
+  additive `AssertDissolution`, since `decide` rejects an empty `to`. — #573
 - **Dated, accumulating `code`** — `code` is single-valued and last-writer-wins, so a place's identifier
   history is lost: Bærum carried 0219, then 3024, then 3201 with no boundary change. Making it dated and
-  accumulating like `PlaceName` is a projection reshape, free per ADR 0010.
+  accumulating like `PlaceName` is a projection reshape, free per ADR 0010. — #574
 - **`places_containing(point, as_of)`** — there is no containment query at all; `places_in_bbox` answers
   only bounding-box overlap. This is what "which parish held this farm in 1865" needs. Containment must
   surface as *evidence* for an `AssertEnclosedBy` — rationale, dataset citation, low confidence — never
-  as a projection-time inference, or geometry silently overrides the recorded legal fact.
+  as a projection-time inference, or geometry silently overrides the recorded legal fact. — #575
 - **Optional DB `place_parent` index** — a Gramps precedent for scaling the hierarchy walk; a later
-  follow-up, not needed at current volumes.
+  follow-up, not needed at current volumes. — #576
 
 ### Notes & research notes
 
 - **`remove_translation` core verb** — note-translation retract is Edit-only; there is no verb to
-  remove a single translation.
+  remove a single translation. — #577
 
 ### Tags
 
@@ -96,29 +96,19 @@ none needs an event rewrite — and the first three are gated by an unwritten **
   `shared_tab` gives it the shared `history-note`, which ends "Any entry can be undone." `tag.html`
   words its note honestly ("Tag history is display-only"), so `tests/mockup_history_note.rs` exempts it
   by name. *Shape:* a Tag-specific History note key, the exemption dropped. *Exit:* the Tag History tab
-  and `tag.html` say the same thing.
+  and `tag.html` say the same thing. — #578
 
 ### Media
 
 - **"Add file to media library" action.** The media-save dialog and the pure naming logic
   (`suggest_filename`/`slugify`) ship and are SSR-tested; the app-layer copy use-case that writes an
-  external file into `media/<target>` and creates the Media record is deferred.
+  external file into `media/<target>` and creates the Media record is deferred. — #579
 - **A file stored outside the workspace media root has no preview** — an absolute `MediaPath::File` is
   legitimate (see the *Media edit mode* bullet: a record for a file that is not on this machine is
   legitimate too), but `media_asset_src` serves only the media root, so such a record shows the 📷
   placeholder. Honest, not useful: previewing it needs either a second asset-handler route scoped to a
   configured set of readable roots, or an explicit "copy into the workspace" action reusing the media
-  save dialog. Neither is designed.
-- **Media edit mode cannot check, fetch, or type a file** — *File path* is a plain `DraftText`
-  (`media.rs:88-101`) with no existence check, and any check added must **flag, never block**: a
-  record for a file that is not on this machine is legitimate. There is no download when *Web path*
-  changes with a file path set (the mockup already draws `⤓ Download`, `media.html:73`), which needs an
-  overwrite prompt on checksum mismatch. And nothing *records* a `mime`: the extension→MIME mapping now
-  lives in `vitni_core::media_path::mime_for_path` and drives the display gate (an image with no
-  recorded MIME still previews, #301), but no command writes an inferred value into the record, and the
-  editor's MIME box stays blank. Writing one on save is the work left — deliberately not done as part of
-  #301, because `MediaDraft::from_detail` seeds the editor from `mime` and `edits_against` diffs it, so
-  an inferred value there would emit a spurious `SetMime` on every save.
+  save dialog. Neither is designed. — #580
 
 ### DNA
 
@@ -141,16 +131,11 @@ long-standing "DNA match views in the UI" item is closed.
 - **Configurable surety-scheme *cardinality*** — ADR 0027 shipped relabeling the five fixed ordinals;
   re-scaling the scheme (GENTECH's full generality) stays deferred behind its own gating ADR, no
   consumer need demonstrated yet.
-- **`run_checks` is dead code, and there is no CLI data-quality command** — its body is `list_persons`
-  \+ `check_persons` (`checks.rs:53-56`), and the GUI's Data Quality view calls `check_persons` directly
-  with the person list it already holds, so GUI coverage is *equivalent* — nothing is missing there.
-  Either delete the wrapper, or keep it to back a `vitni check` subcommand so quality findings are
-  scriptable.
 - **Consistency checks are person-only** — the one consistency check, `CheckFinding::DeathBeforeBirth`,
   reads persons only; the duplicate check already covers every matchable kind. Widening consistency
-  checks to the other aggregates (such as a date inversion on an Event or Place) is its own item.
+  checks to the other aggregates (such as a date inversion on an Event or Place) is its own item. — #583
 - **Repository media refs (U31)** — should Repository carry media refs (e.g. archive photos)? A
-  data-model question.
+  data-model question. — #584
 
 ## Frontend & interaction
 
@@ -182,7 +167,7 @@ which is what makes them worth fixing in the shared code rather than per screen.
   Wanted: the same x-macro treatment for these 14, which needs a row carrying each aggregate's
   `*ChangeSetRequest` type; `commit_new_record` has no aggregate row to sit on, and the per-wrapper doc
   comments (what commits together, what the UI boundary parsed) would have to survive as macro
-  arguments rather than be dropped.
+  arguments rather than be dropped. — #585
 - **Every detail pane spells out the 19 `IntentOutcome` variants it does not handle.** The terminal
   `match` of each pane ends in a catch-all arm naming every other variant so no wildcard is used — 21
   lines apiece at `note.rs:337-358`, `person.rs:781-802`, `tag.rs:165-186` and 11 more, 14 sites in
@@ -192,7 +177,7 @@ which is what makes them worth fixing in the shared code rather than per screen.
   `detail_state<'a, T>(&'a Option<ScreenData>, pick: impl Fn(&'a IntentOutcome) -> Option<&'a T>)`
   helper in `screens/shared.rs` returning `Loading | Error | NotFound | Ready(&T) | Other`, each screen
   supplying a one-line `if let` for its own variant — the exhaustive listing then survives in exactly
-  one place, which is what the no-wildcard rule is for.
+  one place, which is what the no-wildcard rule is for. — #586
 - **The record editors' side-panel host is written 13 times, and its `footer` prop has no user.** Each
   `*_edit_panel` (`source.rs:763-798`, `note.rs:601-630`, `repository.rs:693-736` and 10 more) opens
   with the same `let loc` / `let Some(form) = editing() else { return }` and closes over the same six
@@ -202,7 +187,7 @@ which is what makes them worth fixing in the shared code rather than per screen.
   `edit_side_panel<E>(loc, title, editing, body)` in `screens/shared.rs` beside the
   `retract_side_panel` it mirrors, and `footer` given `#[props(default)]` or dropped. Independent of
   #312, which is fixed: a panel stays where it is authored, registers itself in `NavState::open_panels`
-  while open, and every region behind it inerts its own root — so no construction site moved.
+  while open, and every region behind it inerts its own root — so no construction site moved. — #587
 - **Import run rows cannot be expanded.** An import run is one History row (#393): `group_runs`
   (`vitni-app/src/history.rs`) folds a run's entries into `ActivityDetail::ImportRun`, whose `children`
   the `ActivityVm`/`HistoryEntryVm` carry, and the row shows its count muted beside it. Nothing renders
@@ -211,22 +196,20 @@ which is what makes them worth fixing in the shared code rather than per screen.
   primitive to build on: no `Disclosure` component and no `<details>` anywhere in `components/`, only
   ad-hoc `aria-expanded` on four unrelated widgets. The Dashboard's children are the run's entries
   within the feed's scan window (`MAX_ACTIVITY_SCAN`), so disclosing a large run needs a read of its
-  entries by run.
+  entries by run. — #588
 
 ### Lists, search & scale
 
-- **Long-list / overflow specimen (U30)** — no tab demonstrates a long-list or overflow state;
-  deferred as low-fidelity in a static mockup (the a11y real-app walkthrough covers it).
 - **`ListPane` DOM virtualization** — `master_detail.rs` mounts every row (and a `MountedEvent` per
   row). Render only a scrolled window with a `store.count`-sized spacer and make the roving-focus
   `nodes` bookkeeping window-aware. If server-side windowing is chosen instead, add
   `list_view_page(table, offset, limit)` (+ a Postgres mirror) — the `human_id` column and indexes
   it would order/page by already exist (ADR 0032). Overlaps the `list_*` pagination item under
-  *Performance & scale*.
+  *Performance & scale*. — #590
 - **Saved searches** — nothing in the palette, list toolbars, or app layer; the 100k-scale research
-  workflow argues for it. Needs a design + use-case decision.
+  workflow argues for it. Needs a design + use-case decision. — #591
 - **Column chooser** — `list.rs` has no column state though PR3's text claims "columns". Decide
-  whether to build it or amend the PR3 description.
+  whether to build it or amend the PR3 description. — #592
 
 ### Keyboard & shortcuts
 
@@ -235,20 +218,20 @@ Residuals from the shortcuts work (ADR 0030); see
 
 - **Chord entry is a typed canonical string, not live key capture.** `keydown` is inert under SSR and
   `cargo xtask input-guard` forbids a raw form element outside the primitives, so the Preferences
-  rebind field takes `mod+shift+alt+key` text rather than a press-the-keys capture widget.
+  rebind field takes `mod+shift+alt+key` text rather than a press-the-keys capture widget. — #593
 - **No chord sequences beyond the existing `g`-prefix** — `resolved_shortcuts` resolves single chords
-  only.
+  only. — #594
 - **The framework-free `Key` enum (`vitni-ui::shortcuts`) is still closed** — no function keys, so
-  `e`/`F2` (the within-screen edit chord) could not be rebound even if that group were opened up.
+  `e`/`F2` (the within-screen edit chord) could not be rebound even if that group were opened up. — #595
 - **No keyboard topic in the in-app Help browser.** `vitni-ui::help.rs`'s `HelpSection::Reference`
   is documented as "Lookup material (shortcuts, glossaries)" and `Run::Kbd` is unused — no authored doc
-  covers shortcuts; the `?` overlay is the only in-app reference today.
+  covers shortcuts; the `?` overlay is the only in-app reference today. — #596
 
 ### Pedigree & charts
 
-- **`Restriction` chart cue** on the pedigree chart.
+- **`Restriction` chart cue** on the pedigree chart. — #597
 - **Name-autocomplete pickers** for the focus / relationship inputs, which are plain `human_id` text
-  fields today.
+  fields today. — #598
 
 ### Geography & map
 
@@ -260,7 +243,7 @@ Residuals from the shortcuts work (ADR 0030); see
   pass every scenario. Both live inside `format!`-built JavaScript no test inspects, which is why the
   proof has to be a shot rather than an assertion over markup. Cheapest closure: a `region` compare
   over a marker between two zoom levels. This bullet is the cited evidence for the `type/test-gap`
-  label in [`issue-tracking.md`](issue-tracking.md) §2.
+  label in [`issue-tracking.md`](issue-tracking.md) §2. — #599
 - **The map's draw-tool state machine sits above the ADR 0008 line.** `DrawTool`
   (`screens/map_shared.rs:27`), `MapDraft` (`:47`), `draft_actions` (`:94`), `draft_geometry` (`:114`,
   which encodes the ≥3-vertices-for-a-ring rule and the refusal of a tool/draft mismatch), `geo_point`
@@ -277,15 +260,11 @@ Residuals from the shortcuts work (ADR 0030); see
   roughly 200 lines out of 2155, not a split of the file. Counter-case on the record: ADR 0008 does
   put app screens in the renderer as per-framework view code, and no second renderer exists; what
   makes this more than size is that `draft_geometry` returns a domain `PlaceGeometry` and decides
-  whether one is valid.
-- **In-map editing depth** — mid-ring vertex insertion (today: a vertex can be dragged to a new
-  position, but not inserted between two others), pin-click selection on the canvas (today: select via
-  the rail list), and polygon-drawn creation of a *new* place (today: point-drop creation is wired;
-  polygon draws onto an existing place).
+  whether one is valid. — #600
 - **Provider sub-forms** — the toolbar select switches among every provider `[map.providers.*]`
   declares (ADR 0033), live and persisted; there is still no in-app form to *enter* a style URL or
   API-key env name — a provider has to already exist in the config file before the select can choose
-  it.
+  it. — #602
 - **`ai_config`'s `for_workspace` config-store path is dead, like #283's root cause was.**
   `services::ai_config` (`services.rs`) reads through `FileConfigStore::for_workspace(dir)`, whose
   `config_path` is `None` — the same defect `map_config` had — but it survives unnoticed because its
@@ -293,7 +272,7 @@ Residuals from the shortcuts work (ADR 0030); see
   correct. `set_plugin_grants`/`store_plugin_enabled` use the same store for genuinely
   workspace-scoped writes and are fine; only the client-scope reads/writes routed through it are
   affected. Found while fixing #283 (ADR 0033); not fixed here since nothing currently observes the
-  bug.
+  bug. — #603
 - **The Google Map Tiles adapter (ADR 0033) is untested against the live service.** `resolve_map_source`'s
   session mint, tile-URL template, and `refresh_map_attribution`'s viewport-copyright fetch are unit-
   tested on their pure seams (URL builders, `{key}` substitution, response deserialization) but never
@@ -303,7 +282,7 @@ Residuals from the shortcuts work (ADR 0030); see
   (`developers.google.com/maps/demo-key`) is not such a key: it covers the Maps JavaScript API and a
   handful of web services, not the Map Tiles API, so `createSession` answers it with `403 Forbidden`
   (confirmed 2026-08-11). The failure is now legible — the error carries Google's own message, not just
-  the status — but the adapter still has no end-to-end proof.
+  the status — but the adapter still has no end-to-end proof. — #604
 - **Tile caching** — tiles are fetched by the webview, and `main.rs` never gives dioxus-desktop a data
   directory, so they land in WebKit's default unmanaged cache at a path the app neither controls nor
   can bound. A viewport-only, size- and TTL-bounded disk cache is possible without leaving Rust: serve
@@ -317,7 +296,7 @@ Residuals from the shortcuts work (ADR 0030); see
   toolbar search is now a `RecordPicker` over existing places (search + jump); geocoding a *new*
   real-world address to a coordinate stays deferred. A WASM `map-provider` world supplying geocoding
   \+ custom tile-source descriptors over `net` is the ADR 0025 §4 follow-up (supplies data/descriptors,
-  never pixels).
+  never pixels). — #605
 
 ### GUI ⇄ CLI parity
 
@@ -333,7 +312,7 @@ in its own area: research notes (*Notes & research notes*). The gaps running the
   `No judgment` however well the event itself is cited. Found while seeding the `screenshots` demo
   workspace (#328), which is why its person views are not in the README.
   *Shape:* the `--citation`/`--confidence`/`--rationale` trio `person add-name` already takes, threaded
-  into the same participation command.
+  into the same participation command. — #606
 
 ## Import, export & plugins
 
@@ -380,7 +359,7 @@ Follow-ups left open when the Digitalarkivet flow shipped; each is scoped, none 
 
 ### Record matching & identity
 
-The `0.10 — Record matching` milestone ([`issue-tracking.md`](issue-tracking.md) §4). The design is
+The [`0.10 — Record matching`](https://github.com/magne/vitni/milestone/5) milestone. The design is
 in ADRs [0037](adr/0037-record-origin-and-import-runs.md) (record origin and import runs),
 [0038](adr/0038-record-matching-explainable-scoring.md) (matching),
 [0039](adr/0039-identity-decisions-clusters-merge-distinct.md) (identity decisions),
@@ -459,17 +438,17 @@ From [`research/performance-profiling.md`](research/performance-profiling.md):
 
 - **`list_*` projections lack `LIMIT`/`OFFSET`** — a full scan + JSON decode (61.7 ms at ~52.6k persons);
   pagination is the real interactive scaling lever before 100k scale. Overlaps **`ListPane` DOM
-  virtualization** under *Lists, search & scale*.
+  virtualization** under *Lists, search & scale*. — #607
 - **Research-note reverse lookup is a `json_each` scan, not a materialized index** — fine now (~2 ms at
   ~2250 notes); a materialized side-index is a follow-up only if note volume grows.
 - **Postgres spatial mirror** — `places_in_bbox` returns `Unsupported` on Postgres (SQLite R\*Tree only);
   the native geometry + GiST index is a later feature-gated follow-up. It would also back the
   `places_containing` query under *Places*, and once containment exists on both engines the two must
   agree at boundary-touching points and shared edges — so a shared conformance corpus, not two
-  independently plausible implementations, or parish membership would change with the database engine.
+  independently plausible implementations, or parish membership would change with the database engine. — #608
 - **Viewport-scoped loading** — `show_geography` loads every place with a resolved geometry rather than
   calling `places_in_bbox` for the current viewport; wire the spatial query in when place counts grow
-  (needs a Postgres fallback given the row above).
+  (needs a Postgres fallback given the row above). — #609
 
 ### Packaging & release
 
@@ -479,7 +458,7 @@ From [`research/performance-profiling.md`](research/performance-profiling.md):
   than introduced by ADR 0035, and only reachable by someone who wants the launcher *and* a headless
   CLI on one machine — but that is a reasonable thing to want. Either declare
   `Conflicts`/`Replaces`, or split the fleet into a `vitni-plugins` package both depend on, still
-  installing to the `/usr/lib/vitni/plugins` the embedded-layer resolver looks in.
+  installing to the `/usr/lib/vitni/plugins` the embedded-layer resolver looks in. — #610
 - **Cross-platform packaging** — 1.0 is Linux-first (tarball + `.deb` + AppImage). macOS/Windows
   bundles and **OS-level code-signing / notarization** (Gatekeeper, Authenticode) are a later cycle
   (ADR 0014 §Out of scope). — #215
@@ -515,12 +494,12 @@ already filed against it keep resolving their [`#backup--restore`](#backup--rest
   tree into two `sqlx` versions and every `Pool<Sqlite>` / `Pool<Postgres>` handed to the event stores
   fails to typecheck (17 mismatches). 0.9 also replaces `&str` query input with `SqlSafeStr`
   (38 `sqlx::query(&format!(…))` call sites in `vitni-db` need `AssertSqlSafe`). Re-evaluate when the
-  `*-es` crates release on `sqlx` 0.9.
+  `*-es` crates release on `sqlx` 0.9. — #611
 - **`ed25519-dalek` 3.0.0** — needs `curve25519-dalek` ^5.0.0, while `russh` (via the `testcontainers`
   dev-dependency) needs `curve25519-dalek` =5.0.0-pre.6. Cargo resolves the conflict by downgrading to
   `russh` 0.60.1, which does not compile against the `pkcs5` 0.8.1 that ed25519-dalek 3.0.0 pulls in.
   Held at `=3.0.0-pre.6` (comment in `Cargo.toml`); re-evaluate when `testcontainers` ships a `russh` on
-  stable `curve25519-dalek`.
+  stable `curve25519-dalek`. — #612
 
 ### Docs & repo tooling
 
@@ -532,7 +511,7 @@ The `area/docs` label already existed with no `###` home; this is it.
   produces most. The protection therefore requires a pull request (0 approvals, admins included) and
   blocks force-push and deletion, but requires no check. Making the four CI jobs required means first
   dropping those `paths-ignore` filters and paying runner minutes on every doc PR; free on a public
-  repository, so it is a live option, not a closed one.
+  repository, so it is a live option, not a closed one. — #613
 - **Paid-plugin distribution is unshaped.** The plugin boundary is the only genuinely exclusive
   revenue line (a signed bundle whose source stays private, under its own EULA — selling licence
   keys over an OSI-licensed source does not hold), and it needs decisions before the first one
@@ -541,7 +520,7 @@ The `area/docs` label already existed with no `###` home; this is it.
   unmonetised so it remains outside the CRA (Commission guidance C(2026) 5252 ¶52 — reporting
   duties arrive 11 September 2026, main obligations 11 December 2027). Also unresolved for
   `vitni-digitalarkivet` specifically: the National Archives' service name in a paid product's
-  title.
+  title. — #614
 
 ## Decided — no action needed
 
@@ -606,6 +585,12 @@ decision, not a gap.
 - **External ids have no frontend entry point** — person `add_external_id` (module-level, not even
   root-exported) and `add_family_external_id` are used only inside `import.rs` for resolve-or-create.
   External ids are importer bookkeeping, not user-editable data.
+
+### Lists
+
+- **No long-list or overflow specimen in the mockups.** Closed at triage (#589, 2026-10-13): a long or
+  overflowing list is low-fidelity in a static mockup, and the real app is where it is judged — the
+  list virtualization work (#590) measures it there.
 
 ### Shell & panes
 

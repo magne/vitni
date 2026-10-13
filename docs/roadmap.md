@@ -419,7 +419,7 @@ Plan: [`docs/archive/plans/places-geography-temporal.md`](archive/plans/places-g
   civil/ecclesiastical/judicial hierarchies that do not nest, positional accuracy as a concept distinct
   from `Confidence`, and cessation. All are additive; the itemization lives in
   [`issues.md`](issues.md#places). The import itself is deliberately unmilestoned — see
-  [`issue-tracking.md`](issue-tracking.md) §4.
+  [`issue-tracking.md`](issue-tracking.md) §3.
 
 ## Phase 10 — Research rigor & import sync ✅ done
 
@@ -552,8 +552,8 @@ client carries no local config file. The embedded build keeps the file backend u
 
 ## Phase 14 — Record matching & identity
 
-**Sequenced before 1.0**, as the GitHub milestone `0.10 — Record matching`
-([`issue-tracking.md`](issue-tracking.md) §4). It comes ahead of Phases 12–13 despite its number,
+**Sequenced before 1.0**, as the GitHub milestone
+[`0.10 — Record matching`](https://github.com/magne/vitni/milestone/5). It comes ahead of Phases 12–13 despite its number,
 because import corrupts data today:
 - a re-import duplicates places and sources
 - a second, unrelated GEDCOM file resolves its people onto the first file's people

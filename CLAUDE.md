@@ -29,12 +29,14 @@ These docs are the source of truth; read them before changing the core or its wi
   `DnaMatch`, `ResearchNote` (ADR 0028), and `ImportRun` (ADR 0037); `for_each_aggregate!` in
   `crates/vitni-app/src/aggregates.rs` is the registry that lists them.
 - **`docs/adr/` — architecture decisions. ADRs are immutable**: never edit an accepted ADR;
-  supersede it with a new one.
+  supersede it with a new one. Start from **`docs/adr/README.md`**, the index (one-line decision and
+  keywords per ADR); a new ADR adds its row there (`cargo xtask adr-index` checks it).
 - **`docs/roadmap.md` (+ `roadmap.html`) owns phase/progress state** — read it rather than
-  tracking progress here. **`docs/issues.md` is the backlog**; its *Decided — no action needed*
-  section records deliberate non-tasks, so check there before "fixing" something. Completed work
-  is in `docs/archive/completed-work.md`, the issue ↔ GitHub linkage (enforced by `cargo xtask
-  issue-sync`) in `docs/issue-tracking.md`. Also `release.md`, `second-renderer-checklist.md`,
+  tracking progress here. **Open work lives in GitHub Issues**; `docs/issues.md` is the legacy
+  backlog being moved there (#615), and its *Decided — no action needed* section records deliberate
+  non-tasks, so check there before "fixing" something. Completed work is in
+  `docs/archive/completed-work.md`; how issues, labels and milestones work is in
+  `docs/issue-tracking.md`. Also `release.md`, `second-renderer-checklist.md`,
   `mockups/`, `research/`.
 
 Binding invariants from the ADRs — the load-bearing part; open the ADR for the rest:
@@ -123,7 +125,7 @@ prek run                                                             # run git h
 ```
 
 `cargo xtask` also runs the individual checks (`i18n-check`, `css-check`, `input-guard`,
-`licence-check`, `icons --check`, `backup-guard`, `fixture-guard`, `match-eval`) plus `issue-sync`, `labels`, and
+`licence-check`, `icons --check`, `backup-guard`, `fixture-guard`, `match-eval`, `adr-index`) plus `issue-sync`, `labels`, and
 `package` (Linux release tarball).
 
 The **app icon** lives in `crates/vitni-ui-dioxus/assets/icon/` (four SVG tiers — the seal on the V's

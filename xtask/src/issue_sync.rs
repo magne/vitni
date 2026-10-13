@@ -1,7 +1,9 @@
-//! `issue-sync` — guards the `docs/issues.md` ↔ GitHub Issues linkage (`docs/issue-tracking.md` §5).
+//! `issue-sync` — guards the legacy `docs/issues.md` ↔ GitHub Issues linkage (`docs/issue-tracking.md`
+//! §4).
 //!
-//! Sync runs one way: the doc is the backlog of record, an issue is a working copy of one bullet, and
-//! a filed bullet carries its number as a trailing `— #142`. This check keeps that linkage honest.
+//! GitHub Issues are canonical for open work; `issues.md` still holds bullets written before that, and
+//! a filed bullet carries its number as a trailing `— #142`. This check keeps that linkage honest until
+//! the legacy backlog is migrated (#615).
 //!
 //! Two modes, deliberately split by what they cost:
 //!
@@ -10,9 +12,9 @@
 //!   every bullet under a backlog H2 sits inside an `###` area so it has an `area/*` label to inherit.
 //!   `## Bugs` is a pointer section rather than a backlog H2, so a bullet there is reported as
 //!   misplaced — it belongs under the `###` area it affects. No network, no token.
-//! - **Online** (`--online`): additionally reconcile against `gh issue list` and report drift in both
-//!   directions — a bullet pointing at a closed issue, an open issue whose bullet is gone, an open
-//!   issue with no bullet at all. Needs `gh` authenticated, so it is a scheduled/manual job rather
+//! - **Online** (`--online`): additionally reconcile against `gh issue list` and report a bullet
+//!   pointing at an issue that is not open. An open issue with no bullet is normal: new work is filed
+//!   as an issue only. Needs `gh` authenticated, so it is a scheduled/manual job rather
 //!   than a per-commit gate.
 //!
 //! Drift is *reported*, never auto-fixed: which side is wrong is a judgement call. A bullet pointing
@@ -210,7 +212,8 @@ fn placement_problem(bullet: &Bullet, decided: bool) -> Option<String> {
     ))
 }
 
-/// Reconciles filed bullets against GitHub in both directions.
+/// Reconciles filed bullets against GitHub: each must point at an open issue. An open issue with no
+/// bullet is normal, since new work is filed as an issue only (`docs/issue-tracking.md` §1).
 fn online_problems(filed: &BTreeMap<u32, &Bullet>) -> Result<Vec<String>> {
     let mut problems = Vec::new();
     let open = fetch_open_issues()?;
@@ -221,13 +224,6 @@ fn online_problems(filed: &BTreeMap<u32, &Bullet>) -> Result<Vec<String>> {
                 "{ISSUES_DOC}:{}: \"{}\" references #{number}, which is not open \
                  (closed, or never existed) — delete the bullet or reopen the issue",
                 bullet.line, bullet.title
-            ));
-        }
-    }
-    for (number, title) in &open {
-        if !filed.contains_key(number) {
-            problems.push(format!(
-                "issue #{number} (\"{title}\") is open with no bullet in {ISSUES_DOC}"
             ));
         }
     }
