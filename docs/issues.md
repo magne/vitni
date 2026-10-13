@@ -1,14 +1,14 @@
 # Vitni Issues
 
-Outstanding work, grouped by **area**. [`roadmap.md`](roadmap.md) owns phase detail, sequencing, and
-progress state — this file owns open bugs, scoped residuals, and unscheduled backlog, and does not
-restate phases. Completed work lives in
-[`archive/completed-work.md`](archive/completed-work.md).
+The legacy backlog, grouped by **area**, and the record of decisions. **Open work now lives in
+[GitHub Issues](https://github.com/magne/vitni/issues)**: new work is filed there and gets no bullet
+here, and the bullets below are being moved there (#615). [`roadmap.md`](roadmap.md) owns phase
+detail; completed work lives in [`archive/completed-work.md`](archive/completed-work.md).
 
 Two conventions:
 
-- The `###` area names are the organizing unit; each maps to one `area/*` GitHub label. A bullet being
-  worked on carries its issue number (`— #142`); the rest are unfiled by design. See
+- The `###` area names are the organizing unit; each maps to one `area/*` GitHub label. A filed bullet
+  carries its issue number (`— #142`), and the issue is canonical. See
   [`issue-tracking.md`](issue-tracking.md) for the labels, milestones, triage loop, and what happens to
   a bullet when the work lands. `cargo xtask issue-sync` keeps the two honest.
 - [**Decided — no action needed**](#decided--no-action-needed) at the end collects deliberate
@@ -380,7 +380,7 @@ Follow-ups left open when the Digitalarkivet flow shipped; each is scoped, none 
 
 ### Record matching & identity
 
-The `0.10 — Record matching` milestone ([`issue-tracking.md`](issue-tracking.md) §4). The design is
+The [`0.10 — Record matching`](https://github.com/magne/vitni/milestone/5) milestone. The design is
 in ADRs [0037](adr/0037-record-origin-and-import-runs.md) (record origin and import runs),
 [0038](adr/0038-record-matching-explainable-scoring.md) (matching),
 [0039](adr/0039-identity-decisions-clusters-merge-distinct.md) (identity decisions),
