@@ -17,8 +17,6 @@ use vitni_core::citation::error::CitationError;
 use vitni_core::date::GenealogicalDate;
 use vitni_core::enums::Restriction;
 use vitni_core::ids::{AssertionId, CitationId, HumanId, MediaId, NoteId, SourceId, TagId};
-use vitni_core::media::MediaView;
-use vitni_core::note::NoteView;
 use vitni_core::provenance::{Confidence, EvidenceAnalysis, EvidenceRef};
 use vitni_core::source::SourceView;
 use vitni_core::text::{Attribute, MediaRef};
@@ -29,7 +27,7 @@ use crate::error::AppError;
 use crate::event::{DateParts, gregorian_date};
 use crate::identity::{self, CitationClusters, IdentityDecision, PairDecision};
 use crate::session::Session;
-use crate::use_case::{self, MediaRefInput, MutationMeta, Provenance};
+use crate::use_case::{self, MediaRefInput, MutationMeta, Provenance, resolve_media_id, resolve_note_id};
 use crate::workspace::Workspace;
 
 /// An applied tag. The user only ever sees the name, colour, and priority; the `id` is carried for
@@ -863,20 +861,6 @@ async fn resolve_source_id(store: &Store, human_id: &str) -> Result<SourceId, Ap
 async fn resolve_citation_id(store: &Store, human_id: &str) -> Result<CitationId, AppError> {
     use_case::resolve_id(store.find_citation(human_id).await?, CitationView::citation_id, || {
         AppError::CitationNotFound(human_id.to_owned())
-    })
-}
-
-/// Resolves a media `human_id` to its aggregate [`MediaId`], or [`AppError::MediaNotFound`].
-async fn resolve_media_id(store: &Store, human_id: &str) -> Result<MediaId, AppError> {
-    use_case::resolve_id(store.find_media(human_id).await?, MediaView::media_id, || {
-        AppError::MediaNotFound(human_id.to_owned())
-    })
-}
-
-/// Resolves a note `human_id` to its aggregate [`NoteId`], or [`AppError::NoteNotFound`].
-async fn resolve_note_id(store: &Store, human_id: &str) -> Result<NoteId, AppError> {
-    use_case::resolve_id(store.find_note(human_id).await?, NoteView::note_id, || {
-        AppError::NoteNotFound(human_id.to_owned())
     })
 }
 

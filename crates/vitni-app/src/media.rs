@@ -31,7 +31,7 @@ use crate::event::{DateParts, gregorian_date};
 use crate::identity::{self, IdentityDecision, MediaClusters, PairDecision};
 use crate::media_usage::MediaUsage;
 use crate::session::Session;
-use crate::use_case::{self, MutationMeta, Provenance};
+use crate::use_case::{self, MutationMeta, Provenance, resolve_media_id};
 use crate::workspace::Workspace;
 
 /// A frontend-neutral summary of a media object (the DTO the CLI renders), carrying its stable id and
@@ -848,13 +848,6 @@ fn superseded(media_id: MediaId, command: MediaCommand, target: Option<Assertion
         },
         None => command,
     }
-}
-
-/// Resolves a `human_id` to its aggregate [`MediaId`], or [`AppError::MediaNotFound`].
-async fn resolve_media_id(store: &Store, human_id: &str) -> Result<MediaId, AppError> {
-    use_case::resolve_id(store.find_media(human_id).await?, MediaView::media_id, || {
-        AppError::MediaNotFound(human_id.to_owned())
-    })
 }
 
 /// Resolves a citation `human_id` to its aggregate [`CitationId`], or [`AppError::CitationNotFound`].

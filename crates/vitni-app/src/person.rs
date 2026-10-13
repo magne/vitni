@@ -28,7 +28,7 @@ use crate::error::AppError;
 use crate::event::{DateParts, NewEvent, assert_event_date, create_event};
 use crate::identity::{self, IdentityDecision, PairDecision, PersonClusters};
 use crate::session::Session;
-use crate::use_case::{self, MediaRefInput, MutationMeta, Provenance};
+use crate::use_case::{self, MediaRefInput, MutationMeta, Provenance, resolve_media_id, resolve_note_id};
 use crate::workspace::Workspace;
 
 /// A frontend-neutral summary of a person (the DTO the CLI renders).
@@ -1535,24 +1535,6 @@ async fn resolve_citation_id(store: &Store, human_id: &str) -> Result<CitationId
         store.find_citation(human_id).await?,
         vitni_core::citation::CitationView::citation_id,
         || AppError::CitationNotFound(human_id.to_owned()),
-    )
-}
-
-/// Resolves a media `human_id` to its aggregate [`MediaId`], or [`AppError::MediaNotFound`].
-async fn resolve_media_id(store: &Store, human_id: &str) -> Result<MediaId, AppError> {
-    use_case::resolve_id(
-        store.find_media(human_id).await?,
-        vitni_core::media::MediaView::media_id,
-        || AppError::MediaNotFound(human_id.to_owned()),
-    )
-}
-
-/// Resolves a note `human_id` to its aggregate [`NoteId`], or [`AppError::NoteNotFound`].
-async fn resolve_note_id(store: &Store, human_id: &str) -> Result<NoteId, AppError> {
-    use_case::resolve_id(
-        store.find_note(human_id).await?,
-        vitni_core::note::NoteView::note_id,
-        || AppError::NoteNotFound(human_id.to_owned()),
     )
 }
 

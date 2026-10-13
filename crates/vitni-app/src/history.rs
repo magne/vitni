@@ -27,10 +27,10 @@ use vitni_core::ids::{
     AssertionId, CitationId, EventId, FamilyId, ImportRunId, MediaId, NoteId, PersonId, PlaceId, RepositoryId, SourceId,
 };
 use vitni_core::matching::MatchEvidence;
+use vitni_core::media::MediaEventBody;
 use vitni_core::media::command::{MediaCommand, MediaCommandEnvelope};
-use vitni_core::media::{MediaEventBody, MediaView};
+use vitni_core::note::NoteEventBody;
 use vitni_core::note::command::{NoteCommand, NoteCommandEnvelope};
-use vitni_core::note::{NoteEventBody, NoteView};
 use vitni_core::person::PersonView;
 use vitni_core::person::command::{PersonCommand, PersonCommandEnvelope};
 use vitni_core::person::event::PersonEventBody;
@@ -48,7 +48,7 @@ use vitni_db::{DbError, Store, StoredEvent};
 use crate::error::AppError;
 use crate::import_run::{self, RunResume};
 use crate::session::Session;
-use crate::use_case::{Provenance, map_command_error};
+use crate::use_case::{Provenance, map_command_error, resolve_media_id, resolve_note_id};
 use crate::workspace::Workspace;
 
 mod values;
@@ -1448,20 +1448,6 @@ async fn resolve_repository_id(store: &Store, human_id: &str) -> Result<vitni_co
         RepositoryView::repository_id,
         || AppError::RepositoryNotFound(human_id.to_owned()),
     )
-}
-
-/// Resolves a `human_id` to its aggregate [`MediaId`](vitni_core::ids::MediaId).
-async fn resolve_media_id(store: &Store, human_id: &str) -> Result<vitni_core::ids::MediaId, AppError> {
-    crate::use_case::resolve_id(store.find_media(human_id).await?, MediaView::media_id, || {
-        AppError::MediaNotFound(human_id.to_owned())
-    })
-}
-
-/// Resolves a `human_id` to its aggregate [`NoteId`](vitni_core::ids::NoteId).
-async fn resolve_note_id(store: &Store, human_id: &str) -> Result<vitni_core::ids::NoteId, AppError> {
-    crate::use_case::resolve_id(store.find_note(human_id).await?, NoteView::note_id, || {
-        AppError::NoteNotFound(human_id.to_owned())
-    })
 }
 
 /// Resolves a `human_id` to its aggregate

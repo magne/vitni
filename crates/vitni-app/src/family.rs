@@ -29,7 +29,7 @@ use crate::event::{EventSummary, list_events};
 use crate::identity::{self, EventClusters, FamilyClusters, IdentityDecision, PairDecision, PersonClusters};
 use crate::person::{list_persons, render_name};
 use crate::session::Session;
-use crate::use_case::{self, MediaRefInput, MutationMeta, Provenance};
+use crate::use_case::{self, MediaRefInput, MutationMeta, Provenance, resolve_media_id, resolve_note_id};
 use crate::workspace::Workspace;
 
 /// A family partner, joined to the person projection: their name + lifespan for display, the stable
@@ -1268,24 +1268,6 @@ async fn resolve_event_id(store: &Store, human_id: &str) -> Result<EventId, AppE
     use_case::resolve_id(store.find_event(human_id).await?, EventView::event_id, || {
         AppError::EventNotFound(human_id.to_owned())
     })
-}
-
-/// Resolves a media `human_id` to its aggregate [`MediaId`], or [`AppError::MediaNotFound`].
-async fn resolve_media_id(store: &Store, human_id: &str) -> Result<MediaId, AppError> {
-    use_case::resolve_id(
-        store.find_media(human_id).await?,
-        vitni_core::media::MediaView::media_id,
-        || AppError::MediaNotFound(human_id.to_owned()),
-    )
-}
-
-/// Resolves a note `human_id` to its aggregate [`NoteId`], or [`AppError::NoteNotFound`].
-async fn resolve_note_id(store: &Store, human_id: &str) -> Result<NoteId, AppError> {
-    use_case::resolve_id(
-        store.find_note(human_id).await?,
-        vitni_core::note::NoteView::note_id,
-        || AppError::NoteNotFound(human_id.to_owned()),
-    )
 }
 
 /// A person joined to the Person projection: the `human_id`, display name, and lifespan years.
