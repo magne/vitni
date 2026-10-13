@@ -315,7 +315,10 @@ fn running_stage_is_indeterminate_until_the_plugin_knows_the_total() {
 
 // ----- Summary stage -----
 
-fn summary_view() -> Element {
+const DATE_NOTE: &str = "family.ged declares an export date that cannot be read (2100-02-30T00:00:00Z), so this \
+                         import only added to records and replaced no value.";
+
+fn summary_stage(note: Option<String>) -> Element {
     rsx! {
         BulkSummaryStage {
             labels: BulkSummaryLabels {
@@ -325,9 +328,18 @@ fn summary_view() -> Element {
                 another: "Import another".to_owned(),
             },
             source: "/ws/imports/family.ged".to_owned(),
+            note,
             onrestart: |()| {},
         }
     }
+}
+
+fn summary_view() -> Element {
+    summary_stage(None)
+}
+
+fn summary_with_note_view() -> Element {
+    summary_stage(Some(DATE_NOTE.to_owned()))
 }
 
 #[test]
@@ -336,6 +348,14 @@ fn summary_stage_shows_the_count_and_the_source() {
     assert!(html.contains("40 records imported"), "record count: {html}");
     assert!(html.contains("/ws/imports/family.ged"), "the source path: {html}");
     assert!(html.contains("Import another"), "restart action: {html}");
+    assert!(!html.contains("section-note"), "no note without one: {html}");
+}
+
+#[test]
+fn summary_stage_says_when_the_export_date_could_not_be_read() {
+    let html = render(summary_with_note_view);
+    assert!(html.contains("class=\"section-note\""), "the note's box: {html}");
+    assert!(html.contains(DATE_NOTE), "the note: {html}");
 }
 
 // ----- Terminal notices (shared with the export wizard) -----

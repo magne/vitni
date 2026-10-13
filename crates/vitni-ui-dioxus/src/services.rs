@@ -19,17 +19,17 @@ use tokio::sync::{mpsc, oneshot};
 use unic_langid::LanguageIdentifier;
 use vitni_app::{
     AiConfig, BackupReport, BackupRequest, Confidence, Config, ConfigStore, DatasetChoice, DatasetProposal,
-    DatasetScope, FileConfigStore, IdFormats, ImportRunSummary, LocaleDefaults, MapConfig, MapProvider, MapSource,
-    MatchQuestion, MatchReply, PlanReply, PlanSummary, PluginTrust, PluginTrustConfig, PreferenceLayers, ReplaceReport,
-    ReplaceRequest, ResolvedLocale, RestoreReport, RestoreRequest, Session, ShortcutConfig, SuretyLabelOverrides,
-    TagSummary, Workspace, WorkspaceCounts, WorkspaceSummary, config, list_tags, list_workspaces,
+    DatasetScope, FileConfigStore, FileDate, IdFormats, ImportRunSummary, LocaleDefaults, MapConfig, MapProvider,
+    MapSource, MatchQuestion, MatchReply, PlanReply, PlanSummary, PluginTrust, PluginTrustConfig, PreferenceLayers,
+    ReplaceReport, ReplaceRequest, ResolvedLocale, RestoreReport, RestoreRequest, Session, ShortcutConfig,
+    SuretyLabelOverrides, TagSummary, Workspace, WorkspaceCounts, WorkspaceSummary, config, list_tags, list_workspaces,
     read_preference_layers, read_resolved_locale, read_resolved_surety_labels, read_surety_label_overrides,
     workspace_counts,
 };
 use vitni_plugin_host::{
-    Capability, DeferMatches, ExportTarget, Grants, HostPattern, ImportRunSpec, Invocation, NetPolicy, PlanReviewer,
-    PluginHost, PluginInfo, PluginRole, PresentError, Presenter, ProgressControl, ProgressUpdate, ResourceBudget,
-    ReviewRequest, RunDataset, TrustRoots, TrustTier, channel_reviewer, resolve_trust_roots,
+    BulkImported, Capability, DeferMatches, ExportTarget, Grants, HostPattern, ImportRunSpec, Invocation, NetPolicy,
+    PlanReviewer, PluginHost, PluginInfo, PluginRole, PresentError, Presenter, ProgressControl, ProgressUpdate,
+    ResourceBudget, ReviewRequest, RunDataset, TrustRoots, TrustTier, channel_reviewer, resolve_trust_roots,
 };
 use vitni_ui::{
     Category, CitationChangeSetRequest, DataQualityVm, DecideMatch, DnaMatchChangeSetRequest, DnaTestChangeSetRequest,
@@ -1292,8 +1292,9 @@ pub struct BulkImportHandle {
     pub reviews: mpsc::Receiver<ReviewRequest>,
     /// Set to `true` to cancel: the next progress report answers [`ProgressControl::Cancel`].
     pub cancel: Arc<AtomicBool>,
-    /// Resolves with the number of records imported, or a localized error.
-    pub outcome: oneshot::Receiver<Result<u32, String>>,
+    /// Resolves with the number of records imported and the export date the file declared, or a
+    /// localized error.
+    pub outcome: oneshot::Receiver<Result<(u32, FileDate), String>>,
 }
 
 /// Starts a bulk import of `source` with `plugin_id` into `target` (issue #191), returning the
@@ -1470,16 +1471,16 @@ struct BulkImportRequest {
     reviewer: Box<dyn PlanReviewer>,
 }
 
-/// Runs the bulk-import invocation to completion, returning the number of records imported or a
-/// localized error. Mirrors the CLI's `vitni import` (ADR 0013): resolve the bundle (from the
-/// currently open workspace's plugin layers, same as the bulk-export and assisted-import wizards),
-/// take the operator's effective grant, open the *target* workspace (which may differ from the one
-/// currently open), and run the plugin under a Software session.
+/// Runs the bulk-import invocation to completion, returning the number of records imported and the
+/// export date the file declared, or a localized error. Mirrors the CLI's `vitni import` (ADR 0013):
+/// resolve the bundle (from the currently open workspace's plugin layers, same as the bulk-export and
+/// assisted-import wizards), take the operator's effective grant, open the *target* workspace (which
+/// may differ from the one currently open), and run the plugin under a Software session.
 async fn run_bulk_import_session(
     services: Services,
     request: BulkImportRequest,
     progress: impl FnMut(ProgressUpdate) -> ProgressControl + Send + 'static,
-) -> Result<u32, String> {
+) -> Result<(u32, FileDate), String> {
     let BulkImportRequest {
         plugin_id,
         source,
@@ -1514,7 +1515,7 @@ async fn run_bulk_import_session(
         provenance_confidence: None,
         import: Some(run),
     };
-    let (records, _workspace) = services
+    let BulkImported { records, file_date, .. } = services
         .host
         .run_bulk_import(&component, invocation, source, progress)
         .await
@@ -1524,7 +1525,7 @@ async fn run_bulk_import_session(
             }
             other => chrome.plugin_error(&other.to_string()),
         })?;
-    Ok(records)
+    Ok((records, file_date))
 }
 
 /// Everything the Preferences screen (PR 20) needs to render: the global config (operator identity,

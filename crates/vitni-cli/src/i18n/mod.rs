@@ -270,6 +270,13 @@ impl Localizer {
         fl!(self.loader, "import-success", count = count, plugin = plugin)
     }
 
+    /// Why an import replaced no value: `source` declared an export date, `date` (as the importer
+    /// declared it), that cannot be read (ADR 0029 §3).
+    #[must_use]
+    pub fn import_date_unread(&self, source: &str, date: &str) -> String {
+        fl!(self.loader, "import-date-unread", source = source, date = date)
+    }
+
     /// `Exported N record(s) to <path>.`
     #[must_use]
     pub fn export_success(&self, count: u32, path: &str) -> String {

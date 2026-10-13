@@ -9,9 +9,9 @@ use vitni_app::{
     AiConfig, AppError, ConfigStore, DatasetChoice, DatasetProposal, FileConfigStore, PlanSummary, Session, Workspace,
 };
 use vitni_plugin_host::{
-    DeferMatches, ExportTarget, Grants, ImportRunSpec, Invocation, NetPolicy, PluginError, PluginHost, PluginInfo,
-    ProgressControl, ProgressStep, ProgressUpdate, ResourceBudget, RunDataset, TrustRoots, channel_reviewer,
-    resolve_trust_roots,
+    BulkImported, DeferMatches, ExportTarget, Grants, ImportRunSpec, Invocation, NetPolicy, PluginError, PluginHost,
+    PluginInfo, ProgressControl, ProgressStep, ProgressUpdate, ResourceBudget, RunDataset, TrustRoots,
+    channel_reviewer, resolve_trust_roots,
 };
 
 use crate::commands::review::{self, PlanFormat, ReviewMode, Reviewed, Terminal};
@@ -150,7 +150,11 @@ impl PreparedImport {
         };
         let review = review::answer(requests, localizer, (mode, &source), &mut terminal);
         let (imported, (), reviewed) = tokio::join!(import, answer, review);
-        let (count, _workspace) = imported.map_err(|error| match error {
+        let BulkImported {
+            records: count,
+            file_date,
+            ..
+        } = imported.map_err(|error| match error {
             PluginError::Dataset(error) => AppError::Dataset(error),
             other => AppError::Plugin(other.to_string()),
         })?;
@@ -169,6 +173,9 @@ impl PreparedImport {
             (Reviewed::Cancelled, _) => println!("{}", localizer.import_cancelled()),
             (Reviewed::NotPlanned | Reviewed::Committed, _) => {
                 println!("{}", localizer.import_success(count, &plugin));
+                if let Some(declared) = file_date.unreadable() {
+                    println!("{}", localizer.import_date_unread(&source, declared));
+                }
             }
         }
         Ok(())

@@ -19,8 +19,8 @@ use vitni_app::{
 };
 use vitni_core::ids::AgentId;
 use vitni_plugin_host::{
-    Capability, ExportTarget, Grants, Invocation, NetPolicy, PluginError, ProgressControl, ProgressUpdate,
-    ResourceBudget,
+    BulkImported, Capability, ExportTarget, Grants, Invocation, NetPolicy, PluginError, ProgressControl,
+    ProgressUpdate, ResourceBudget,
 };
 
 mod common;
@@ -387,7 +387,11 @@ async fn gedcom_imports_with_software_provenance_then_round_trips() {
     let (root, _dir) = init_workspace();
     let workspace = open_workspace(&root).await;
     let (progress, record) = progress_collector();
-    let (count, workspace) = host
+    let BulkImported {
+        records: count,
+        workspace,
+        ..
+    } = host
         .run_bulk_import(&importer, invocation(workspace, import_grants()), source, record)
         .await
         .expect("import");
@@ -452,7 +456,11 @@ async fn gedcom_imports_with_software_provenance_then_round_trips() {
     let (root2, _dir2) = init_workspace();
     let workspace2 = open_workspace(&root2).await;
     let (_, record) = progress_collector();
-    let (count2, workspace2) = host
+    let BulkImported {
+        records: count2,
+        workspace: workspace2,
+        ..
+    } = host
         .run_bulk_import(&importer, invocation(workspace2, import_grants()), exported, record)
         .await
         .expect("re-import");
@@ -479,7 +487,11 @@ async fn re_importing_the_same_file_into_one_workspace_emits_no_new_events() {
     let workspace = open_workspace(&root).await;
 
     // First import populates the workspace.
-    let (count, workspace) = host
+    let BulkImported {
+        records: count,
+        workspace,
+        ..
+    } = host
         .run_bulk_import(
             &importer,
             invocation(workspace, import_grants()),
@@ -512,7 +524,7 @@ async fn re_importing_the_same_file_into_one_workspace_emits_no_new_events() {
 
     // Re-import the identical file into the SAME workspace: every record resolves to its existing
     // aggregate, so no new events are written and the projection is unchanged.
-    let (_, workspace) = host
+    let BulkImported { workspace, .. } = host
         .run_bulk_import(
             &importer,
             invocation(workspace, import_grants()),
@@ -601,7 +613,11 @@ async fn gedcom_imports_repositories_fam_level_attachments_and_media_caption() {
     let source = write_file(io_dir.path(), "in.ged", REPO_AND_FAM_ATTACHMENTS.as_bytes());
     let (root, _dir) = init_workspace();
     let workspace = open_workspace(&root).await;
-    let (count, workspace) = host
+    let BulkImported {
+        records: count,
+        workspace,
+        ..
+    } = host
         .run_bulk_import(
             &importer,
             invocation(workspace, import_grants()),
@@ -651,7 +667,9 @@ async fn gedcom_imports_repositories_fam_level_attachments_and_media_caption() {
 
     let (root2, _dir2) = init_workspace();
     let workspace2 = open_workspace(&root2).await;
-    let (_, workspace2) = host
+    let BulkImported {
+        workspace: workspace2, ..
+    } = host
         .run_bulk_import(
             &importer,
             invocation(workspace2, import_grants()),
@@ -703,7 +721,11 @@ async fn gedcom_imports_a_source_abbreviation() {
     let source = write_file(io_dir.path(), "in.ged", SOURCE_ABBREVIATION.as_bytes());
     let (root, _dir) = init_workspace();
     let workspace = open_workspace(&root).await;
-    let (count, workspace) = host
+    let BulkImported {
+        records: count,
+        workspace,
+        ..
+    } = host
         .run_bulk_import(
             &importer,
             invocation(workspace, import_grants()),
@@ -750,7 +772,11 @@ async fn gedcom_imports_and_exports_a_repository_call_number_and_medium() {
     let source = write_file(io_dir.path(), "in.ged", REPOSITORY_CALL_NUMBER_AND_MEDIUM.as_bytes());
     let (root, _dir) = init_workspace();
     let workspace = open_workspace(&root).await;
-    let (count, workspace) = host
+    let BulkImported {
+        records: count,
+        workspace,
+        ..
+    } = host
         .run_bulk_import(
             &importer,
             invocation(workspace, import_grants()),
@@ -788,7 +814,9 @@ async fn gedcom_imports_and_exports_a_repository_call_number_and_medium() {
 
     let (root2, _dir2) = init_workspace();
     let workspace2 = open_workspace(&root2).await;
-    let (_, workspace2) = host
+    let BulkImported {
+        workspace: workspace2, ..
+    } = host
         .run_bulk_import(
             &importer,
             invocation(workspace2, import_grants()),
@@ -867,7 +895,7 @@ async fn gedcom_imports_and_exports_a_citation_transcription() {
     let source = write_file(io_dir.path(), "in.ged", CITATION_TRANSCRIPTION.as_bytes());
     let (root, _dir) = init_workspace();
     let workspace = open_workspace(&root).await;
-    let (_, workspace) = host
+    let BulkImported { workspace, .. } = host
         .run_bulk_import(
             &importer,
             invocation(workspace, import_grants()),
@@ -897,7 +925,9 @@ async fn gedcom_imports_and_exports_a_citation_transcription() {
 
     let (root2, _dir2) = init_workspace();
     let workspace2 = open_workspace(&root2).await;
-    let (_, workspace2) = host
+    let BulkImported {
+        workspace: workspace2, ..
+    } = host
         .run_bulk_import(
             &importer,
             invocation(workspace2, import_grants()),
@@ -932,7 +962,11 @@ async fn gedcom_imports_and_exports_a_second_name_without_clobbering_the_first()
     let source = write_file(io_dir.path(), "in.ged", TWO_NAMES.as_bytes());
     let (root, _dir) = init_workspace();
     let workspace = open_workspace(&root).await;
-    let (count, workspace) = host
+    let BulkImported {
+        records: count,
+        workspace,
+        ..
+    } = host
         .run_bulk_import(
             &importer,
             invocation(workspace, import_grants()),
@@ -965,7 +999,9 @@ async fn gedcom_imports_and_exports_a_second_name_without_clobbering_the_first()
 
     let (root2, _dir2) = init_workspace();
     let workspace2 = open_workspace(&root2).await;
-    let (_, workspace2) = host
+    let BulkImported {
+        workspace: workspace2, ..
+    } = host
         .run_bulk_import(
             &importer,
             invocation(workspace2, import_grants()),
@@ -996,7 +1032,7 @@ async fn a_places_map_is_imported_however_late_the_document_states_it() {
     let source = write_file(io_dir.path(), "in.ged", doc.as_bytes());
     let (root, _dir) = init_workspace();
     let workspace = open_workspace(&root).await;
-    let (_, workspace) = common::host()
+    let BulkImported { workspace, .. } = common::host()
         .run_bulk_import(
             &common::component("gedcom-import"),
             invocation(workspace, import_grants()),
@@ -1048,7 +1084,7 @@ async fn reimport_reconciles_sex_only_when_the_files_export_date_is_at_least_as_
     let source = write_file(io_dir.path(), "in1.ged", reconcile_doc(None, "M").as_bytes());
     let (root, _dir) = init_workspace();
     let workspace = open_workspace(&root).await;
-    let (_, workspace) = host
+    let BulkImported { workspace, .. } = host
         .run_bulk_import(
             &importer,
             invocation(workspace, import_grants()),
@@ -1069,7 +1105,7 @@ async fn reimport_reconciles_sex_only_when_the_files_export_date_is_at_least_as_
         "in2.ged",
         reconcile_doc(Some("1 JAN 2000"), "F").as_bytes(),
     );
-    let (_, workspace) = host
+    let BulkImported { workspace, .. } = host
         .run_bulk_import(
             &importer,
             invocation(workspace, import_grants()),
@@ -1092,7 +1128,7 @@ async fn reimport_reconciles_sex_only_when_the_files_export_date_is_at_least_as_
         "in3.ged",
         reconcile_doc(Some("1 JAN 2100"), "F").as_bytes(),
     );
-    let (_, workspace) = host
+    let BulkImported { workspace, .. } = host
         .run_bulk_import(
             &importer,
             invocation(workspace, import_grants()),
@@ -1121,7 +1157,11 @@ async fn rich_gedcom_imports_structured_name_dates_address_fact_and_association(
     let (root, _dir) = init_workspace();
     let workspace = open_workspace(&root).await;
     let (_, record) = progress_collector();
-    let (count, workspace) = host
+    let BulkImported {
+        records: count,
+        workspace,
+        ..
+    } = host
         .run_bulk_import(&importer, invocation(workspace, import_grants()), source, record)
         .await
         .expect("import");
@@ -1188,7 +1228,7 @@ async fn rich_gedcom_round_trips_structured_name_date_address_fact_and_associati
     let (root, _dir) = init_workspace();
     let workspace = open_workspace(&root).await;
     let (_, record) = progress_collector();
-    let (_, workspace) = host
+    let BulkImported { workspace, .. } = host
         .run_bulk_import(&importer, invocation(workspace, import_grants()), source, record)
         .await
         .expect("import");
@@ -1211,7 +1251,9 @@ async fn rich_gedcom_round_trips_structured_name_date_address_fact_and_associati
     let (root2, _dir2) = init_workspace();
     let workspace2 = open_workspace(&root2).await;
     let (_, record) = progress_collector();
-    let (_, workspace2) = host
+    let BulkImported {
+        workspace: workspace2, ..
+    } = host
         .run_bulk_import(&importer, invocation(workspace2, import_grants()), exported, record)
         .await
         .expect("re-import");
@@ -1268,7 +1310,7 @@ async fn gedcom_imports_participation_age_and_event_witness() {
     let (root, _dir) = init_workspace();
     let workspace = open_workspace(&root).await;
     let (_, record) = progress_collector();
-    let (_, workspace) = host
+    let BulkImported { workspace, .. } = host
         .run_bulk_import(&importer, invocation(workspace, import_grants()), source, record)
         .await
         .expect("import");
@@ -1319,7 +1361,7 @@ async fn participation_age_and_witness_round_trip_through_export() {
     let (root, _dir) = init_workspace();
     let workspace = open_workspace(&root).await;
     let (_, record) = progress_collector();
-    let (_, workspace) = host
+    let BulkImported { workspace, .. } = host
         .run_bulk_import(&importer, invocation(workspace, import_grants()), source, record)
         .await
         .expect("import");
@@ -1348,7 +1390,9 @@ async fn participation_age_and_witness_round_trip_through_export() {
     let (root2, _dir2) = init_workspace();
     let workspace2 = open_workspace(&root2).await;
     let (_, record) = progress_collector();
-    let (_, workspace2) = host
+    let BulkImported {
+        workspace: workspace2, ..
+    } = host
         .run_bulk_import(&importer, invocation(workspace2, import_grants()), exported, record)
         .await
         .expect("re-import");
@@ -1416,7 +1460,11 @@ async fn a_cancel_while_reading_stops_the_import_before_anything_is_written() {
 
     let (root, _dir) = init_workspace();
     let workspace = open_workspace(&root).await;
-    let (count, workspace) = host
+    let BulkImported {
+        records: count,
+        workspace,
+        ..
+    } = host
         .run_bulk_import(
             &importer,
             invocation(workspace, import_grants()),
@@ -1447,7 +1495,7 @@ async fn export_to_a_directory_lands_under_the_plugins_suggested_name() {
     let source = write_file(io_dir.path(), "in.ged", SAMPLE.as_bytes());
     let (root, _dir) = init_workspace();
     let workspace = open_workspace(&root).await;
-    let (_, workspace) = host
+    let BulkImported { workspace, .. } = host
         .run_bulk_import(
             &importer,
             invocation(workspace, import_grants()),
@@ -1488,7 +1536,11 @@ async fn export_to_a_directory_lands_under_the_plugins_suggested_name() {
     // The document itself is a real export: it re-imports to the same structure.
     let (root2, _dir2) = init_workspace();
     let workspace2 = open_workspace(&root2).await;
-    let (recount, workspace2) = host
+    let BulkImported {
+        records: recount,
+        workspace: workspace2,
+        ..
+    } = host
         .run_bulk_import(
             &importer,
             invocation(workspace2, import_grants()),
@@ -1577,7 +1629,7 @@ async fn a_merged_cluster_exports_as_one_person_until_the_merge_is_undone() {
     let io_dir = tempfile::tempdir().expect("io dir");
     let (root, _dir) = init_workspace();
     let workspace = open_workspace(&root).await;
-    let (_, workspace) = common::host()
+    let BulkImported { workspace, .. } = common::host()
         .run_bulk_import(
             &common::component("gedcom-import"),
             invocation(workspace, import_grants()),
@@ -1655,7 +1707,7 @@ async fn a_family_naming_two_records_of_one_cluster_exports_the_root_once() {
     let io_dir = tempfile::tempdir().expect("io dir");
     let (root, _dir) = init_workspace();
     let workspace = open_workspace(&root).await;
-    let (_, workspace) = common::host()
+    let BulkImported { workspace, .. } = common::host()
         .run_bulk_import(
             &common::component("gedcom-import"),
             invocation(workspace, import_grants()),
@@ -1705,7 +1757,7 @@ async fn a_merged_family_and_marriage_export_as_one() {
     let io_dir = tempfile::tempdir().expect("io dir");
     let (root, _dir) = init_workspace();
     let workspace = open_workspace(&root).await;
-    let (_, workspace) = common::host()
+    let BulkImported { workspace, .. } = common::host()
         .run_bulk_import(
             &common::component("gedcom-import"),
             invocation(workspace, import_grants()),
@@ -1775,7 +1827,7 @@ async fn a_merged_source_and_citation_export_as_one() {
     let io_dir = tempfile::tempdir().expect("io dir");
     let (root, _dir) = init_workspace();
     let workspace = open_workspace(&root).await;
-    let (_, workspace) = common::host()
+    let BulkImported { workspace, .. } = common::host()
         .run_bulk_import(
             &common::component("gedcom-import"),
             invocation(workspace, import_grants()),
