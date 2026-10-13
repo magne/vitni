@@ -118,7 +118,7 @@ condition under which snapshotting would pay off.
 [ADR 0032](../adr/0032-projection-schema-evolution-by-replay.md) added a `GENERATED ALWAYS ... STORED`
 `human_id` column plus two indexes to every human-id-bearing view table, replacing the
 `json_extract`/`->>` scans `next_human_id` and `find_view_by_human_id` did before (issue #233). This
-re-measurement corrects finding 3 above and gives the before/after numbers `docs/issues.md`'s bullet
+re-measurement corrects finding 3 above and gives the before/after numbers the backlog item
 asked for. **Quick mode** (fewer samples than a full run — the invocation is in *Reproducing* below),
 same machine and sizes as above:
 

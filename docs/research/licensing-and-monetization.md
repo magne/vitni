@@ -494,8 +494,7 @@ contributor agreement while claiming a commercial-exception business exists.
 
 ## 9. Follow-ups
 
-Filed as backlog bullets under *Docs & repo tooling* in [`issues.md`](../issues.md); none of it is
-done in this change.
+Filed as issues #613 and #614; none of it is done in this change.
 
 1. **ADR 0034** — record the split, the AGPLv3 §7 plugin exception, the CLA decision, and the fact
    that the MPL crates carry Exhibit A only. 0016 and 0031 are unwritten; the accepted set runs to

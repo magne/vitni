@@ -11,8 +11,8 @@
 # defaults (`bug`, `documentation`, `good first issue`, `help wanted`, `wontfix`, `dependencies`, …)
 # are deliberately reused, and Dependabot applies some of them itself.
 #
-# `area/*` mirrors the H3 headings under the four *backlog* H2s of `docs/issues.md`. The H3s under
-# `## Decided — no action needed` are deliberately absent: they group decisions, not work.
+# `area/*` names the surfaces of the product; the issue templates' area dropdowns mirror this list.
+# The headings of `docs/decisions.md` group decisions, not work, and are deliberately not areas.
 
 # --- area/* : where the work is. Exactly one per issue. ---------------------------------------
 
@@ -136,7 +136,7 @@ name = "area/platform/deps"
 color = "b60205"
 description = "Dependency upgrades"
 
-# Cross-cutting areas — not backlog H3s, but real homes for work.
+# Cross-cutting areas — not one surface of the product, but real homes for work.
 
 [[label]]
 name = "area/docs"

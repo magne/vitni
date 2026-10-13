@@ -1,7 +1,7 @@
 # Plan — Places: geography view & temporal place model (full phase)
 
 - **Status:** **Implemented 2026-07-22** — shipped as three stacked ADR-gated slices
-  (ADR 0024/0025/0026). Archived; residuals tracked by area in [`docs/issues.md`](../../issues.md).
+  (ADR 0024/0025/0026). Archived; residuals tracked by area in `docs/issues.md` (retired in #615).
 - **Roadmap home:** Phase 9 (after Phase 8, the `net` capability)
 - **Mockup:** [`../mockups/geography.html`](../../mockups/geography.html)
 - **Gating ADRs:** [0024](../../adr/0024-place-geometry-and-spatial-storage.md) (geometry & spatial

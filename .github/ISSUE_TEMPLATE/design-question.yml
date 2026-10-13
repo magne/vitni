@@ -24,6 +24,7 @@ body:
         - records/dna
         - records/cross-aggregate
         - frontend/shell
+        - frontend/records
         - frontend/lists
         - frontend/keyboard
         - frontend/pedigree
@@ -74,5 +75,5 @@ body:
       options:
         - label: The answer should be recorded as an ADR (binding, immutable).
         - label: >
-            The answer might be "no change" — in which case it belongs in `docs/issues.md`'s
-            **Decided — no action needed** section, not just an issue comment.
+            The answer might be "no change" — in which case it belongs in `docs/decisions.md`,
+            not just an issue comment.

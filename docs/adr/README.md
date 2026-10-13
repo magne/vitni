@@ -4,7 +4,8 @@ One file per decision, numbered in the order they were accepted. **An accepted A
 later ADR that changes it says so, naming the section it supersedes, and the earlier one stands
 everywhere else. 0016 and 0031 are reserved and not yet written: 0016 for the server backend and web frontend
 ([`roadmap.md`](../roadmap.md) Phase 13), 0031 for the Norwegian place-model changes the
-[*Places*](../issues.md#places) backlog names.
+[`needs-adr` place issues](https://github.com/magne/vitni/issues?q=is%3Aopen+label%3Aarea%2Frecords%2Fplaces+label%3Aneeds-adr)
+wait on.
 
 Find the ADRs that bear on a change by its keywords below, then read those. To add one, take the next
 number, copy an existing ADR's header (`Status`, `Date`), and add its row to this table in the same

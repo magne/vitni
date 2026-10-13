@@ -417,8 +417,9 @@ Plan: [`docs/archive/plans/places-geography-temporal.md`](archive/plans/places-g
   Postgres mirror — whose succession half turns out to be a functional break of `show_place` rather than a
   performance follow-up. The research also surfaced model gaps this phase did not anticipate: parallel
   civil/ecclesiastical/judicial hierarchies that do not nest, positional accuracy as a concept distinct
-  from `Confidence`, and cessation. All are additive; the itemization lives in
-  [`issues.md`](issues.md#places). The import itself is deliberately unmilestoned — see
+  from `Confidence`, and cessation. All are additive; the itemization lives in the
+  [place issues](https://github.com/magne/vitni/issues?q=is%3Aopen+label%3Aarea%2Frecords%2Fplaces).
+  The import itself is deliberately unmilestoned — see
   [`issue-tracking.md`](issue-tracking.md) §3.
 
 ## Phase 10 — Research rigor & import sync ✅ done
@@ -462,8 +463,10 @@ Research: [`surety-schemes.md`](research/surety-schemes.md),
 [`proof-argument-modelling.md`](research/proof-argument-modelling.md),
 [`merge-sync-conflict-resolution.md`](research/merge-sync-conflict-resolution.md); plan (archivable):
 [`docs/archive/plans/phase-10-research-rigor.md`](archive/plans/phase-10-research-rigor.md). Scoped residuals are
-tracked by area in [`docs/issues.md`](issues.md) — chiefly under *Import, export & plugins* (bulk
-sync, round-trip gaps) and *Records & data model → Cross-aggregate* (surety-scheme cardinality).
+tracked as issues — chiefly
+[bulk sync](https://github.com/magne/vitni/issues?q=is%3Aopen+label%3Aarea%2Fimport%2Fbulk),
+[round-trip gaps](https://github.com/magne/vitni/issues?q=is%3Aopen+label%3Aarea%2Fimport%2Fround-trip)
+and surety-scheme cardinality (#627).
 
 ## Phase 11 — 1.0 hardening ✅ done
 
@@ -500,9 +503,10 @@ app. Gated by **ADR 0014** (the last deferred plugin-system decision).
 
 Research: [`research/plugin-signing-and-trust.md`](research/plugin-signing-and-trust.md),
 [`research/performance-profiling.md`](research/performance-profiling.md); plan:
-[`archive/plans/phase-11-hardening.md`](archive/plans/phase-11-hardening.md). Scoped residuals are tracked by area in
-[`docs/issues.md`](issues.md) — under *Platform & operations* (packaging & release, performance) and
-*Import, export & plugins → Plugin trust & capabilities*.
+[`archive/plans/phase-11-hardening.md`](archive/plans/phase-11-hardening.md). Scoped residuals are tracked as issues —
+[packaging & release](https://github.com/magne/vitni/issues?q=is%3Aopen+label%3Aarea%2Fplatform%2Fpackaging),
+[performance](https://github.com/magne/vitni/issues?q=is%3Aopen+label%3Aarea%2Fplatform%2Fperf) and
+[plugin trust & capabilities](https://github.com/magne/vitni/issues?q=is%3Aopen+label%3Aarea%2Fplugins%2Ftrust).
 
 ## Phase 12 — DNA breadth & depth
 
@@ -583,8 +587,8 @@ The design is five ADRs, written together because each builds on the one before:
 The five ADRs were accepted on 2026-09-28, together and ahead of their implementation. That departs
 from the sequencing rule under *New ADRs required*: they depend on each other too closely to accept
 one at a time. They are immutable like every accepted ADR, so anything the implementation proves wrong
-is fixed by a superseding ADR, not by an edit. The work items are in
-[`issues.md`](issues.md#record-matching--identity), in dependency order.
+is fixed by a superseding ADR, not by an edit. The work items are the
+[`0.10 — Record matching`](https://github.com/magne/vitni/milestone/5) milestone's issues.
 
 **Progress.** ✅ Workspace backup and restore (ADR 0041, #391): `vitni backup create|restore` and the
 Preferences *Backup & restore* card, the `0.1` format with its restore-time upgrader chain and window,

@@ -1,6 +1,6 @@
 # Completed work (archived)
 
-- **Status:** **Extracted 2026-07-27** from [`docs/issues.md`](../issues.md), which now tracks only
+- **Status:** **Extracted 2026-07-27** from `docs/issues.md` (retired in #615), which now tracks only
   outstanding work grouped by area. Retained here as a historical record; every claim below was
   re-verified against the code at archive time.
 - **Purpose (historical):** was the `## Completed` log (and the closed `## Bugs` list) of
@@ -12,7 +12,7 @@
 Each entry below was checked against the code before archiving — symbol by symbol, not by trusting
 the prose. All 8 bug fixes and all 7 phase/feature completions are genuinely implemented. Four
 inaccuracies were found; the two that describe real gaps became outstanding items in
-[`docs/issues.md`](../issues.md):
+`docs/issues.md` (retired in #615):
 
 1. **The `## Bugs` preamble overstated test coverage.** It claimed "each is covered by an SSR/unit
    test". True for bugs 1, 3 and 5; **false for 2 and 4** — the marker load-race stash
@@ -180,7 +180,7 @@ pan/zoom feel or click latency:
   silent drop. `[shortcuts]` lives in the global `~/.config/vitni/config.toml`, client scope only
   (mirrors `[ai]`/`[map]`/`[plugin_trust]`) — no workspace-manifest layer. A save takes effect live (a
   `Signal<ShortcutConfig>` held in shell context), no restart needed. Scoped residuals tracked in
-  [`docs/issues.md`](../issues.md) under *Frontend & interaction → Keyboard & shortcuts*.
+  `docs/issues.md` (retired in #615) under *Frontend & interaction → Keyboard & shortcuts*.
 - **1.0 hardening (Phase 11).** *(Done — Gate 1 + a Gate-2 PR stack, PRs #176–#182:
   `docs/phase-11-gate-1` → `feat/plugin-bundle-signing` → `feat/plugin-layered-loading` →
   `feat/plugin-grants` → `feat/plugin-grant-ux` → `feat/perf-profiling` →

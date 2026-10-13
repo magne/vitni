@@ -41,10 +41,8 @@
 //!   `target/` and every `plugins/*/target/`, plus the regenerable run output; `--full` also deletes
 //!   `target/plugins` and the fetched external fixtures, `--dry-run` only reports.
 //! - `check` — run every static check above (`i18n-check`, `css-check`, `input-guard`,
-//!   `licence-check`, `icons --check`, `issue-sync`, `adr-index`, `backup-guard`, `fixture-guard`,
-//!   `match-eval`) in one pass, reporting all failures rather than stopping at the first.
-//! - `issue-sync` — verify the `docs/issues.md` ↔ GitHub Issues linkage: references well-formed and
-//!   unique, every backlog bullet inside an `###` area. `--online` also reconciles against `gh`.
+//!   `licence-check`, `icons --check`, `adr-index`, `backup-guard`, `fixture-guard`, `match-eval`) in one
+//!   pass, reporting all failures rather than stopping at the first.
 //! - `adr-index` — verify `docs/adr/README.md` has exactly one row per ADR and links no missing file.
 //! - `labels` — reconcile GitHub's issue labels with `.github/labels.toml` (`--apply` to write).
 //! - `package` — assemble a Linux release tarball (binaries + signed plugin fleet + launcher) under
@@ -78,7 +76,6 @@ mod gui_pass;
 mod i18n_check;
 mod icons;
 mod input_guard;
-mod issue_sync;
 mod labels;
 mod licence_check;
 mod match_eval;
@@ -103,7 +100,6 @@ fn main() -> Result<()> {
         Some("input-guard") => input_guard::run(),
         Some("licence-check") => licence_check::run(),
         Some("icons") => icons::run(&env::args().skip(2).collect::<Vec<String>>()),
-        Some("issue-sync") => issue_sync::run(),
         Some("adr-index") => adr_index::run(),
         Some("labels") => labels::run(),
         Some("package") => package::run(),
@@ -130,13 +126,12 @@ fn main() -> Result<()> {
 
 /// Runs every static check, reporting all failures (never stopping at the first).
 fn check() -> Result<()> {
-    let checks: [Check; 10] = [
+    let checks: [Check; 9] = [
         ("i18n-check", i18n_check::run),
         ("css-check", css_check::run),
         ("input-guard", input_guard::run),
         ("licence-check", licence_check::run),
         ("icons", icons::check),
-        ("issue-sync", issue_sync::run),
         ("adr-index", adr_index::run),
         ("backup-guard", backup_guard::run),
         ("fixture-guard", fixture_guard::run),
@@ -169,7 +164,6 @@ fn print_usage() {
     println!("  licence-check  verify no permissive crate reaches AGPL code and every crate declares a licence");
     println!("  icons          rasterise the SVG icon tiers and brand lockups into their PNGs");
     println!("                 [--check]      verify the committed rasters instead of rewriting them");
-    println!("  issue-sync     verify the docs/issues.md <-> GitHub Issues linkage (--online to reconcile)");
     println!("  adr-index      verify docs/adr/README.md indexes every ADR exactly once");
     println!("  labels         reconcile GitHub labels with .github/labels.toml (--apply to write)");
     println!("  backup-fixture regenerate the golden backup fixture and refresh every fixture digest");
@@ -179,7 +173,7 @@ fn print_usage() {
     println!("  fetch-fixtures download the external Digitalarkivet fixtures into target/ (needs the network)");
     println!("  regen-fixtures rebuild the bundled Digitalarkivet fixtures from the fetched pages, failing closed");
     println!(
-        "  check          run every static check (i18n-check, css-check, input-guard, licence-check, icons, issue-sync,\n                 adr-index, backup-guard, fixture-guard, match-eval)"
+        "  check          run every static check (i18n-check, css-check, input-guard, licence-check, icons, adr-index,\n                 backup-guard, fixture-guard, match-eval)"
     );
     println!("  clean          free disk: drop incremental caches, linked test binaries and run output,");
     println!("                 keeping every compiled dependency and target/plugins");

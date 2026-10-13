@@ -38,8 +38,9 @@ Pre-1.0 and usable. The domain model, persistence, import/export, the desktop GU
 map views, and the plugin trust model are implemented; DNA breadth and a server-backed web frontend
 are the remaining work. Release artifacts are **Linux-first** — a tarball, a `.deb` and an AppImage
 (see [`docs/release.md`](docs/release.md)). The CLI and the desktop GUI are both thin frontends over
-the same application layer, so they stay in step by construction; two known gaps in either direction
-are tracked in [`docs/issues.md`](docs/issues.md) rather than papered over.
+the same application layer, so they stay in step by construction; the known gaps in either direction
+are [tracked as issues](https://github.com/magne/vitni/labels/area%2Ffrontend%2Fgui-cli-parity) rather
+than papered over.
 
 > **Pre-1.0 data notice.** Upgrading between pre-1.0 versions is **not migration-safe**. Event
 > payloads change without upcasters and configuration files owe no backwards compatibility
