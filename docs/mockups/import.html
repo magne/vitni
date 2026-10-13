@@ -365,6 +365,22 @@
       <div style="margin-top:var(--sp-3)">
         <button class="btn primary">Import another</button>
       </div>
+      <div class="specimen">
+        <div class="label">The summary of a re-import of <span class="mono">tree.ged</span> whose export date cannot be read</div>
+        <div class="wrap" style="gap:var(--sp-4)">
+          <span class="badge">1 record imported</span>
+        </div>
+        <div class="path-preview" style="margin-top:var(--sp-3)">
+          <span class="field-label">Imported from</span>
+          <div class="picker-value">
+            <span class="mono grow" style="word-break:break-all">/home/ola/downloads/tree.ged</span>
+          </div>
+        </div>
+        <div class="section-note" style="margin-top:var(--sp-3);margin-bottom:0">tree.ged declares an export date that cannot be read (2100-02-30T00:00:00Z), so this import only added to records and replaced no value.</div>
+        <div style="margin-top:var(--sp-3)">
+          <button class="btn primary">Import another</button>
+        </div>
+      </div>
     </div>
 
     <!-- ===================== AFTER A RE-IMPORT — WHAT IT CHANGED, AND WHY (ADR 0029, ADR 0049) =====================
@@ -376,8 +392,9 @@
         only when the file says it was exported no earlier than when the value it replaces was recorded,
         whoever recorded it (ADR 0029 §1). An older file, or one with no export date the importer can read,
         leaves the value as it is. A file that declares a date which cannot be read — an impossible day such
-        as <span class="mono">30 FEB 2100</span> — says so on its run's row, quoting the date as the importer read it, so a
-        re-import that changed nothing is not a mystery (#528). Nothing asks: the replacement is an ordinary <b>supersession</b>, kept in
+        as <span class="mono">30 FEB 2100</span> — says so on its run's row, quoting the date as the importer read it (#528).
+        The wizard's <b>Summary</b> and the CLI's <span class="mono">vitni import</span> output say it too, in the same words,
+        so a re-import that wrote nothing, and so left no run, is not a mystery (#558). Nothing asks: the replacement is an ordinary <b>supersession</b>, kept in
         the record's <b>History</b> like any correction and undone the same way. The run's row opens with
         <b>What it changed</b> to the changes it made to this record, and the supersession says why, worded
         from the run's file and export date in the UI's language (ADR 0049). A re-import that replaces a

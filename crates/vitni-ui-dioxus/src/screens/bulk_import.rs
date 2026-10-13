@@ -354,6 +354,7 @@ pub fn BulkImportBody() -> Element {
             BulkSummaryStage {
                 labels: bulk_summary_labels(&chrome, summary.records),
                 source: summary.source,
+                note: summary.date_note,
                 onrestart: move |()| bulk_restart(session),
             }
         },
@@ -1024,7 +1025,12 @@ pub fn BulkRunningStage(
 
 /// Stage 3 — the summary: how many records were imported, from where, and "Import another".
 #[component]
-pub fn BulkSummaryStage(labels: BulkSummaryLabels, source: String, onrestart: EventHandler<()>) -> Element {
+pub fn BulkSummaryStage(
+    labels: BulkSummaryLabels,
+    source: String,
+    note: Option<String>,
+    onrestart: EventHandler<()>,
+) -> Element {
     rsx! {
         Card {
             h3 { "{labels.heading}" }
@@ -1036,6 +1042,9 @@ pub fn BulkSummaryStage(labels: BulkSummaryLabels, source: String, onrestart: Ev
                 div { class: "picker-value",
                     span { class: "mono grow", style: "word-break:break-all", "{source}" }
                 }
+            }
+            if let Some(note) = note {
+                div { class: "section-note", style: "margin-top:var(--sp-3);margin-bottom:0", "{note}" }
             }
             div { style: "margin-top:var(--sp-3)",
                 Button {
@@ -1230,7 +1239,7 @@ fn launch_bulk_import(
 /// What the driver loop needs beyond the run's handle.
 struct BulkDrive {
     chrome: Chrome,
-    /// The data localizer a possible match's comparison is labelled with.
+    /// The data localizer a possible match's comparison and the summary's note are labelled with.
     loc: Localizer,
     source_display: String,
     /// The target workspace's name and person count, for the dataset question's dialog.
@@ -1334,17 +1343,17 @@ async fn bulk_drive(handle: BulkImportHandle, mut session: Signal<BulkImportSess
     let mut review = drive.asking.review;
     review.set(None);
     let BulkDrive {
+        loc,
         source_display,
         refresh,
         unknown_failure,
         ..
     } = drive;
     match outcome.await {
-        Ok(Ok(records)) => {
-            session.write().on_success(BulkImportSummary {
-                records,
-                source: source_display,
-            });
+        Ok(Ok((records, file_date))) => {
+            session
+                .write()
+                .on_success(BulkImportSummary::new(records, source_display, &file_date, &loc));
             if let Some(mut nav) = refresh {
                 nav.mark_changed();
             }

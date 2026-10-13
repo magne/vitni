@@ -191,7 +191,7 @@ history-import-run-resume-aria = Fortsett importen fra { $source }
 # tidligere enn da verdien den erstattet ble registrert (ADR 0029 §1). Vises på erstatningen i en kjøringsrad.
 history-import-superseded-why = Verdien den erstattet ble registrert senest da { $source } ble eksportert ({ $date }), så filens verdi erstattet den.
 # Hvorfor en importkjøring ikke erstattet noen verdi (ADR 0029 §3): filen oppga en eksportdato som ikke kan
-# leses, vist ordrett som $date. Vises på kjøringsraden.
+# leses, vist ordrett som $date. Vises på kjøringsraden og på masseimportens oppsummering.
 history-import-run-date-unread = { $source } oppgir en eksportdato som ikke kan leses ({ $date }), så denne importen la bare til i postene og erstattet ingen verdi.
 
 # Endringslogg-operatørlinje

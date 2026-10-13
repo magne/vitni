@@ -37,7 +37,7 @@ mod trust;
 
 use std::path::{Path, PathBuf};
 
-use vitni_app::{AiConfig, Confidence, Session, Workspace};
+use vitni_app::{AiConfig, Confidence, FileDate, Session, Workspace};
 use wasmtime::component::{HasSelf, Linker};
 use wasmtime::{Config, Engine, Store, StoreLimits, StoreLimitsBuilder, Trap};
 use wasmtime_wasi::WasiCtxBuilder;
@@ -194,6 +194,17 @@ pub struct Invocation {
     pub import: Option<ImportRunSpec>,
 }
 
+/// What a finished bulk import did.
+pub struct BulkImported {
+    /// How many records the plugin read.
+    pub records: u32,
+    /// The export date the file declared (ADR 0029 §2). An unreadable one replaced no single value,
+    /// which a re-import that wrote nothing leaves no run to record (ADR 0037 §5).
+    pub file_date: FileDate,
+    /// The workspace, recovered from the consumed store so the caller can keep using it.
+    pub workspace: Workspace,
+}
+
 /// Per-instance resource limits (ADR 0011 §4). Fuel bounds execution (a runaway guest traps);
 /// `memory_bytes` caps linear-memory growth.
 #[derive(Debug, Clone, Copy)]
@@ -319,8 +330,7 @@ impl PluginHost {
     /// Runs a bulk import plugin (ADR 0013): the plugin reads its document from `source` through the
     /// host-mediated `import-source`, submits its record graphs to `staging`, and reports progress to
     /// `progress`; once it returns, the host plans the graphs and commits the plan, reporting its writes
-    /// to `progress` too (ADR 0040 §4). Returns the number of records the plugin read and the workspace
-    /// (recovered from the consumed store so the caller can keep using it). A cancel stops the commit
+    /// to `progress` too (ADR 0040 §4). Returns what the import did as a [`BulkImported`]. A cancel stops the commit
     /// between two writes; importing the same file again finishes it.
     ///
     /// # Errors
@@ -333,7 +343,7 @@ impl PluginHost {
         run: Invocation,
         source: PathBuf,
         progress: impl FnMut(ProgressUpdate) -> ProgressControl + Send + 'static,
-    ) -> Result<(u32, Workspace), PluginError> {
+    ) -> Result<BulkImported, PluginError> {
         let Invocation {
             workspace,
             session,
@@ -380,9 +390,13 @@ impl PluginHost {
         {
             result = Err(error);
         }
-        let (workspace, active) = state.into_parts();
+        let (workspace, active, file_date) = state.into_parts();
         close_run(&workspace, active, &run::Ending::Bulk(&result)).await?;
-        Ok((result?, workspace))
+        Ok(BulkImported {
+            records: result?,
+            file_date,
+            workspace,
+        })
     }
 
     /// Runs a bulk export plugin (ADR 0013): the plugin reads via `query`, writes its document to the
@@ -478,7 +492,7 @@ impl PluginHost {
             .await
             .map_err(|error| PluginError::Runtime(error.to_string()))?;
         let outcome = bindings.call_run_assisted(&mut store, request).await;
-        let (workspace, active) = store.into_data().into_parts();
+        let (workspace, active, _) = store.into_data().into_parts();
         let result = interpret_result(outcome);
         close_run(&workspace, active, &run::Ending::Assisted(&result)).await?;
         Ok((result?, workspace))

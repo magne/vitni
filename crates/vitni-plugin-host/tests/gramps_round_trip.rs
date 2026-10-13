@@ -19,7 +19,7 @@ use vitni_app::{
 use vitni_core::ids::AgentId;
 use vitni_core::provenance::Agent;
 use vitni_plugin_host::{
-    Capability, ExportTarget, Grants, ImportRunSpec, Invocation, NetPolicy, PluginError, ProgressControl,
+    BulkImported, Capability, ExportTarget, Grants, ImportRunSpec, Invocation, NetPolicy, PluginError, ProgressControl,
     ProgressUpdate, ResourceBudget, RunDataset,
 };
 
@@ -326,7 +326,11 @@ async fn gramps_imports_with_software_provenance_then_round_trips() {
     let (root, _dir) = init_workspace();
     let workspace = open_workspace(&root).await;
     let (progress, record) = progress_collector();
-    let (count, workspace) = host
+    let BulkImported {
+        records: count,
+        workspace,
+        ..
+    } = host
         .run_bulk_import(&importer, invocation(workspace, import_grants()), source, record)
         .await
         .expect("import");
@@ -395,7 +399,11 @@ async fn gramps_imports_with_software_provenance_then_round_trips() {
     let (root2, _dir2) = init_workspace();
     let workspace2 = open_workspace(&root2).await;
     let (_, record) = progress_collector();
-    let (count2, workspace2) = host
+    let BulkImported {
+        records: count2,
+        workspace: workspace2,
+        ..
+    } = host
         .run_bulk_import(&importer, invocation(workspace2, import_grants()), exported, record)
         .await
         .expect("re-import");
@@ -433,7 +441,11 @@ async fn re_importing_the_same_gramps_file_emits_no_new_events() {
 
     let (root, _dir) = init_workspace();
     let workspace = open_workspace(&root).await;
-    let (count, workspace) = host
+    let BulkImported {
+        records: count,
+        workspace,
+        ..
+    } = host
         .run_bulk_import(
             &importer,
             run_invocation(workspace),
@@ -447,7 +459,7 @@ async fn re_importing_the_same_gramps_file_emits_no_new_events() {
     let events_after_first = event_count(&root).await;
     drop(workspace);
 
-    let (_, workspace) = host
+    let BulkImported { workspace, .. } = host
         .run_bulk_import(
             &importer,
             run_invocation(open_workspace(&root).await),
@@ -492,7 +504,7 @@ fn reconcile_doc(created: Option<&str>, gender: &str) -> String {
 /// Imports `doc` into the fixed run dataset and returns the workspace with its one person's sex.
 async fn import_sex(workspace: Workspace, io_dir: &Path, doc: &str) -> (Workspace, Option<vitni_app::Sex>) {
     let source = write_file(io_dir, "in.gramps", doc.as_bytes());
-    let (_, workspace) = common::host()
+    let BulkImported { workspace, .. } = common::host()
         .run_bulk_import(
             &common::component("gramps-import"),
             run_invocation(workspace),
@@ -594,7 +606,7 @@ fn coded_doc(created: &str, code: &str) -> String {
 /// Imports `doc` into the fixed run dataset and returns the workspace with its one place.
 async fn import_place(workspace: Workspace, io_dir: &Path, doc: &str) -> (Workspace, PlaceSummary) {
     let source = write_file(io_dir, "in.gramps", doc.as_bytes());
-    let (_, workspace) = common::host()
+    let BulkImported { workspace, .. } = common::host()
         .run_bulk_import(
             &common::component("gramps-import"),
             run_invocation(workspace),
@@ -681,7 +693,7 @@ async fn gramps_round_trips_eventref_role_age_attributes_and_note() {
     let (root, _dir) = init_workspace();
     let workspace = open_workspace(&root).await;
     let (_, record) = progress_collector();
-    let (_, workspace) = host
+    let BulkImported { workspace, .. } = host
         .run_bulk_import(&importer, invocation(workspace, import_grants()), source, record)
         .await
         .expect("import");
@@ -704,7 +716,9 @@ async fn gramps_round_trips_eventref_role_age_attributes_and_note() {
     let (root2, _dir2) = init_workspace();
     let workspace2 = open_workspace(&root2).await;
     let (_, record) = progress_collector();
-    let (_, workspace2) = host
+    let BulkImported {
+        workspace: workspace2, ..
+    } = host
         .run_bulk_import(&importer, invocation(workspace2, import_grants()), exported, record)
         .await
         .expect("re-import");
@@ -779,7 +793,11 @@ async fn gramps_imports_a_tag_applied_to_a_person_and_a_family() {
     let source = write_file(io_dir.path(), "in.gramps", TAGGED.as_bytes());
     let (root, _dir) = init_workspace();
     let workspace = open_workspace(&root).await;
-    let (count, workspace) = host
+    let BulkImported {
+        records: count,
+        workspace,
+        ..
+    } = host
         .run_bulk_import(
             &importer,
             invocation(workspace, import_grants()),
@@ -835,7 +853,11 @@ async fn gramps_imports_a_source_abbreviation() {
     let source = write_file(io_dir.path(), "in.gramps", SOURCE_ABBREVIATION.as_bytes());
     let (root, _dir) = init_workspace();
     let workspace = open_workspace(&root).await;
-    let (count, workspace) = host
+    let BulkImported {
+        records: count,
+        workspace,
+        ..
+    } = host
         .run_bulk_import(
             &importer,
             invocation(workspace, import_grants()),
@@ -888,7 +910,11 @@ async fn gramps_imports_and_exports_a_repository_call_number_and_medium() {
     let source = write_file(io_dir.path(), "in.gramps", REPOSITORY_CALL_NUMBER_AND_MEDIUM.as_bytes());
     let (root, _dir) = init_workspace();
     let workspace = open_workspace(&root).await;
-    let (count, workspace) = host
+    let BulkImported {
+        records: count,
+        workspace,
+        ..
+    } = host
         .run_bulk_import(
             &importer,
             invocation(workspace, import_grants()),
@@ -926,7 +952,9 @@ async fn gramps_imports_and_exports_a_repository_call_number_and_medium() {
 
     let (root2, _dir2) = init_workspace();
     let workspace2 = open_workspace(&root2).await;
-    let (_, workspace2) = host
+    let BulkImported {
+        workspace: workspace2, ..
+    } = host
         .run_bulk_import(
             &importer,
             invocation(workspace2, import_grants()),
@@ -1016,7 +1044,7 @@ async fn gramps_imports_and_exports_a_citation_transcription() {
     let source = write_file(io_dir.path(), "in.gramps", CITATION_TRANSCRIPTION.as_bytes());
     let (root, _dir) = init_workspace();
     let workspace = open_workspace(&root).await;
-    let (_, workspace) = host
+    let BulkImported { workspace, .. } = host
         .run_bulk_import(
             &importer,
             invocation(workspace, import_grants()),
@@ -1041,7 +1069,9 @@ async fn gramps_imports_and_exports_a_citation_transcription() {
 
     let (root2, _dir2) = init_workspace();
     let workspace2 = open_workspace(&root2).await;
-    let (_, workspace2) = host
+    let BulkImported {
+        workspace: workspace2, ..
+    } = host
         .run_bulk_import(
             &importer,
             invocation(workspace2, import_grants()),
@@ -1075,7 +1105,11 @@ async fn gramps_imports_and_exports_a_second_name_without_clobbering_the_first()
     let source = write_file(io_dir.path(), "in.gramps", TWO_NAMES.as_bytes());
     let (root, _dir) = init_workspace();
     let workspace = open_workspace(&root).await;
-    let (count, workspace) = host
+    let BulkImported {
+        records: count,
+        workspace,
+        ..
+    } = host
         .run_bulk_import(
             &importer,
             invocation(workspace, import_grants()),
@@ -1108,7 +1142,9 @@ async fn gramps_imports_and_exports_a_second_name_without_clobbering_the_first()
 
     let (root2, _dir2) = init_workspace();
     let workspace2 = open_workspace(&root2).await;
-    let (_, workspace2) = host
+    let BulkImported {
+        workspace: workspace2, ..
+    } = host
         .run_bulk_import(
             &importer,
             invocation(workspace2, import_grants()),

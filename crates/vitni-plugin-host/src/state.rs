@@ -193,9 +193,10 @@ impl HostState {
         self.workspace
     }
 
-    /// Recovers the workspace and the import run, if any, once the instance has run.
-    pub(crate) fn into_parts(self) -> (Workspace, Option<ActiveRun>) {
-        (self.workspace, self.run)
+    /// Recovers the workspace, the import run, if any, and the export date the file declared, once the
+    /// instance has run.
+    pub(crate) fn into_parts(self) -> (Workspace, Option<ActiveRun>, FileDate) {
+        (self.workspace, self.run, self.file_date)
     }
 }
 

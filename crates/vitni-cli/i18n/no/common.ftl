@@ -10,6 +10,9 @@ init-success = Initialiserte arbeidsområde "{ $name }" i { $path }
 config-line = Konfigurasjon: { $path }
 rebuild-success = Bygde alle projeksjoner på nytt fra hendelsesloggen.
 import-success = Importerte { $count } post(er) med { $plugin }.
+# Hvorfor en import ikke erstattet noen verdi (ADR 0029 §3): filen oppga en eksportdato som ikke kan leses,
+# vist ordrett som $date. Skrives ut etter import-success.
+import-date-unread = { $source } oppgir en eksportdato som ikke kan leses ({ $date }), så denne importen la bare til i postene og erstattet ingen verdi.
 export-success = Eksporterte { $count } post(er) til { $path }.
 import-confirm = Arbeidsområdet "{ $name }" inneholder allerede { $count } person(er). Importere likevel? [j/N]
 import-cancelled = Import avbrutt.

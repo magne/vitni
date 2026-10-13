@@ -13,16 +13,16 @@ use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 use vitni_app::{
     AbandonReason, AgentKind, AiConfig, AppDefaults, ChosenDataset, DatasetChoice, DatasetError, DatasetId,
-    DatasetProposal, DatasetScope, DatasetSpec, IdentityDecision, ImportRunStatus, ImportRunSummary, MatchQuestion,
-    OperatorConfig, PairAnswer, PlanCounts, PlanStep, PlanSummary, ReviewReply, Session, Workspace, WorkspaceDefaults,
-    list_import_runs, list_persons, undo_assertion, workspace_counts,
+    DatasetProposal, DatasetScope, DatasetSpec, FileDate, IdentityDecision, ImportRunStatus, ImportRunSummary,
+    MatchQuestion, OperatorConfig, PairAnswer, PlanCounts, PlanStep, PlanSummary, ReviewReply, Session, Timestamp,
+    Workspace, WorkspaceDefaults, list_import_runs, list_persons, undo_assertion, workspace_counts,
 };
 use vitni_core::ids::AgentId;
 use vitni_core::matching::MatchableKind;
 use vitni_core::provenance::{Agent, EventContext};
 use vitni_plugin_host::{
-    Capability, DeferMatches, ExportTarget, Grants, ImportRunSpec, Invocation, NetPolicy, PlanReviewer, PluginError,
-    PresentError, ProgressControl, ProgressStep, ProgressUpdate, ResourceBudget, RunDataset,
+    BulkImported, Capability, DeferMatches, ExportTarget, Grants, ImportRunSpec, Invocation, NetPolicy, PlanReviewer,
+    PluginError, PresentError, ProgressControl, ProgressStep, ProgressUpdate, ResourceBudget, RunDataset,
 };
 
 mod common;
@@ -184,7 +184,11 @@ async fn a_gedcom_import_writes_one_run_and_stamps_every_assertion_with_its_reco
     let workspace = workspace(dir.path()).await;
     let source = write_file(dir.path(), "tree.ged", GEDCOM);
     let dataset = DatasetId::lineage("gedcom", Uuid::from_u128(5));
-    let (count, workspace) = common::host()
+    let BulkImported {
+        records: count,
+        workspace,
+        ..
+    } = common::host()
         .run_bulk_import(
             &common::component("gedcom-import"),
             invocation(workspace, Some(spec("gedcom-import", dataset.clone(), "tree.ged"))),
@@ -258,7 +262,7 @@ async fn gedcom_and_gramps_item_keys_are_stable_across_runs_of_the_same_file() {
             let workspace = workspace(dir.path()).await;
             let source = write_file(dir.path(), name, text);
             let dataset = DatasetId::lineage(plugin, Uuid::from_u128(5));
-            let (_, workspace) = common::host()
+            let BulkImported { workspace, .. } = common::host()
                 .run_bulk_import(
                     &common::component(plugin),
                     invocation(workspace, Some(spec(plugin, dataset, name))),
@@ -283,8 +287,18 @@ async fn import(
     name: &str,
     text: &str,
 ) -> Workspace {
+    imported(workspace, plugin, dataset, (dir, name, text)).await.workspace
+}
+
+/// Imports `text`, written to `name` in `dir`, into `dataset` with `plugin`, and returns the outcome.
+async fn imported(
+    workspace: Workspace,
+    plugin: &str,
+    dataset: &DatasetId,
+    (dir, name, text): (&Path, &str, &str),
+) -> BulkImported {
     let source = write_file(dir, name, text);
-    let (_, workspace) = common::host()
+    common::host()
         .run_bulk_import(
             &common::component(plugin),
             invocation(workspace, Some(spec(plugin, dataset.clone(), name))),
@@ -292,8 +306,7 @@ async fn import(
             proceed,
         )
         .await
-        .expect("import");
-    workspace
+        .expect("import")
 }
 
 async fn event_count(workspace: &Workspace) -> u64 {
@@ -655,6 +668,44 @@ async fn a_re_import_with_an_impossible_export_date_replaces_nothing_and_its_run
     );
 }
 
+#[tokio::test]
+async fn a_re_import_that_writes_nothing_returns_the_export_date_it_could_not_read() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let dataset = DatasetId::lineage("gedcom", Uuid::from_u128(5));
+    let first = imported(
+        workspace(dir.path()).await,
+        "gedcom-import",
+        &dataset,
+        (dir.path(), "tree.ged", &dated("1 JAN 2000", "5 APR 1970")),
+    )
+    .await;
+    assert_eq!(
+        first.file_date,
+        FileDate::Read(Timestamp::parse_rfc3339("2000-01-01T00:00:00Z").expect("instant")),
+        "a readable export date is returned read"
+    );
+    let workspace = first.workspace;
+    let (events, birth) = (event_count(&workspace).await, birth_date(&workspace).await);
+
+    // Only the birth date differs, and the impossible export date stops it (ADR 0029 §3): the
+    // re-import writes nothing, so no run records the date — only the outcome can say it.
+    let again = imported(
+        workspace,
+        "gedcom-import",
+        &dataset,
+        (dir.path(), "tree.ged", &dated("30 FEB 2100", "6 APR 1970")),
+    )
+    .await;
+    assert_eq!(event_count(&again.workspace).await, events, "nothing was written");
+    assert_eq!(birth_date(&again.workspace).await, birth);
+    assert_eq!(list_import_runs(&again.workspace).await.expect("runs").len(), 1);
+    assert_eq!(
+        again.file_date,
+        FileDate::Unreadable("2100-02-30T00:00:00Z".to_owned()),
+        "the outcome keeps the date it could not read"
+    );
+}
+
 /// Cancels a bulk import at the commit's first progress report past its start.
 fn cancel_mid_commit(update: &ProgressUpdate) -> ProgressControl {
     if update.step == ProgressStep::Writing && update.processed > 0 {
@@ -670,7 +721,7 @@ async fn a_bulk_import_cancelled_while_writing_abandons_its_run() {
     let workspace = workspace(dir.path()).await;
     let source = write_file(dir.path(), "tree.ged", GEDCOM);
     let dataset = DatasetId::lineage("gedcom", Uuid::from_u128(5));
-    let (_, workspace) = common::host()
+    let BulkImported { workspace, .. } = common::host()
         .run_bulk_import(
             &common::component("gedcom-import"),
             invocation(workspace, Some(spec("gedcom-import", dataset, "tree.ged"))),
@@ -702,7 +753,7 @@ async fn a_bulk_run_records_its_source_as_an_absolute_path() {
     let cwd = std::env::current_dir().expect("cwd");
     let relative = pathdiff(&source, &cwd);
     let dataset = DatasetId::lineage("gedcom", Uuid::from_u128(5));
-    let (_, workspace) = common::host()
+    let BulkImported { workspace, .. } = common::host()
         .run_bulk_import(
             &common::component("gedcom-import"),
             invocation(workspace, Some(spec("gedcom-import", dataset, "tree.ged"))),
@@ -730,7 +781,7 @@ async fn a_bulk_import_cancelled_while_reading_writes_nothing_and_leaves_no_run(
     let workspace = workspace(dir.path()).await;
     let source = write_file(dir.path(), "tree.ged", GEDCOM);
     let dataset = DatasetId::lineage("gedcom", Uuid::from_u128(5));
-    let (_, workspace) = common::host()
+    let BulkImported { workspace, .. } = common::host()
         .run_bulk_import(
             &common::component("gedcom-import"),
             invocation(workspace, Some(spec("gedcom-import", dataset, "tree.ged"))),
@@ -760,7 +811,7 @@ async fn an_interrupted_bulk_commit_finishes_on_re_run_without_duplicates() {
         let dir = tempfile::tempdir().expect("tempdir");
         let workspace = workspace(dir.path()).await;
         let source = write_file(dir.path(), name, text);
-        let (_, workspace) = common::host()
+        let BulkImported { workspace, .. } = common::host()
             .run_bulk_import(
                 &common::component(plugin),
                 invocation(workspace, Some(spec(plugin, dataset.clone(), name))),
@@ -826,7 +877,7 @@ async fn an_import_without_a_run_stamps_no_origin() {
     let dir = tempfile::tempdir().expect("tempdir");
     let workspace = workspace(dir.path()).await;
     let source = write_file(dir.path(), "tree.ged", GEDCOM);
-    let (_, workspace) = common::host()
+    let BulkImported { workspace, .. } = common::host()
         .run_bulk_import(
             &common::component("gedcom-import"),
             invocation(workspace, None),
@@ -869,7 +920,7 @@ async fn exports_carry_no_record_origin() {
     let source = write_file(dir.path(), "tree.ged", GEDCOM);
     let lineage = Uuid::from_u128(0x5eed);
     let dataset = DatasetId::lineage("gedcom", lineage);
-    let (_, mut workspace) = common::host()
+    let BulkImported { mut workspace, .. } = common::host()
         .run_bulk_import(
             &common::component("gedcom-import"),
             invocation(workspace, Some(spec("gedcom-import", dataset, "tree.ged"))),
@@ -930,7 +981,7 @@ async fn import_proposing(
     run: ImportRunSpec,
 ) -> Result<Workspace, PluginError> {
     let source = write_file(dir, name, text);
-    let (_, workspace) = common::host()
+    let BulkImported { workspace, .. } = common::host()
         .run_bulk_import(
             &common::component(plugin),
             invocation(workspace, Some(run)),
@@ -1016,7 +1067,7 @@ async fn later_export_is_proposed_its_dataset(importer: &str, exporter: &str, ex
         )
         .await
         .expect("import into A")
-        .1;
+        .workspace;
     let a = export(a, exporter, &importing.path().join(&first_name)).await;
     let first = std::fs::read_to_string(importing.path().join(&first_name)).expect("first export");
     let shown = Shown::default();
@@ -1034,7 +1085,7 @@ async fn later_export_is_proposed_its_dataset(importer: &str, exporter: &str, ex
     let dataset = only_run(&b).await.dataset;
 
     let more = "0 HEAD\n1 SOUR test\n0 @I1@ INDI\n1 NAME Kari /Nordmann/\n0 TRLR\n";
-    let (_, a) = common::host()
+    let BulkImported { workspace: a, .. } = common::host()
         .run_bulk_import(
             &common::component("gedcom-import"),
             invocation(a, None),
@@ -1286,7 +1337,7 @@ async fn import_reviewed(
         confirm,
         seen: Arc::clone(&seen),
     });
-    let (_, workspace) = common::host()
+    let BulkImported { workspace, .. } = common::host()
         .run_bulk_import(
             &common::component("gedcom-import"),
             invocation(workspace, Some(run)),

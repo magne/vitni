@@ -896,6 +896,44 @@ fn stdout(assert: &assert_cmd::assert::Assert) -> String {
     String::from_utf8(assert.get_output().stdout.clone()).unwrap()
 }
 
+/// TREE declaring `export` as its export date and `birth` as John's birth date.
+fn dated_tree(export: &str, birth: &str) -> String {
+    TREE.replace("1 SOUR test\n", &format!("1 SOUR test\n1 DATE {export}\n"))
+        .replace(
+            "1 NAME John /Smith/\n",
+            &format!("1 NAME John /Smith/\n1 BIRT\n2 DATE {birth}\n"),
+        )
+}
+
+#[test]
+fn a_re_import_that_writes_nothing_says_its_export_date_could_not_be_read() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    let first = stdout(&import_text(dir.path(), &dated_tree("1 JAN 2000", "5 APR 1970"), &["--yes"]).success());
+    assert!(!first.contains("cannot be read"), "{first}");
+
+    let again = stdout(
+        &import_text(
+            dir.path(),
+            &dated_tree("30 FEB 2100", "6 APR 1970"),
+            &["--yes", "--dataset", "tree.ged"],
+        )
+        .success(),
+    );
+    assert!(
+        again.contains(
+            "tree.ged declares an export date that cannot be read (2100-02-30T00:00:00Z), so this import only added to records and replaced no value."
+        ),
+        "{again}"
+    );
+    let runs = stdout(&vitni(dir.path()).args(["import-run", "list"]).assert().success());
+    assert_eq!(
+        runs.lines().count(),
+        1,
+        "the re-import wrote nothing, so it left no run: {runs}"
+    );
+}
+
 #[test]
 fn a_plan_of_a_re_import_reports_every_record_unchanged_and_writes_nothing() {
     let dir = TempDir::new().unwrap();

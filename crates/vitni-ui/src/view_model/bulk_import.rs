@@ -14,7 +14,7 @@
 
 use std::path::{Component, Path, PathBuf};
 
-use vitni_app::{ImportRunStatus, ImportRunSummary, MatchQuestion, PlanSummary};
+use vitni_app::{FileDate, ImportRunStatus, ImportRunSummary, MatchQuestion, PlanSummary};
 
 use crate::i18n::Localizer;
 use crate::view_model::history::ResumeVm;
@@ -55,6 +55,27 @@ pub struct BulkImportSummary {
     pub records: u32,
     /// The source file the operator picked, for display.
     pub source: String,
+    /// Why the import replaced no value: the file declared an export date that cannot be read (ADR
+    /// 0029 §3). A re-import that wrote nothing leaves no run whose History row could say so (#558).
+    pub date_note: Option<String>,
+}
+
+impl BulkImportSummary {
+    /// The summary of an import of `records` from `source`, whose file declared `file_date`.
+    #[must_use]
+    pub fn new(records: u32, source: String, file_date: &FileDate, loc: &Localizer) -> Self {
+        let date_note = file_date.unreadable().map(|declared| {
+            let label = Path::new(&source)
+                .file_name()
+                .map_or_else(|| source.clone(), |name| name.to_string_lossy().into_owned());
+            loc.import_run_date_unread(&label, declared)
+        });
+        Self {
+            records,
+            source,
+            date_note,
+        }
+    }
 }
 
 /// Where a bulk-import session currently is. It starts at [`Source`](Self::Source) and runs through
@@ -409,7 +430,7 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     use vitni_app::{
-        AbandonReason, DatasetId, ImportCounts, ImportRunId, ImportRunStatus, ImportRunSummary, KindCounts,
+        AbandonReason, DatasetId, FileDate, ImportCounts, ImportRunId, ImportRunStatus, ImportRunSummary, KindCounts,
         MatchableKind, PlanCounts, PlanSummary, RunResume, Timestamp,
     };
 
@@ -504,9 +525,36 @@ mod tests {
     }
 
     fn summary() -> BulkImportSummary {
-        BulkImportSummary {
-            records: 40,
-            source: "/ws/family.ged".to_owned(),
+        BulkImportSummary::new(
+            40,
+            "/ws/family.ged".to_owned(),
+            &FileDate::Undeclared,
+            &Localizer::for_test("en"),
+        )
+    }
+
+    #[test]
+    fn a_summary_says_when_the_file_declared_an_export_date_that_cannot_be_read() {
+        let unreadable = FileDate::Unreadable("2100-02-30T00:00:00Z".to_owned());
+        let summary = BulkImportSummary::new(1, "/ws/tree.ged".to_owned(), &unreadable, &Localizer::for_test("en"));
+
+        assert_eq!(summary.records, 1);
+        assert_eq!(summary.source, "/ws/tree.ged");
+        assert_eq!(
+            summary.date_note.as_deref(),
+            Some(
+                "tree.ged declares an export date that cannot be read (2100-02-30T00:00:00Z), so this import only added to records and replaced no value."
+            )
+        );
+    }
+
+    #[test]
+    fn a_summary_of_a_file_with_a_readable_or_no_export_date_has_no_note() {
+        let loc = Localizer::for_test("en");
+        let read = FileDate::Read(Timestamp::parse_rfc3339("2000-01-01T00:00:00Z").expect("instant"));
+        for file_date in [FileDate::Undeclared, read] {
+            let summary = BulkImportSummary::new(1, "/ws/tree.ged".to_owned(), &file_date, &loc);
+            assert_eq!(summary.date_note, None, "{file_date:?}");
         }
     }
 
