@@ -235,3 +235,8 @@ description = "Waiting on a third-party release, not on us"
 name = "manual-verify"
 color = "006b75"
 description = "Needs a human at the webview; agents can screenshot it but not drive or feel it"
+
+[[label]]
+name = "at-scale"
+color = "fbca04"
+description = "Only pays off at high data volume; pick up when a measured workspace makes it slow"

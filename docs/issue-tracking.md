@@ -82,6 +82,9 @@ and is retired only when the surface itself goes, together with its label.
   nobody has made.
 - **`blocked/upstream`** — waiting on a third-party release. Distinguishing it from `blocked` stops
   re-investigation of a conclusion already reached and written down.
+- **`at-scale`** — pays off only at high data volume (an index, pagination, viewport loading). Real work,
+  but premature until a measured workspace is slow; the label says what will trigger it, so the item is
+  neither closed nor mistaken for current work.
 - **`manual-verify`** — behaviour only a human can confirm. Most webview behaviour is automatable with
   `cargo xtask gui-pass` (see [`CLAUDE.md`](../CLAUDE.md#testing-the-gui)): it drives the real GUI on
   Xvfb and asserts over screenshots and an element probe, including the window-manager close. What is

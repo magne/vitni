@@ -109,16 +109,6 @@ none needs an event rewrite — and the first three are gated by an unwritten **
   placeholder. Honest, not useful: previewing it needs either a second asset-handler route scoped to a
   configured set of readable roots, or an explicit "copy into the workspace" action reusing the media
   save dialog. Neither is designed. — #580
-- **Media edit mode cannot check, fetch, or type a file** — *File path* is a plain `DraftText`
-  (`media.rs:88-101`) with no existence check, and any check added must **flag, never block**: a
-  record for a file that is not on this machine is legitimate. There is no download when *Web path*
-  changes with a file path set (the mockup already draws `⤓ Download`, `media.html:73`), which needs an
-  overwrite prompt on checksum mismatch. And nothing *records* a `mime`: the extension→MIME mapping now
-  lives in `vitni_core::media_path::mime_for_path` and drives the display gate (an image with no
-  recorded MIME still previews, #301), but no command writes an inferred value into the record, and the
-  editor's MIME box stays blank. Writing one on save is the work left — deliberately not done as part of
-  #301, because `MediaDraft::from_detail` seeds the editor from `mime` and `edits_against` diffs it, so
-  an inferred value there would emit a spurious `SetMime` on every save. — #581
 
 ### DNA
 
@@ -141,11 +131,6 @@ long-standing "DNA match views in the UI" item is closed.
 - **Configurable surety-scheme *cardinality*** — ADR 0027 shipped relabeling the five fixed ordinals;
   re-scaling the scheme (GENTECH's full generality) stays deferred behind its own gating ADR, no
   consumer need demonstrated yet.
-- **`run_checks` is dead code, and there is no CLI data-quality command** — its body is `list_persons`
-  \+ `check_persons` (`checks.rs:53-56`), and the GUI's Data Quality view calls `check_persons` directly
-  with the person list it already holds, so GUI coverage is *equivalent* — nothing is missing there.
-  Either delete the wrapper, or keep it to back a `vitni check` subcommand so quality findings are
-  scriptable. — #582
 - **Consistency checks are person-only** — the one consistency check, `CheckFinding::DeathBeforeBirth`,
   reads persons only; the duplicate check already covers every matchable kind. Widening consistency
   checks to the other aggregates (such as a date inversion on an Event or Place) is its own item. — #583
@@ -215,8 +200,6 @@ which is what makes them worth fixing in the shared code rather than per screen.
 
 ### Lists, search & scale
 
-- **Long-list / overflow specimen (U30)** — no tab demonstrates a long-list or overflow state;
-  deferred as low-fidelity in a static mockup (the a11y real-app walkthrough covers it). — #589
 - **`ListPane` DOM virtualization** — `master_detail.rs` mounts every row (and a `MountedEvent` per
   row). Render only a scrolled window with a `store.count`-sized spacer and make the roving-focus
   `nodes` bookkeeping window-aware. If server-side windowing is chosen instead, add
@@ -278,10 +261,6 @@ Residuals from the shortcuts work (ADR 0030); see
   put app screens in the renderer as per-framework view code, and no second renderer exists; what
   makes this more than size is that `draft_geometry` returns a domain `PlaceGeometry` and decides
   whether one is valid. — #600
-- **In-map editing depth** — mid-ring vertex insertion (today: a vertex can be dragged to a new
-  position, but not inserted between two others), pin-click selection on the canvas (today: select via
-  the rail list), and polygon-drawn creation of a *new* place (today: point-drop creation is wired;
-  polygon draws onto an existing place). — #601
 - **Provider sub-forms** — the toolbar select switches among every provider `[map.providers.*]`
   declares (ADR 0033), live and persisted; there is still no in-app form to *enter* a style URL or
   API-key env name — a provider has to already exist in the config file before the select can choose
@@ -606,6 +585,12 @@ decision, not a gap.
 - **External ids have no frontend entry point** — person `add_external_id` (module-level, not even
   root-exported) and `add_family_external_id` are used only inside `import.rs` for resolve-or-create.
   External ids are importer bookkeeping, not user-editable data.
+
+### Lists
+
+- **No long-list or overflow specimen in the mockups.** Closed at triage (#589, 2026-10-13): a long or
+  overflowing list is low-fidelity in a static mockup, and the real app is where it is judged — the
+  list virtualization work (#590) measures it there.
 
 ### Shell & panes
 
