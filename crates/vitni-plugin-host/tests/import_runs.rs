@@ -663,8 +663,8 @@ async fn a_re_import_with_an_impossible_export_date_replaces_nothing_and_its_run
     assert_eq!(run.file_asserted_at, None);
     assert_eq!(
         run.unreadable_file_date.as_deref(),
-        Some("2100-02-30T00:00:00Z"),
-        "the run keeps the date it could not read"
+        Some("30 FEB 2100"),
+        "the run keeps the date it could not read, as the header writes it"
     );
 }
 
@@ -701,9 +701,38 @@ async fn a_re_import_that_writes_nothing_returns_the_export_date_it_could_not_re
     assert_eq!(list_import_runs(&again.workspace).await.expect("runs").len(), 1);
     assert_eq!(
         again.file_date,
-        FileDate::Unreadable("2100-02-30T00:00:00Z".to_owned()),
-        "the outcome keeps the date it could not read"
+        FileDate::Unreadable("30 FEB 2100".to_owned()),
+        "the outcome keeps the date it could not read, as the header writes it"
     );
+}
+
+#[tokio::test]
+async fn an_export_date_naming_no_day_is_kept_on_the_run_as_the_header_writes_it() {
+    let gramps = GRAMPS.replace("<people>", "<header><created date=\"2019-05\"/></header>\n<people>");
+    for (plugin, name, text, declared) in [
+        ("gedcom-import", "tree.ged", dated("2100", "5 APR 1970"), "2100"),
+        ("gedcom-import", "tree.ged", dated("ABT 2000", "5 APR 1970"), "ABT 2000"),
+        ("gramps-import", "tree.gramps", gramps, "2019-05"),
+    ] {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let dataset = DatasetId::lineage(plugin, Uuid::from_u128(5));
+        let outcome = imported(workspace(dir.path()).await, plugin, &dataset, (dir.path(), name, &text)).await;
+        assert_eq!(
+            outcome.file_date,
+            FileDate::Unreadable(declared.to_owned()),
+            "{plugin} declared {declared:?} but the host did not keep it"
+        );
+        let rows = vitni_app::group_runs(
+            &vitni_app::change_log_for_person(&outcome.workspace, "I0001")
+                .await
+                .expect("log"),
+        );
+        let Some(vitni_app::ActivityDetail::ImportRun { run, .. }) = &rows[0].detail else {
+            panic!("{plugin}: the newest History row is the import: {:#?}", rows[0]);
+        };
+        assert_eq!(run.file_asserted_at, None, "{plugin}");
+        assert_eq!(run.unreadable_file_date.as_deref(), Some(declared), "{plugin}");
+    }
 }
 
 /// Cancels a bulk import at the commit's first progress report past its start.

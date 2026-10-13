@@ -156,8 +156,8 @@ pub enum FileDate {
     Undeclared,
     /// The date, read.
     Read(Timestamp),
-    /// The date as the importer declared it, which could not be read: the run replaces no
-    /// single-valued field.
+    /// The date as the file's header writes it, which yields no instant — a partial, text-only or
+    /// impossible date: the run replaces no single-valued field.
     Unreadable(String),
 }
 

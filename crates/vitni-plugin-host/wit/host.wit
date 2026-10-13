@@ -221,7 +221,12 @@
 // Version 0.31.0 carries a place's code into an import (#537): `staged-place` gains
 // `code: option<string>`, which Gramps `<placeobj><code>` states, so a re-import reconciles a changed
 // code by the file's export date (ADR 0029). A breaking change to `staging`.
-package vitni:host-api@0.31.0;
+//
+// Version 0.32.0 carries the header's export date as the document writes it (#559): `begin-run` gains
+// `file-date-text`, which the host records on the run, and quotes, whenever `file-asserted-at` yields
+// no instant — a partial, text-only or impossible date — so the run says why it replaced no value
+// (ADR 0029 §3). A breaking change to `staging`.
+package vitni:host-api@0.32.0;
 
 interface types {
     // The kind of a name (data-model §7 / GEDCOM `NAME.TYPE`), mirroring `vitni_core::name::NameType`.
@@ -1273,8 +1278,15 @@ interface staging {
     // Declares the import, at most once and before the first `submit`: a hint at which dataset the
     // document is (its header's fingerprint), what it is called, and its own export date (RFC 3339) —
     // the date ADR 0029 reconciles single-valued fields by; `none` when the document has none or its
-    // date names no specific day (ADR 0029 §3). Not calling it is calling it with `none` throughout.
-    begin-run: func(dataset-hint: option<string>, source-label: option<string>, file-asserted-at: option<string>) -> result<_, capability-error>;
+    // date names no specific day (ADR 0029 §3) — and that date as the document's header writes it,
+    // whenever it declares one, which the host quotes when `file-asserted-at` yields no instant. Not
+    // calling it is calling it with `none` throughout.
+    begin-run: func(
+        dataset-hint: option<string>,
+        source-label: option<string>,
+        file-asserted-at: option<string>,
+        file-date-text: option<string>,
+    ) -> result<_, capability-error>;
     // Submits one record, with the records it references by origin that are planned with it: an
     // assisted import writes them as one plan, so what only a withheld record reaches is withheld too.
     // `invalid-input` when a graph is malformed: a repeated local id or item, a reference to a missing

@@ -400,23 +400,36 @@ fn date_point(value: &str) -> DatePoint {
     }
 }
 
+impl Header {
+    /// The file's own export date, read from [`Header::created`] — the input a re-import
+    /// reconciliation rule gates on (ADR 0029 §2). A time after the day (`2019-05-04T10:00:00`, also
+    /// with a `t` or a space before it as RFC 3339 allows — Gramps writes none, but a hand-edited or
+    /// third-party file may) is dropped, keeping the day. A missing or unparseable date yields `None`
+    /// rather than a synthesized fallback (ADR 0029 §3): [`date_point`] never fails outright, so
+    /// "unparseable" here means no year could be read.
+    #[must_use]
+    pub fn date(&self) -> Option<DatePoint> {
+        self.created
+            .as_deref()
+            .map(|date| date.split_once(['T', 't', ' ']).map_or(date, |(day, _time)| day))
+            .map(date_point)
+            .filter(|point| point.year.is_some())
+    }
+}
+
 /// Interprets a `<header>` element: its researcher's name, and its `<created date="…">` — the file's
-/// own export date (ADR 0029 §2). A time after the day (`2019-05-04T10:00:00`, also with a `t` or a
-/// space before it as RFC 3339 allows — Gramps writes none, but a hand-edited or third-party file may)
-/// is dropped, keeping the day. A missing or unparseable date yields `None` rather than a synthesized
-/// fallback (ADR 0029 §3): [`date_point`] never fails outright, so "unparseable" here means no year
-/// could be read.
+/// own export date (ADR 0029 §2), kept as the file writes it; a blank date is no date.
 fn header(element: &Element) -> Header {
-    let date = element
+    let created = element
         .child("created")
         .and_then(|created| created.attr("date"))
-        .map(|date| date.split_once(['T', 't', ' ']).map_or(date, |(day, _time)| day))
-        .map(date_point)
-        .filter(|point| point.year.is_some());
+        .map(str::trim)
+        .filter(|date| !date.is_empty())
+        .map(str::to_owned);
     let researcher = element
         .child("researcher")
         .and_then(|researcher| child_text(researcher, "resname"));
-    Header { date, researcher }
+    Header { created, researcher }
 }
 
 /// Maps a Gramps event-type label onto an [`EventKind`]; an unrecognized label falls back to `Birth`

@@ -315,7 +315,7 @@ fn running_stage_is_indeterminate_until_the_plugin_knows_the_total() {
 
 // ----- Summary stage -----
 
-const DATE_NOTE: &str = "family.ged declares an export date that cannot be read (2100-02-30T00:00:00Z), so this \
+const DATE_NOTE: &str = "family.ged declares an export date that cannot be read (30 FEB 2100), so this \
                          import only added to records and replaced no value.";
 
 fn summary_stage(note: Option<String>) -> Element {

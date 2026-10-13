@@ -922,7 +922,7 @@ fn a_re_import_that_writes_nothing_says_its_export_date_could_not_be_read() {
     );
     assert!(
         again.contains(
-            "tree.ged declares an export date that cannot be read (2100-02-30T00:00:00Z), so this import only added to records and replaced no value."
+            "tree.ged declares an export date that cannot be read (30 FEB 2100), so this import only added to records and replaced no value."
         ),
         "{again}"
     );

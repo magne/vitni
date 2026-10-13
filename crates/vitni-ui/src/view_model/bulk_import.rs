@@ -535,7 +535,7 @@ mod tests {
 
     #[test]
     fn a_summary_says_when_the_file_declared_an_export_date_that_cannot_be_read() {
-        let unreadable = FileDate::Unreadable("2100-02-30T00:00:00Z".to_owned());
+        let unreadable = FileDate::Unreadable("30 FEB 2100".to_owned());
         let summary = BulkImportSummary::new(1, "/ws/tree.ged".to_owned(), &unreadable, &Localizer::for_test("en"));
 
         assert_eq!(summary.records, 1);
@@ -543,7 +543,7 @@ mod tests {
         assert_eq!(
             summary.date_note.as_deref(),
             Some(
-                "tree.ged declares an export date that cannot be read (2100-02-30T00:00:00Z), so this import only added to records and replaced no value."
+                "tree.ged declares an export date that cannot be read (30 FEB 2100), so this import only added to records and replaced no value."
             )
         );
     }

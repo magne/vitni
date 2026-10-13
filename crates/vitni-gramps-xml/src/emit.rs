@@ -49,13 +49,13 @@ fn section<T>(out: &mut String, name: &str, records: &[T], mut emit_one: impl Fn
 /// Emits `<header>` with the file's export date (ADR 0029 §2) and researcher's name, each when
 /// recorded; omitted entirely when neither is, matching every other optional field's shape.
 fn emit_header(out: &mut String, header: &Header) {
-    let Header { date, researcher } = header;
-    if date.is_none() && researcher.is_none() {
+    let Header { created, researcher } = header;
+    if created.is_none() && researcher.is_none() {
         return;
     }
     out.push_str("<header>\n");
-    if let Some(date) = date {
-        out.push_str(&empty("created", &[("date", &format_point(date))]));
+    if let Some(created) = created {
+        out.push_str(&empty("created", &[("date", created)]));
     }
     if let Some(researcher) = researcher {
         out.push_str("<researcher>\n");

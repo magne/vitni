@@ -9,7 +9,7 @@ config-line = Config: { $path }
 rebuild-success = Rebuilt all projections from the event log.
 import-success = Imported { $count } record(s) with { $plugin }.
 # Why an import replaced no value (ADR 0029 §3): its file declared an export date that cannot be read,
-# shown as the importer declared it (RFC 3339) as $date. Printed after import-success.
+# quoted as the file's header writes it as $date. Printed after import-success.
 import-date-unread = { $source } declares an export date that cannot be read ({ $date }), so this import only added to records and replaced no value.
 export-success = Exported { $count } record(s) to { $path }.
 import-confirm = Workspace "{ $name }" already contains { $count } person(s). Import anyway? [y/N]
