@@ -28,7 +28,7 @@ use crate::dto::{
 use crate::error::AppError;
 use crate::identity::{self, CitationClusters, IdentityDecision, PairDecision, SourceClusters};
 use crate::session::Session;
-use crate::use_case::{self, MediaRefInput, MutationMeta, Provenance};
+use crate::use_case::{self, MediaRefInput, MutationMeta, Provenance, resolve_media_id, resolve_note_id};
 use crate::workspace::Workspace;
 
 /// A typed attribute on a source (the Source › Attributes rows).
@@ -366,21 +366,23 @@ pub async fn add_source_attribute(
     .await
 }
 
-/// Attaches a media reference (by media aggregate id) to a source, identified by `human_id`.
+/// Attaches the media object named by `media_human_id` to the source identified by `human_id`.
 ///
 /// # Errors
 ///
-/// [`AppError::SourceNotFound`] if no such source exists, or a workspace/store error.
+/// [`AppError::SourceNotFound`] / [`AppError::MediaNotFound`] if either does not exist, or a
+/// workspace/store error.
 pub async fn attach_source_media(
     workspace: &Workspace,
     session: &Session,
     human_id: &str,
-    media_id: MediaId,
+    media_human_id: &str,
     input: MediaRefInput,
     meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let source_id = resolve_source_id(store, human_id).await?;
+    let media_id = resolve_media_id(store, media_human_id).await?;
     execute_source_mutation(
         store,
         session,
@@ -447,20 +449,22 @@ pub async fn update_source_media_ref(
     .await
 }
 
-/// Attaches a note (by note aggregate id) to a source, identified by `human_id`.
+/// Attaches the note named by `note_human_id` to the source identified by `human_id`.
 ///
 /// # Errors
 ///
-/// [`AppError::SourceNotFound`] if no such source exists, or a workspace/store error.
+/// [`AppError::SourceNotFound`] / [`AppError::NoteNotFound`] if either does not exist, or a
+/// workspace/store error.
 pub async fn attach_source_note(
     workspace: &Workspace,
     session: &Session,
     human_id: &str,
-    note_id: NoteId,
+    note_human_id: &str,
     meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let source_id = resolve_source_id(store, human_id).await?;
+    let note_id = resolve_note_id(store, note_human_id).await?;
     execute_source_mutation(
         store,
         session,
@@ -1027,59 +1031,6 @@ fn modal_evidence(citations: &[SourceCitationRef]) -> Option<EvidenceAnalysis> {
         information: information?,
         evidence: evidence?,
     })
-}
-
-/// Attaches a media object (by its `human_id`) to a source — the frontend/importer-facing wrapper
-/// that resolves the media `human_id` to its id, so a caller never handles UUIDs.
-///
-/// # Errors
-///
-/// [`AppError::SourceNotFound`] / [`AppError::MediaNotFound`] if either does not exist, or a
-/// workspace/store error.
-pub async fn import_attach_source_media(
-    workspace: &Workspace,
-    session: &Session,
-    source_human_id: &str,
-    media_human_id: &str,
-    meta: MutationMeta<'_>,
-) -> Result<(), AppError> {
-    let store = workspace.store();
-    let media_id = use_case::resolve_id(
-        store.find_media(media_human_id).await?,
-        vitni_core::media::MediaView::media_id,
-        || AppError::MediaNotFound(media_human_id.to_owned()),
-    )?;
-    attach_source_media(
-        workspace,
-        session,
-        source_human_id,
-        media_id,
-        MediaRefInput::default(),
-        meta,
-    )
-    .await
-}
-
-/// Attaches a note (by its `human_id`) to a source — the frontend/importer-facing wrapper.
-///
-/// # Errors
-///
-/// [`AppError::SourceNotFound`] / [`AppError::NoteNotFound`] if either does not exist, or a
-/// workspace/store error.
-pub async fn import_attach_source_note(
-    workspace: &Workspace,
-    session: &Session,
-    source_human_id: &str,
-    note_human_id: &str,
-    meta: MutationMeta<'_>,
-) -> Result<(), AppError> {
-    let store = workspace.store();
-    let note_id = use_case::resolve_id(
-        store.find_note(note_human_id).await?,
-        vitni_core::note::NoteView::note_id,
-        || AppError::NoteNotFound(note_human_id.to_owned()),
-    )?;
-    attach_source_note(workspace, session, source_human_id, note_id, meta).await
 }
 
 /// Summarises a cluster — its root first, then its members — as one source (ADR 0039 §5): the root's

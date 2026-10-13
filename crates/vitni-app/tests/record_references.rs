@@ -17,7 +17,7 @@ use vitni_app::{
     show_event, show_geography, show_media, show_note, show_place, show_repository, show_source,
 };
 use vitni_core::enums::{EventType, PlaceType};
-use vitni_core::ids::{AgentId, MediaId, NoteId};
+use vitni_core::ids::AgentId;
 use vitni_core::provenance::{Agent, AgentKind};
 
 fn operator() -> OperatorConfig {
@@ -92,28 +92,24 @@ async fn citation(ws: &Workspace, source: &str) -> String {
         .expect("create citation")
 }
 
-async fn note(ws: &Workspace) -> (String, NoteId) {
+async fn note(ws: &Workspace) -> String {
     let new = NewNote {
         human_id: None,
         text: Some("Baptised at home".to_owned()),
     };
-    let human_id = create_note(ws, &session(), new, Provenance::default(), &[])
+    create_note(ws, &session(), new, Provenance::default(), &[])
         .await
-        .expect("create note");
-    let id = show_note(ws, &human_id).await.expect("show").expect("note").id;
-    (human_id, NoteId::from_uuid(Uuid::parse_str(&id).expect("uuid")))
+        .expect("create note")
 }
 
-async fn media(ws: &Workspace) -> (String, MediaId) {
+async fn media(ws: &Workspace) -> String {
     let new = NewMedia {
         human_id: None,
         path: Some("https://example.org/scan.jpg".to_owned()),
     };
-    let human_id = create_media(ws, &session(), new, Provenance::default(), &[])
+    create_media(ws, &session(), new, Provenance::default(), &[])
         .await
-        .expect("create media");
-    let id = show_media(ws, &human_id).await.expect("show").expect("media").id;
-    (human_id, MediaId::from_uuid(Uuid::parse_str(&id).expect("uuid")))
+        .expect("create media")
 }
 
 fn point(lat: &str, lon: &str) -> GeoCoordinates {
@@ -257,25 +253,18 @@ async fn a_source_held_by_a_merged_repository_names_the_root() {
 #[tokio::test]
 async fn a_merged_note_and_media_object_resolve_to_their_roots() {
     let (ws, _dir) = workspace().await;
-    let ((note_root, _), (note_copy, note_copy_id)) = (note(&ws).await, note(&ws).await);
-    let ((media_root, _), (media_copy, media_copy_id)) = (media(&ws).await, media(&ws).await);
+    let (note_root, note_copy) = (note(&ws).await, note(&ws).await);
+    let (media_root, media_copy) = (media(&ws).await, media(&ws).await);
     let (baptism, farm) = (event(&ws).await, place(&ws, "Haugen").await);
-    attach_event_note(&ws, &session(), &baptism, note_copy_id, meta())
+    attach_event_note(&ws, &session(), &baptism, &note_copy, meta())
         .await
         .expect("note");
-    attach_place_note(&ws, &session(), &farm, note_copy_id, meta())
+    attach_place_note(&ws, &session(), &farm, &note_copy, meta())
         .await
         .expect("place note");
-    attach_event_media(
-        &ws,
-        &session(),
-        &baptism,
-        media_copy_id,
-        MediaRefInput::default(),
-        meta(),
-    )
-    .await
-    .expect("media");
+    attach_event_media(&ws, &session(), &baptism, &media_copy, MediaRefInput::default(), meta())
+        .await
+        .expect("media");
     merge_notes(&ws, &session(), &note_root, &note_copy, IdentityDecision::default())
         .await
         .expect("merge notes");
@@ -310,8 +299,8 @@ async fn a_merged_note_and_media_object_resolve_to_their_roots() {
 async fn a_record_using_a_merged_place_is_listed_under_the_root() {
     let (ws, _dir) = workspace().await;
     let (survivor, copy) = (place(&ws, "Haugen").await, place(&ws, "Hougen").await);
-    let (remark, remark_id) = note(&ws).await;
-    attach_place_note(&ws, &session(), &copy, remark_id, meta())
+    let remark = note(&ws).await;
+    attach_place_note(&ws, &session(), &copy, &remark, meta())
         .await
         .expect("note");
     merge_places(&ws, &session(), &survivor, &copy, IdentityDecision::default())
@@ -329,9 +318,9 @@ async fn a_record_using_a_merged_place_is_listed_under_the_root() {
 async fn a_note_on_two_records_of_one_place_cluster_is_used_by_the_root_once() {
     let (ws, _dir) = workspace().await;
     let (survivor, copy) = (place(&ws, "Haugen").await, place(&ws, "Hougen").await);
-    let (remark, remark_id) = note(&ws).await;
+    let remark = note(&ws).await;
     for record in [&survivor, &copy] {
-        attach_place_note(&ws, &session(), record, remark_id, meta())
+        attach_place_note(&ws, &session(), record, &remark, meta())
             .await
             .expect("note");
     }
@@ -390,11 +379,11 @@ async fn a_repository_counts_the_citations_of_a_held_source_cluster_once_each() 
 async fn two_copies_of_a_place_using_two_copies_of_a_note_are_listed_once() {
     let (ws, _dir) = workspace().await;
     let (survivor, copy) = (place(&ws, "Haugen").await, place(&ws, "Hougen").await);
-    let ((remark, remark_id), (remark_copy, remark_copy_id)) = (note(&ws).await, note(&ws).await);
-    attach_place_note(&ws, &session(), &survivor, remark_id, meta())
+    let (remark, remark_copy) = (note(&ws).await, note(&ws).await);
+    attach_place_note(&ws, &session(), &survivor, &remark, meta())
         .await
         .expect("note");
-    attach_place_note(&ws, &session(), &copy, remark_copy_id, meta())
+    attach_place_note(&ws, &session(), &copy, &remark_copy, meta())
         .await
         .expect("note copy");
     merge_places(&ws, &session(), &survivor, &copy, IdentityDecision::default())

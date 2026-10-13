@@ -7,29 +7,28 @@
 use std::collections::BTreeSet;
 
 use vitni_app::{
-    AppError, ChildParentRelationship, ImportedMediaRef, MediaRefInput, NewFact, NewParticipation, Restriction,
-    Session, Workspace, add_child, add_citation_attribute, add_event_citation, add_family_citation,
-    add_media_attribute, add_media_citation, add_name, add_note_translation, add_partner, add_person_citation,
-    add_place_citation, add_place_name, add_repository_address, add_repository_url, add_source_attribute,
-    assert_association, assert_child_relationship, assert_citation_date_value, assert_event_address, assert_fact,
-    assert_participation, assert_place_enclosed_by, assert_sex, attach_citation_media, attach_citation_note,
-    attach_family_media, attach_family_note, attach_person_media, attach_person_note, change_log_for_citation,
-    change_log_for_event, change_log_for_family, change_log_for_media, change_log_for_note, change_log_for_person,
-    change_log_for_place, change_log_for_repository, change_log_for_research_note, change_log_for_source,
-    citation_claim_owner, claim_owner, event_claim_owner, families_for_person, family_claim_owner,
-    import_attach_event_media, import_attach_event_note, import_attach_media_note, import_attach_place_media,
-    import_attach_place_note, import_attach_repository_note, import_attach_source_media, import_attach_source_note,
-    link_family_event, link_place, link_source_repository, linked_records, list_citations, list_event_rows,
-    list_family_rows, list_media, list_notes, list_person_rows, list_places, list_repositories, list_sources,
-    media_claim_owner, note_claim_owner, place_claim_owner, recent_activity, record_origin, remove_child,
-    repository_claim_owner, set_citation_confidence, set_citation_evidence_analysis, set_citation_restrictions,
-    set_event_restrictions, set_family_restrictions, set_media_restrictions, set_note_restrictions, set_note_text,
-    set_note_type, set_page, set_place_restrictions, set_repository_restrictions, set_restrictions,
-    set_source_restrictions, show_citation, show_event, show_family, show_media, show_note, show_person, show_place,
-    show_repository, show_source, source_claim_owner, tag_citation, tag_event, tag_family, tag_media, tag_note,
-    tag_person, tag_place, tag_repository, tag_source, undo_assertion, undo_citation_assertion, undo_event_assertion,
-    undo_family_assertion, undo_media_assertion, undo_note_assertion, undo_place_assertion, undo_repository_assertion,
-    undo_research_note_assertion, undo_source_assertion, unlink_person, workspace_counts,
+    AppError, ChildParentRelationship, MediaRefInput, NewFact, NewParticipation, Restriction, Session, Workspace,
+    add_child, add_citation_attribute, add_event_citation, add_family_citation, add_media_attribute,
+    add_media_citation, add_name, add_note_translation, add_partner, add_person_citation, add_place_citation,
+    add_place_name, add_repository_address, add_repository_url, add_source_attribute, assert_association,
+    assert_child_relationship, assert_citation_date_value, assert_event_address, assert_fact, assert_participation,
+    assert_place_enclosed_by, assert_sex, attach_citation_media, attach_citation_note, attach_event_media,
+    attach_event_note, attach_family_media, attach_family_note, attach_media_note, attach_person_media,
+    attach_person_note, attach_place_media, attach_place_note, attach_repository_note, attach_source_media,
+    attach_source_note, change_log_for_citation, change_log_for_event, change_log_for_family, change_log_for_media,
+    change_log_for_note, change_log_for_person, change_log_for_place, change_log_for_repository,
+    change_log_for_research_note, change_log_for_source, citation_claim_owner, claim_owner, event_claim_owner,
+    families_for_person, family_claim_owner, link_family_event, link_place, link_source_repository, linked_records,
+    list_citations, list_event_rows, list_family_rows, list_media, list_notes, list_person_rows, list_places,
+    list_repositories, list_sources, media_claim_owner, note_claim_owner, place_claim_owner, recent_activity,
+    record_origin, remove_child, repository_claim_owner, set_citation_confidence, set_citation_evidence_analysis,
+    set_citation_restrictions, set_event_restrictions, set_family_restrictions, set_media_restrictions,
+    set_note_restrictions, set_note_text, set_note_type, set_page, set_place_restrictions, set_repository_restrictions,
+    set_restrictions, set_source_restrictions, show_citation, show_event, show_family, show_media, show_note,
+    show_person, show_place, show_repository, show_source, source_claim_owner, tag_citation, tag_event, tag_family,
+    tag_media, tag_note, tag_person, tag_place, tag_repository, tag_source, undo_assertion, undo_citation_assertion,
+    undo_event_assertion, undo_family_assertion, undo_media_assertion, undo_note_assertion, undo_place_assertion,
+    undo_repository_assertion, undo_research_note_assertion, undo_source_assertion, unlink_person, workspace_counts,
 };
 use vitni_app::{
     CitationRefInput, NewCitationEntry, NewSourceEntry, PersonChangeSet, PersonTarget, PlaceholderRef, SourceRefInput,
@@ -50,10 +49,10 @@ use vitni_app::{
 };
 use vitni_app::{
     TagChangeSet, TagTarget, add_dna_match_segment, assert_dna_match_shared_ancestor, assert_dna_test_haplogroup,
-    build_shared_ancestor, change_log_for_dna_match, change_log_for_dna_test, change_log_for_tag,
-    commit_tag_change_set, import_attach_dna_match_note, import_attach_dna_test_note, list_dna_matches, list_dna_tests,
-    list_tags, set_dna_match_restrictions, set_dna_match_status, set_dna_test_restrictions, show_dna_match,
-    show_dna_test, show_tag, tag_dna_match, tag_dna_test, undo_dna_match_assertion, undo_dna_test_assertion,
+    attach_dna_match_note, attach_dna_test_note, build_shared_ancestor, change_log_for_dna_match,
+    change_log_for_dna_test, change_log_for_tag, commit_tag_change_set, list_dna_matches, list_dna_tests, list_tags,
+    set_dna_match_restrictions, set_dna_match_status, set_dna_test_restrictions, show_dna_match, show_dna_test,
+    show_tag, tag_dna_match, tag_dna_test, undo_dna_match_assertion, undo_dna_test_assertion,
 };
 
 use vitni_app::{
@@ -1609,18 +1608,19 @@ async fn dispatch_event_edit_to(
                 .await
                 .map(|()| human_id.clone())
         }
-        EventEdit::AttachMedia { human_id, media_id } => {
-            let media = ImportedMediaRef {
-                media_human_id: media_id.clone(),
-                input: MediaRefInput::default(),
-            };
-            import_attach_event_media(workspace, session, human_id, media, prov.meta())
-                .await
-                .map(|()| human_id.clone())
-        }
+        EventEdit::AttachMedia { human_id, media_id } => attach_event_media(
+            workspace,
+            session,
+            human_id,
+            media_id,
+            MediaRefInput::default(),
+            prov.meta(),
+        )
+        .await
+        .map(|()| human_id.clone()),
         EventEdit::SetMediaRegion { .. } => event_set_region(workspace, session, edit, prov).await,
         EventEdit::AttachNote { human_id, note_id } => {
-            import_attach_event_note(workspace, session, human_id, note_id, prov.meta())
+            attach_event_note(workspace, session, human_id, note_id, prov.meta())
                 .await
                 .map(|()| human_id.clone())
         }
@@ -1746,11 +1746,16 @@ async fn dispatch_place_edit_to(
                 .await
                 .map(|()| human_id.clone())
         }
-        PlaceEdit::AttachMedia { human_id, media_id } => {
-            import_attach_place_media(workspace, session, human_id, media_id, prov.meta())
-                .await
-                .map(|()| human_id.clone())
-        }
+        PlaceEdit::AttachMedia { human_id, media_id } => attach_place_media(
+            workspace,
+            session,
+            human_id,
+            media_id,
+            MediaRefInput::default(),
+            prov.meta(),
+        )
+        .await
+        .map(|()| human_id.clone()),
         PlaceEdit::SetMediaRegion {
             human_id,
             assertion_id,
@@ -1770,7 +1775,7 @@ async fn dispatch_place_edit_to(
         .await
         .map(|()| human_id.clone()),
         PlaceEdit::AttachNote { human_id, note_id } => {
-            import_attach_place_note(workspace, session, human_id, note_id, prov.meta())
+            attach_place_note(workspace, session, human_id, note_id, prov.meta())
                 .await
                 .map(|()| human_id.clone())
         }
@@ -1969,14 +1974,19 @@ async fn dispatch_source_edit_to(
         )
         .await
         .map(|()| human_id.clone()),
-        SourceEdit::AttachMedia { human_id, media_id } => {
-            import_attach_source_media(workspace, session, human_id, media_id, prov.meta())
-                .await
-                .map(|()| human_id.clone())
-        }
+        SourceEdit::AttachMedia { human_id, media_id } => attach_source_media(
+            workspace,
+            session,
+            human_id,
+            media_id,
+            MediaRefInput::default(),
+            prov.meta(),
+        )
+        .await
+        .map(|()| human_id.clone()),
         SourceEdit::SetMediaRegion { .. } => source_set_region(workspace, session, edit, prov).await,
         SourceEdit::AttachNote { human_id, note_id } => {
-            import_attach_source_note(workspace, session, human_id, note_id, prov.meta())
+            attach_source_note(workspace, session, human_id, note_id, prov.meta())
                 .await
                 .map(|()| human_id.clone())
         }
@@ -2094,7 +2104,7 @@ async fn dispatch_repository_edit_to(
         .await
         .map(|()| human_id.clone()),
         RepositoryEdit::AttachNote { human_id, note_id } => {
-            import_attach_repository_note(workspace, session, human_id, note_id, prov.meta())
+            attach_repository_note(workspace, session, human_id, note_id, prov.meta())
                 .await
                 .map(|()| human_id.clone())
         }
@@ -2218,7 +2228,7 @@ async fn dispatch_media_edit_to(
                 .map(|()| human_id.clone())
         }
         MediaEdit::AttachNote { human_id, note_id } => {
-            import_attach_media_note(workspace, session, human_id, note_id, prov.meta())
+            attach_media_note(workspace, session, human_id, note_id, prov.meta())
                 .await
                 .map(|()| human_id.clone())
         }
@@ -2949,7 +2959,7 @@ pub async fn dispatch_dna_test_edit(
                 .map(|()| human_id.clone())
         }
         DnaTestEdit::AttachNote { human_id, note_id } => {
-            import_attach_dna_test_note(workspace, session, human_id, note_id, prov.meta())
+            attach_dna_test_note(workspace, session, human_id, note_id, prov.meta())
                 .await
                 .map(|()| human_id.clone())
         }
@@ -3014,7 +3024,7 @@ pub async fn dispatch_dna_match_edit(
                 .map(|()| human_id.clone())
         }
         DnaMatchEdit::AttachNote { human_id, note_id } => {
-            import_attach_dna_match_note(workspace, session, human_id, note_id, prov.meta())
+            attach_dna_match_note(workspace, session, human_id, note_id, prov.meta())
                 .await
                 .map(|()| human_id.clone())
         }

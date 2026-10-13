@@ -22,7 +22,7 @@ use crate::dna_match_usage::DnaMatchUsage;
 use crate::dto::{AggRef, AttachedRef, CitingRecordRef, tag_refs};
 use crate::error::AppError;
 use crate::session::Session;
-use crate::use_case::{self, MutationMeta, Provenance};
+use crate::use_case::{self, MutationMeta, Provenance, resolve_note_id};
 use crate::workspace::Workspace;
 
 /// A frontend-neutral summary of a DNA match (the DTO the CLI/UI renders), carrying its stable id and
@@ -256,20 +256,22 @@ pub async fn set_dna_match_status(
     execute_dna_match_mutation(store, session, dna_match_id, command, meta).await
 }
 
-/// Attaches a note (by note aggregate id) to a match, identified by `human_id`.
+/// Attaches the note named by `note_human_id` to the match identified by `human_id`.
 ///
 /// # Errors
 ///
-/// [`AppError::DnaMatchNotFound`] if no such match exists, or a workspace/store error.
+/// [`AppError::DnaMatchNotFound`] / [`AppError::NoteNotFound`] if either does not exist, or a
+/// workspace/store error.
 pub async fn attach_dna_match_note(
     workspace: &Workspace,
     session: &Session,
     human_id: &str,
-    note_id: NoteId,
+    note_human_id: &str,
     meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let dna_match_id = resolve_dna_match_id(store, human_id).await?;
+    let note_id = resolve_note_id(store, note_human_id).await?;
     execute_dna_match_mutation(
         store,
         session,
@@ -332,28 +334,6 @@ fn parse_tag_id(id: &str) -> Result<TagId, AppError> {
     uuid::Uuid::parse_str(id)
         .map(TagId::from_uuid)
         .map_err(|_| AppError::TagNotFound(id.to_owned()))
-}
-
-/// Attaches a note (by its `human_id`) to a match — the UI/importer-facing wrapper.
-///
-/// # Errors
-///
-/// [`AppError::DnaMatchNotFound`] / [`AppError::NoteNotFound`] if either does not exist, or a
-/// workspace/store error.
-pub async fn import_attach_dna_match_note(
-    workspace: &Workspace,
-    session: &Session,
-    match_human_id: &str,
-    note_human_id: &str,
-    meta: MutationMeta<'_>,
-) -> Result<(), AppError> {
-    let store = workspace.store();
-    let note_id = use_case::resolve_id(
-        store.find_note(note_human_id).await?,
-        vitni_core::note::NoteView::note_id,
-        || AppError::NoteNotFound(note_human_id.to_owned()),
-    )?;
-    attach_dna_match_note(workspace, session, match_human_id, note_id, meta).await
 }
 
 /// Loads a single match's summary by `human_id`.

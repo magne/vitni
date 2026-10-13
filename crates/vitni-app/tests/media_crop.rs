@@ -6,12 +6,12 @@
 
 use uuid::Uuid;
 use vitni_app::{
-    AppDefaults, ImportedMediaRef, MediaRefInput, MutationMeta, NewCitation, NewEvent, NewMedia, NewPerson, NewPlace,
-    NewSource, OperatorConfig, PersonNameParts, Provenance, Rect, Session, Workspace, WorkspaceDefaults,
-    attach_citation_media, attach_family_media, attach_person_media, change_log_for_person, create_citation,
-    create_event, create_family, create_media, create_person, create_place, create_source, import_attach_event_media,
-    import_attach_place_media, import_attach_source_media, set_media_mime, show_citation, show_event, show_family,
-    show_person, show_place, show_source, update_person_media_ref, update_place_media_ref, update_source_media_ref,
+    AppDefaults, MediaRefInput, MutationMeta, NewCitation, NewEvent, NewMedia, NewPerson, NewPlace, NewSource,
+    OperatorConfig, PersonNameParts, Provenance, Rect, Session, Workspace, WorkspaceDefaults, attach_citation_media,
+    attach_event_media, attach_family_media, attach_person_media, attach_place_media, attach_source_media,
+    change_log_for_person, create_citation, create_event, create_family, create_media, create_person, create_place,
+    create_source, set_media_mime, show_citation, show_event, show_family, show_person, show_place, show_source,
+    update_person_media_ref, update_place_media_ref, update_source_media_ref,
 };
 use vitni_core::enums::{EventType, EvidenceLevel, PlaceType};
 use vitni_core::ids::AgentId;
@@ -302,18 +302,9 @@ async fn event_media_attach_round_trips_crop_and_caption() {
     .expect("event");
     let media = media_with_path(&ws, &session).await;
 
-    import_attach_event_media(
-        &ws,
-        &session,
-        &event,
-        ImportedMediaRef {
-            media_human_id: media,
-            input: crop_input(),
-        },
-        MutationMeta::default(),
-    )
-    .await
-    .expect("attach with crop");
+    attach_event_media(&ws, &session, &event, &media, crop_input(), MutationMeta::default())
+        .await
+        .expect("attach with crop");
 
     let summary = show_event(&ws, &event).await.expect("show").expect("event");
     let attached = summary.media.first().expect("one media ref");
@@ -339,9 +330,16 @@ async fn source_media_ref_gains_a_crop_through_the_update_use_case() {
     .await
     .expect("source");
     let media = media_with_path(&ws, &session).await;
-    import_attach_source_media(&ws, &session, &source, &media, MutationMeta::default())
-        .await
-        .expect("attach");
+    attach_source_media(
+        &ws,
+        &session,
+        &source,
+        &media,
+        MediaRefInput::default(),
+        MutationMeta::default(),
+    )
+    .await
+    .expect("attach");
 
     let attach_assertion = show_source(&ws, &source)
         .await
@@ -387,9 +385,16 @@ async fn place_media_ref_gains_a_crop_through_the_update_use_case() {
     .await
     .expect("place");
     let media = media_with_path(&ws, &session).await;
-    import_attach_place_media(&ws, &session, &place, &media, MutationMeta::default())
-        .await
-        .expect("attach");
+    attach_place_media(
+        &ws,
+        &session,
+        &place,
+        &media,
+        MediaRefInput::default(),
+        MutationMeta::default(),
+    )
+    .await
+    .expect("attach");
 
     let attach_assertion = show_place(&ws, &place)
         .await

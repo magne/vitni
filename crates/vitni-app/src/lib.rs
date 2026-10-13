@@ -112,15 +112,15 @@ pub use config_store::{
 };
 pub use dna_match::{
     DnaInferenceRef, DnaMatchSummary, DnaSegmentRef, NewDnaMatch, SharedAncestorRef, add_dna_match_segment,
-    assert_dna_match_shared_ancestor, attach_dna_match_note, build_shared_ancestor, import_attach_dna_match_note,
-    list_dna_matches, observe_dna_match, set_dna_match_human_id, set_dna_match_status,
-    set_restrictions as set_dna_match_restrictions, show_dna_match, tag_dna_match,
+    assert_dna_match_shared_ancestor, attach_dna_match_note, build_shared_ancestor, list_dna_matches,
+    observe_dna_match, set_dna_match_human_id, set_dna_match_status, set_restrictions as set_dna_match_restrictions,
+    show_dna_match, tag_dna_match,
 };
 pub use dna_test::{
     DnaTestMatchRef, DnaTestSummary, HaplogroupRef, NewDnaTest, assert_dna_test_haplogroup, attach_dna_test_note,
-    create_dna_test, import_attach_dna_test_note, list_dna_tests, set_dna_test_genome_build, set_dna_test_human_id,
-    set_dna_test_kit_id, set_dna_test_provider, set_dna_test_type, set_restrictions as set_dna_test_restrictions,
-    show_dna_test, tag_dna_test,
+    create_dna_test, list_dna_tests, set_dna_test_genome_build, set_dna_test_human_id, set_dna_test_kit_id,
+    set_dna_test_provider, set_dna_test_type, set_restrictions as set_dna_test_restrictions, show_dna_test,
+    tag_dna_test,
 };
 pub use dna_test_change_set::{DnaTestChangeSet, commit_dna_test_change_set};
 pub use dto::{
@@ -129,13 +129,13 @@ pub use dto::{
 };
 pub use error::AppError;
 pub use event::{
-    DateInput, DateParts, EventAddressRef, EventMergeResult, EventPlaceRow, EventRow, EventSummary, ImportedMediaRef,
-    NewEvent, ParticipantRef, PlaceRefSummary, add_event_citation, assert_event_address, assert_event_date,
+    DateInput, DateParts, EventAddressRef, EventMergeResult, EventPlaceRow, EventRow, EventSummary, NewEvent,
+    ParticipantRef, PlaceRefSummary, add_event_citation, assert_event_address, assert_event_date,
     assert_event_date_value, attach_event_media, attach_event_note, build_genealogical_date, create_event,
-    distinguish_events, event_claim_owner, event_pair_decision, gregorian_date, import_attach_event_media,
-    import_attach_event_note, link_place, list_event_rows, list_events, merge_events, set_event_description,
-    set_event_human_id, set_event_type, set_restrictions as set_event_restrictions, show_event, tag_event,
-    undo_event_distinction_and_merge, update_event_media_ref,
+    distinguish_events, event_claim_owner, event_pair_decision, gregorian_date, link_place, list_event_rows,
+    list_events, merge_events, set_event_description, set_event_human_id, set_event_type,
+    set_restrictions as set_event_restrictions, show_event, tag_event, undo_event_distinction_and_merge,
+    update_event_media_ref,
 };
 pub use event_change_set::{EventChangeSet, NewPlaceEntry, PlaceRefInput, commit_event_change_set};
 pub use family::{
@@ -178,10 +178,10 @@ pub use match_queue::{
 pub use matching::{MatchDataError, load_match_data};
 pub use media::{
     MediaAttributeRef, MediaMergeResult, MediaSummary, NewMedia, add_media_attribute, add_media_citation,
-    assert_media_date, assert_media_date_value, attach_media_note, create_media, distinguish_media,
-    import_attach_media_note, list_media, media_claim_owner, media_pair_decision, merge_media, set_media_checksum,
-    set_media_file_path, set_media_human_id, set_media_mime, set_media_web_path,
-    set_restrictions as set_media_restrictions, show_media, tag_media, undo_media_distinction_and_merge,
+    assert_media_date, assert_media_date_value, attach_media_note, create_media, distinguish_media, list_media,
+    media_claim_owner, media_pair_decision, merge_media, set_media_checksum, set_media_file_path, set_media_human_id,
+    set_media_mime, set_media_web_path, set_restrictions as set_media_restrictions, show_media, tag_media,
+    undo_media_distinction_and_merge,
 };
 pub use media_change_set::{MediaChangeSet, commit_media_change_set};
 pub use note::{
@@ -208,9 +208,9 @@ pub use place::{
     NewPlace, PlaceEnclosingRef, PlaceGeometryRef, PlaceMergeResult, PlaceNameRef, PlaceSuccessionInput,
     PlaceSuccessionRef, PlaceSummary, add_place_citation, add_place_name, assert_place_coordinates,
     assert_place_enclosed_by, assert_place_geometry, assert_place_succession, attach_place_media, attach_place_note,
-    create_place, distinguish_places, import_attach_place_media, import_attach_place_note, list_places,
-    list_places_as_of, merge_places, place_claim_owner, place_pair_decision, set_place_code, set_place_human_id,
-    set_place_type, set_restrictions as set_place_restrictions, show_place, show_place_as_of, tag_place,
+    create_place, distinguish_places, list_places, list_places_as_of, merge_places, place_claim_owner,
+    place_pair_decision, set_place_code, set_place_human_id, set_place_type,
+    set_restrictions as set_place_restrictions, show_place, show_place_as_of, tag_place,
     undo_place_distinction_and_merge, unstated_place_type, update_place_media_ref,
 };
 pub use place_change_set::{PlaceChangeSet, commit_place_change_set};
@@ -224,10 +224,9 @@ pub use record_origin::record_origin;
 pub use repository::{
     NewRepository, RepositoryAddressRef, RepositoryMergeResult, RepositorySummary, RepositoryUrlRef,
     add_repository_address, add_repository_url, attach_repository_note, create_repository, distinguish_repositories,
-    import_attach_repository_note, list_repositories, merge_repositories, repository_claim_owner,
-    repository_pair_decision, set_repository_human_id, set_repository_name, set_repository_type,
-    set_restrictions as set_repository_restrictions, show_repository, tag_repository,
-    undo_repository_distinction_and_merge,
+    list_repositories, merge_repositories, repository_claim_owner, repository_pair_decision, set_repository_human_id,
+    set_repository_name, set_repository_type, set_restrictions as set_repository_restrictions, show_repository,
+    tag_repository, undo_repository_distinction_and_merge,
 };
 pub use repository_change_set::{RepositoryChangeSet, commit_repository_change_set};
 pub use research_note::{
@@ -243,10 +242,10 @@ pub use similar::{
 };
 pub use source::{
     NewSource, SourceAttributeRef, SourceMergeResult, SourceSummary, add_source_attribute, attach_source_media,
-    attach_source_note, create_source, distinguish_sources, import_attach_source_media, import_attach_source_note,
-    link_source_repository, list_sources, merge_sources, set_restrictions as set_source_restrictions,
-    set_source_abbrev, set_source_author, set_source_human_id, set_source_pub_info, set_title, show_source,
-    source_claim_owner, source_pair_decision, tag_source, undo_source_distinction_and_merge, update_source_media_ref,
+    attach_source_note, create_source, distinguish_sources, link_source_repository, list_sources, merge_sources,
+    set_restrictions as set_source_restrictions, set_source_abbrev, set_source_author, set_source_human_id,
+    set_source_pub_info, set_title, show_source, source_claim_owner, source_pair_decision, tag_source,
+    undo_source_distinction_and_merge, update_source_media_ref,
 };
 pub use source_change_set::{SourceChangeSet, commit_source_change_set};
 pub use staging::{

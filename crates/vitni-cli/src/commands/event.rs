@@ -7,7 +7,6 @@ use vitni_app::{
     add_event_citation, assert_event_date, attach_event_media, attach_event_note, create_event, link_place,
     list_events, set_event_description, set_event_restrictions, set_event_type, show_event, tag_event,
 };
-use vitni_core::ids::{MediaId, NoteId};
 
 use crate::args::{EventTypeArg, RestrictionsArgs};
 use crate::commands::similar::hint_similar;
@@ -73,9 +72,9 @@ pub enum EventCmd {
     AttachMedia {
         /// The event's human id (e.g. `E0001`).
         human_id: String,
-        /// The media aggregate id (UUID).
+        /// The media object's human id (e.g. `O0001`).
         #[arg(long)]
-        media: Uuid,
+        media: String,
         /// A caption specific to this use.
         #[arg(long)]
         caption: Option<String>,
@@ -84,9 +83,9 @@ pub enum EventCmd {
     AttachNote {
         /// The event's human id (e.g. `E0001`).
         human_id: String,
-        /// The note aggregate id (UUID).
+        /// The note's human id (e.g. `N0001`).
         #[arg(long)]
-        note: Uuid,
+        note: String,
     },
     /// Apply a tag to an event.
     Tag {
@@ -181,12 +180,12 @@ pub async fn run(
             caption,
         } => {
             let input = MediaRefInput { crop: None, caption };
-            attach_event_media(workspace, session, &human_id, MediaId::from_uuid(media), input, meta).await?;
+            attach_event_media(workspace, session, &human_id, &media, input, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
         EventCmd::AttachNote { human_id, note } => {
-            attach_event_note(workspace, session, &human_id, NoteId::from_uuid(note), meta).await?;
+            attach_event_note(workspace, session, &human_id, &note, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }

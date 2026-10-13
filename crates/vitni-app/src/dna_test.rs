@@ -12,7 +12,7 @@ use vitni_core::dna::{DnaGenomeBuild, DnaProvider, DnaTestType};
 use vitni_core::dna_test::DnaTestView;
 use vitni_core::dna_test::command::{DnaTestCommand, DnaTestCommandEnvelope};
 use vitni_core::enums::Restriction;
-use vitni_core::ids::{AssertionId, DnaTestId, HumanId, NoteId, PersonId, TagId};
+use vitni_core::ids::{AssertionId, DnaTestId, HumanId, PersonId, TagId};
 use vitni_core::person::PersonView;
 use vitni_core::provenance::EvidenceRef;
 use vitni_db::Store;
@@ -21,7 +21,7 @@ use crate::citation::TagRef;
 use crate::dto::{AggRef, AttachedRef, tag_refs};
 use crate::error::AppError;
 use crate::session::Session;
-use crate::use_case::{self, MutationMeta, Provenance};
+use crate::use_case::{self, MutationMeta, Provenance, resolve_note_id};
 use crate::workspace::Workspace;
 
 /// A frontend-neutral summary of a DNA test (the DTO the CLI/UI renders), carrying its stable id and
@@ -260,20 +260,22 @@ pub async fn assert_dna_test_haplogroup(
     .await
 }
 
-/// Attaches a note (by note aggregate id) to a test, identified by `human_id`.
+/// Attaches the note named by `note_human_id` to the test identified by `human_id`.
 ///
 /// # Errors
 ///
-/// [`AppError::DnaTestNotFound`] if no such test exists, or a workspace/store error.
+/// [`AppError::DnaTestNotFound`] / [`AppError::NoteNotFound`] if either does not exist, or a
+/// workspace/store error.
 pub async fn attach_dna_test_note(
     workspace: &Workspace,
     session: &Session,
     human_id: &str,
-    note_id: NoteId,
+    note_human_id: &str,
     meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let dna_test_id = resolve_dna_test_id(store, human_id).await?;
+    let note_id = resolve_note_id(store, note_human_id).await?;
     execute_dna_test_mutation(
         store,
         session,
@@ -313,28 +315,6 @@ fn parse_tag_id(id: &str) -> Result<TagId, AppError> {
     uuid::Uuid::parse_str(id)
         .map(TagId::from_uuid)
         .map_err(|_| AppError::TagNotFound(id.to_owned()))
-}
-
-/// Attaches a note (by its `human_id`) to a test — the UI/importer-facing wrapper.
-///
-/// # Errors
-///
-/// [`AppError::DnaTestNotFound`] / [`AppError::NoteNotFound`] if either does not exist, or a
-/// workspace/store error.
-pub async fn import_attach_dna_test_note(
-    workspace: &Workspace,
-    session: &Session,
-    test_human_id: &str,
-    note_human_id: &str,
-    meta: MutationMeta<'_>,
-) -> Result<(), AppError> {
-    let store = workspace.store();
-    let note_id = use_case::resolve_id(
-        store.find_note(note_human_id).await?,
-        vitni_core::note::NoteView::note_id,
-        || AppError::NoteNotFound(note_human_id.to_owned()),
-    )?;
-    attach_dna_test_note(workspace, session, test_human_id, note_id, meta).await
 }
 
 /// Loads a single test's summary by `human_id`.

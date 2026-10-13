@@ -7,7 +7,6 @@ use vitni_app::{
     attach_dna_test_note, create_dna_test, list_dna_tests, set_dna_test_genome_build, set_dna_test_kit_id,
     set_dna_test_provider, set_dna_test_restrictions, set_dna_test_type, show_dna_test, tag_dna_test,
 };
-use vitni_core::ids::NoteId;
 
 use crate::args::{DnaGenomeBuildArg, DnaProviderArg, DnaTestTypeArg, RestrictionsArgs};
 use crate::i18n::Localizer;
@@ -66,9 +65,9 @@ pub enum DnaTestCmd {
     AttachNote {
         /// The test's human id (e.g. `D0001`).
         human_id: String,
-        /// The note aggregate id (UUID).
+        /// The note's human id (e.g. `N0001`).
         #[arg(long)]
-        note: Uuid,
+        note: String,
     },
     /// Apply a tag to a test.
     Tag {
@@ -148,14 +147,7 @@ pub async fn run(
             Ok(())
         }
         DnaTestCmd::AttachNote { human_id, note } => {
-            attach_dna_test_note(
-                workspace,
-                session,
-                &human_id,
-                NoteId::from_uuid(note),
-                MutationMeta::default(),
-            )
-            .await?;
+            attach_dna_test_note(workspace, session, &human_id, &note, MutationMeta::default()).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
