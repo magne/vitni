@@ -1472,10 +1472,10 @@ struct BulkImportRequest {
 }
 
 /// Runs the bulk-import invocation to completion, returning the number of records imported and the
-/// export date the file declared, or a localized error. Mirrors the CLI's `vitni import` (ADR 0013): resolve the bundle (from the
-/// currently open workspace's plugin layers, same as the bulk-export and assisted-import wizards),
-/// take the operator's effective grant, open the *target* workspace (which may differ from the one
-/// currently open), and run the plugin under a Software session.
+/// export date the file declared, or a localized error. Mirrors the CLI's `vitni import` (ADR 0013):
+/// resolve the bundle (from the currently open workspace's plugin layers, same as the bulk-export and
+/// assisted-import wizards), take the operator's effective grant, open the *target* workspace (which
+/// may differ from the one currently open), and run the plugin under a Software session.
 async fn run_bulk_import_session(
     services: Services,
     request: BulkImportRequest,
