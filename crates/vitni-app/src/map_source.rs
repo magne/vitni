@@ -197,10 +197,16 @@ fn google_tile_url(session: &str, api_key: &str) -> String {
 
 /// The viewport `copyright` request URL for the camera `bounds` (`north, south, east, west`) at
 /// `zoom`, over `session`/`api_key`.
+///
+/// The endpoint takes an integer zoom and answers a fractional one with `400 INVALID_ARGUMENT`, while
+/// the map's camera zoom is almost always fractional — so `zoom` is rounded (the tile zoom the map
+/// shows a raster source at) and clamped to the levels Google serves.
 fn google_viewport_url(session: &str, api_key: &str, zoom: f64, bounds: (f64, f64, f64, f64)) -> String {
     let (north, south, east, west) = bounds;
+    // `abs` folds the `-0.0` a slightly negative zoom rounds to, which would print as `-0`.
+    let zoom = zoom.round().clamp(0.0, f64::from(GOOGLE_MAX_ZOOM)).abs();
     format!(
-        "https://tile.googleapis.com/tile/v1/viewport?session={session}&key={api_key}&zoom={zoom}\
+        "https://tile.googleapis.com/tile/v1/viewport?session={session}&key={api_key}&zoom={zoom:.0}\
          &north={north}&south={south}&east={east}&west={west}"
     )
 }
@@ -520,18 +526,33 @@ mod tests {
 
     #[test]
     fn the_viewport_url_carries_the_camera_bounds_and_zoom() {
-        let url = google_viewport_url("SESSION1", "KEY123", 12.5, (60.0, 59.0, 11.0, 10.0));
+        let url = google_viewport_url("SESSION1", "KEY123", 12.0, (60.0, 59.0, 11.0, 10.0));
         assert!(url.starts_with("https://tile.googleapis.com/tile/v1/viewport?"));
         for fragment in [
             "session=SESSION1",
             "key=KEY123",
-            "zoom=12.5",
+            "zoom=12&",
             "north=60",
             "south=59",
             "east=11",
             "west=10",
         ] {
             assert!(url.contains(fragment), "{url} names {fragment}");
+        }
+    }
+
+    /// Google answers a fractional zoom with `400 INVALID_ARGUMENT` (confirmed against the live
+    /// service, #604), and the map's settled camera zoom is almost never whole.
+    #[test]
+    fn the_viewport_url_sends_a_whole_zoom_within_googles_range() {
+        for (camera_zoom, sent) in [
+            (6.37, "zoom=6&"),
+            (6.5, "zoom=7&"),
+            (-0.4, "zoom=0&"),
+            (23.8, "zoom=22&"),
+        ] {
+            let url = google_viewport_url("SESSION1", "KEY123", camera_zoom, (60.0, 59.0, 11.0, 10.0));
+            assert!(url.contains(sent), "camera zoom {camera_zoom} sends {sent}: {url}");
         }
     }
 
