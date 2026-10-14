@@ -35,9 +35,9 @@ use vitni_app::{
     commit_person_change_set, set_person_human_id,
 };
 use vitni_app::{
-    DecidableKind, MatchQueueFilter, MatchVerdict, ancestors, assess, decide_match, descendants, evidence_health,
-    list_import_runs, match_pair_decision, match_queue, person_names, relationship, run_checks,
-    undo_match_distinction_and_merge,
+    DecidableKind, ImportRunId, MatchQueueFilter, MatchVerdict, ancestors, assess, decide_match, descendants,
+    evidence_health, list_import_runs, match_pair_decision, match_queue, person_names, relationship, run_checks,
+    run_record_changes, run_records, undo_match_distinction_and_merge,
 };
 use vitni_app::{
     DraftRecord, MatchBand, MatchableKind, SimilarRecord, assess_draft, find_similar, find_similar_to_draft,
@@ -89,11 +89,12 @@ use crate::navigation::{
 };
 use crate::view_model::{
     CitationDetail, CompareSide, DASHBOARD_MATCHES, DashboardStats, DashboardVm, DataQualityVm, DnaMatchDetail,
-    DnaTestDetail, EventDetail, FamilyDetail, FamilyVm, GeographyVm, LISTED_MATCHES, MatchCompareVm, MatchQueueVm,
-    MediaDetail, MediaRefVm, NoteDetail, PedigreeVm, PersonDetail, PlaceDetail, ProvenanceDraft, RelationshipVm,
-    RepositoryDetail, ResearchNoteDetail, SimilarHitVm, SimilarVm, SourceDetail, TagDetail, citation_row,
-    collapse_history, dna_match_row, dna_test_row, event_list_row, event_row, family_list_row, family_row, media_row,
-    note_row, person_list_row, place_row, repository_row, research_note_row, source_row, tag_row,
+    DnaTestDetail, EventDetail, FamilyDetail, FamilyVm, GeographyVm, HistoryEntryVm, LISTED_MATCHES, MatchCompareVm,
+    MatchQueueVm, MediaDetail, MediaRefVm, NoteDetail, PedigreeVm, PersonDetail, PlaceDetail, ProvenanceDraft,
+    RelationshipVm, RepositoryDetail, ResearchNoteDetail, RunRecordVm, RunRecordsVm, SimilarHitVm, SimilarVm,
+    SourceDetail, TagDetail, citation_row, collapse_history, dna_match_row, dna_test_row, event_list_row, event_row,
+    family_list_row, family_row, media_row, note_row, person_list_row, place_row, repository_row, research_note_row,
+    source_row, tag_row,
 };
 
 /// How many recent changes the dashboard activity feed shows.
@@ -512,6 +513,47 @@ pub async fn dispatch_decide_match(
             Ok(loc.match_distinguished_summary(kind, right, left))
         }
     }
+}
+
+/// How many of an import run's records [`load_run_records`] reads at a time.
+const RUN_RECORDS_PAGE: u32 = 50;
+
+/// Reads the first `pages` pages of the records the import run `run` changed, in one read, labelling
+/// people by their display names: what an import-run row on the Dashboard discloses, *Show more*
+/// adding a page.
+///
+/// # Errors
+///
+/// Propagates the [`AppError`] of a store read.
+pub async fn load_run_records(
+    workspace: &Workspace,
+    loc: &Localizer,
+    run: ImportRunId,
+    pages: u32,
+) -> Result<RunRecordsVm, AppError> {
+    let limit = pages.max(1).saturating_mul(RUN_RECORDS_PAGE);
+    let page = run_records(workspace, run, 0, limit).await?;
+    let names = person_names(workspace, &RunRecordsVm::persons_named(&page)).await?;
+    Ok(RunRecordsVm::build(&page, &names, loc))
+}
+
+/// Reads what the import run `run` changed in one record (`kind` + `aggregate_id`, from a
+/// [`RunRecordVm`]), newest first and display-only.
+///
+/// # Errors
+///
+/// Propagates the [`AppError`] of a store read or payload parse.
+pub async fn load_run_record_changes(
+    workspace: &Workspace,
+    loc: &Localizer,
+    run: ImportRunId,
+    record: &RunRecordVm,
+) -> Result<Vec<HistoryEntryVm>, AppError> {
+    let changes = run_record_changes(workspace, run, &record.kind, &record.aggregate_id).await?;
+    Ok(changes
+        .iter()
+        .map(|entry| HistoryEntryVm::from_entry(entry, loc))
+        .collect())
 }
 
 /// Resolves the current primary display name of the record `(category, human_id)`, or `None` when

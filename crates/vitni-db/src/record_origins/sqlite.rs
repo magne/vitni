@@ -7,12 +7,13 @@ use cqrs_es::{Aggregate, EventEnvelope, Query};
 use serde::Serialize;
 use sqlx::{Pool, Row, Sqlite};
 use vitni_core::assertions::{Envelope, EventBody};
-use vitni_core::ids::AssertionId;
+use vitni_core::ids::{AssertionId, ImportRunId};
 use vitni_core::origin::{ContentDigest, DatasetId, RecordOrigin};
 
 use super::{
     IndexRow, OriginResolution, OriginRow, PendingWrite, RECORD_ORIGINS_PENDING_TABLE, RECORD_ORIGINS_STATE_TABLE,
-    RECORD_ORIGINS_TABLE, created_key, decode_assertion_id, decode_run, decode_timestamp, index_rows, resolved_key,
+    RECORD_ORIGINS_TABLE, RunRecordRow, created_key, decode_assertion_id, decode_run, decode_timestamp, index_rows,
+    resolved_key,
 };
 use crate::store::DbError;
 
@@ -38,6 +39,8 @@ const CREATE_RECORD_ORIGINS_KEY_INDEX: &str =
 
 const CREATE_RECORD_ORIGINS_AGGREGATE_INDEX: &str =
     "CREATE INDEX IF NOT EXISTS record_origins_aggregate ON record_origins (aggregate_kind, aggregate_id)";
+
+const CREATE_RECORD_ORIGINS_RUN_INDEX: &str = "CREATE INDEX IF NOT EXISTS record_origins_run ON record_origins (run)";
 
 const CREATE_RECORD_ORIGINS_EVENT_INDEX: &str =
     "CREATE UNIQUE INDEX IF NOT EXISTS record_origins_event ON record_origins (event_key)";
@@ -93,6 +96,7 @@ pub(crate) async fn create_tables(pool: &Pool<Sqlite>) -> Result<bool, sqlx::Err
     }
     sqlx::query(CREATE_RECORD_ORIGINS_KEY_INDEX).execute(pool).await?;
     sqlx::query(CREATE_RECORD_ORIGINS_AGGREGATE_INDEX).execute(pool).await?;
+    sqlx::query(CREATE_RECORD_ORIGINS_RUN_INDEX).execute(pool).await?;
     sqlx::query(CREATE_RECORD_ORIGINS_EVENT_INDEX).execute(pool).await?;
     let complete = sqlx::query(&format!("SELECT 1 FROM {RECORD_ORIGINS_STATE_TABLE}"))
         .fetch_optional(pool)
@@ -600,6 +604,40 @@ pub(crate) async fn assertion_origins(
             run: decode_run(&row.get::<String, _>("run"))?,
         };
         out.push((decode_assertion_id(&row.get::<String, _>("assertion_id"))?, origin));
+    }
+    Ok(out)
+}
+
+/// The aggregates the run `run` wrote to, each once, the one it wrote to last first, skipping
+/// `offset` and returning at most `limit`. A recorded resolution wrote nothing to its aggregate and is
+/// left out.
+///
+/// # Errors
+///
+/// A [`DbError`] if the query fails.
+pub(crate) async fn run_records(
+    pool: &Pool<Sqlite>,
+    run: ImportRunId,
+    offset: u32,
+    limit: u32,
+) -> Result<Vec<RunRecordRow>, DbError> {
+    let rows = sqlx::query(&format!(
+        "SELECT aggregate_kind, aggregate_id FROM {RECORD_ORIGINS_TABLE} \
+         WHERE run = ? AND field_key <> aggregate_kind || '.resolved' \
+         GROUP BY aggregate_kind, aggregate_id ORDER BY MAX(id) DESC LIMIT ? OFFSET ?"
+    ))
+    .bind(run.to_string())
+    .bind(i64::from(limit))
+    .bind(i64::from(offset))
+    .fetch_all(pool)
+    .await
+    .map_err(|e| DbError::Backend(format!("reading the records of import run {run}: {e}")))?;
+    let mut out = Vec::with_capacity(rows.len());
+    for row in rows {
+        out.push(RunRecordRow {
+            aggregate_kind: row.get("aggregate_kind"),
+            aggregate_id: row.get("aggregate_id"),
+        });
     }
     Ok(out)
 }

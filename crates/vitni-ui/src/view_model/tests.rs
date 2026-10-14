@@ -1,7 +1,7 @@
 use super::{
     AttachedRefVm, CitationDetail, DEFAULT_TAG_COLOR, DEFAULT_TAG_PRIORITY, DashboardStats, DashboardVm, DataQualityVm,
-    MediaRefVm, PersonDetail, PersonDraft, ProvenanceDraft, RecordDraft, TagDetail, TagDraft, TimelineKind,
-    citation_row, citation_tabs, collapse_history, evidence_axes, person_row, person_tabs,
+    MediaRefVm, PersonDetail, PersonDraft, ProvenanceDraft, RecordDraft, RunDisclosureVm, RunRecordsVm, TagDetail,
+    TagDraft, TimelineKind, citation_row, citation_tabs, collapse_history, evidence_axes, person_row, person_tabs,
 };
 use crate::i18n::Localizer;
 use crate::presentation::ConfidenceLevel;
@@ -16,7 +16,7 @@ use vitni_app::{
     OperatorKind, PersonName, PersonRow, PersonSummary, Restriction, RunRef, Sex, SourceQuality, Surname, TagRef,
     WorkspaceCounts,
 };
-use vitni_app::{DatasetId, ImportRunId, RunResume};
+use vitni_app::{DatasetId, ImportRunId, RunRecord, RunRecords, RunResume};
 
 /// The display names the dashboard tests label persons with: I0001 is "Ada Lovelace".
 fn ada() -> HashMap<String, String> {
@@ -96,7 +96,15 @@ fn dashboard_renders_an_import_run_row_and_labels_records_by_name() {
         Some("3 records"),
         "the run's own record count, not the rows the window happened to read"
     );
-    assert_eq!(vm.recent[0].children.len(), 2, "the row carries its children");
+    assert_eq!(
+        vm.recent[0].run,
+        Some(RunDisclosureVm {
+            id: run_ref(Some(3)).id,
+            label: "What the import from tree.ged changed".to_owned(),
+        }),
+        "the row names its run, which discloses its records on demand, by its file"
+    );
+    assert_eq!(vm.recent[1].run, None, "a keyboard change names no run");
     assert!(vm.recent[0].record.is_none(), "an import run spans many records");
     // The human edit links to the person by display name, not the human id.
     let linked = vm.recent[1].record.as_ref().expect("person record");
@@ -166,7 +174,11 @@ fn the_dashboard_reads_the_names_of_the_persons_its_activity_names() {
         import,
         log_entry("person", None, OperatorKind::Human, "magne"),
     ];
-    assert_eq!(DashboardVm::persons_named(&activity), ["I0001", "I0002"]);
+    assert_eq!(
+        DashboardVm::persons_named(&activity),
+        ["I0001"],
+        "a run's records are named only once its row is opened"
+    );
 }
 
 #[test]
@@ -1877,4 +1889,46 @@ fn an_activity_row_names_its_value() {
     let vm = super::ActivityVm::from_entry(&entry, &loc, &ada());
 
     assert_eq!(vm.value.as_deref(), Some("male"));
+}
+
+#[test]
+fn a_runs_records_link_by_name_and_each_names_its_disclosure() {
+    let loc = Localizer::for_test("en");
+    let record = |kind: &str, human_id: Option<&str>| RunRecord {
+        kind: kind.to_owned(),
+        aggregate_id: format!("{kind}-id"),
+        human_id: human_id.map(ToOwned::to_owned),
+    };
+    let page = RunRecords {
+        records: vec![
+            record("person", Some("I0001")),
+            record("place", Some("P0001")),
+            record("tag", None),
+        ],
+        more: true,
+    };
+    let vm = RunRecordsVm::build(&page, &ada(), &loc);
+
+    assert!(vm.more);
+    let [person, place, tag] = vm.records.as_slice() else {
+        panic!("three records: {vm:?}");
+    };
+    let linked = person.record.as_ref().expect("a person links");
+    assert_eq!(
+        (linked.label.as_str(), linked.human_id.as_str()),
+        ("Ada Lovelace", "I0001")
+    );
+    assert_eq!(person.label, "Ada Lovelace");
+    assert_eq!(person.toggle_label, "What it changed in Ada Lovelace");
+    assert_eq!(
+        (person.kind.as_str(), person.aggregate_id.as_str()),
+        ("person", "person-id")
+    );
+    assert_eq!(place.label, "P0001", "a record without a known name reads by its id");
+    assert!(
+        tag.record.is_none(),
+        "a record without a user-facing id cannot be linked"
+    );
+    assert_eq!(tag.label, "tag", "it reads as its kind, never its aggregate id");
+    assert_eq!(tag.toggle_label, "What it changed in tag");
 }

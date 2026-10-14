@@ -218,6 +218,12 @@ history-value-dna = { $cm } cM over { $segments ->
 history-value-no-restrictions = none
 # The disclosure on an import run's History row that shows the changes it folds (ADR 0049 §3).
 history-import-run-changes-toggle = What it changed
+# On the Dashboard, an import run's disclosure lists the records it changed; each record's own disclosure
+# shows its changes and is named after the record. More records load a page at a time.
+run-changes-toggle-aria = What the import from { $source } changed
+run-record-changes-toggle = What it changed in { $record }
+run-records-more = Show more
+run-records-empty = It changed no records.
 
 # Edit field labels
 field-nickname = Nickname

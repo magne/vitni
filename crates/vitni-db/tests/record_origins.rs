@@ -314,6 +314,60 @@ async fn the_records_each_dataset_already_holds_are_counted(store: &Store) {
     assert_eq!(store.origin_overlap("person", &[]).await.unwrap(), []);
 }
 
+/// Creates person `n` (`I000n`) from `origin`, as assertion `0x100 + n`.
+async fn create_another_person(store: &Store, n: u128, origin: RecordOrigin) -> PersonId {
+    let person_id = PersonId::from_uuid(Uuid::from_u128(n));
+    let command = PersonCommand::CreatePerson {
+        person_id,
+        human_id: HumanId::new(format!("I{n:04}")),
+        evidence_level: EvidenceLevel::Persona,
+        external_ids: Vec::new(),
+    };
+    store
+        .execute_person(
+            &person_id.to_string(),
+            PersonCommandEnvelope {
+                meta: meta(0x100 + n, Some(origin)),
+                command,
+            },
+        )
+        .await
+        .unwrap();
+    person_id
+}
+
+async fn the_records_a_run_wrote_are_listed_newest_first(store: &Store) {
+    create_person(store).await;
+    person(store, 11, Some(origin("I1", None)), assert_sex(Sex::Female)).await;
+    let second = create_another_person(store, 2, origin("I2", None)).await;
+    let other_run = RecordOrigin {
+        run: ImportRunId::from_uuid(Uuid::from_u128(0x6)),
+        ..origin("I3", None)
+    };
+    create_another_person(store, 3, other_run).await;
+    a_recorded_resolution_resolves_the_item_in_later_runs(store).await;
+
+    let run_id = ImportRunId::from_uuid(Uuid::from_u128(RUN));
+    let records = store.run_records(run_id, 0, 10).await.unwrap();
+    let ids: Vec<(&str, String)> = records
+        .iter()
+        .map(|row| (row.aggregate_kind.as_str(), row.aggregate_id.clone()))
+        .collect();
+    assert_eq!(
+        ids,
+        [("person", second.to_string()), ("person", person_id().to_string())],
+        "each record once, newest first; the other run's record and the resolution are not listed"
+    );
+    let page = store.run_records(run_id, 1, 1).await.unwrap();
+    assert_eq!(page.len(), 1);
+    assert_eq!(page[0].aggregate_id, person_id().to_string(), "offset skips the newest");
+    let none = store
+        .run_records(ImportRunId::from_uuid(Uuid::from_u128(0x7)), 0, 10)
+        .await
+        .unwrap();
+    assert!(none.is_empty(), "{none:?}");
+}
+
 async fn a_rebuild_reproduces_the_index(store: &Store) {
     create_person(store).await;
     person(store, 11, Some(origin("I1", None)), assert_sex(Sex::Female)).await;
@@ -446,6 +500,7 @@ mod sqlite {
         a_rebuild_reproduces_the_index,
         a_preview_returns_the_events_and_writes_nothing,
         the_records_each_dataset_already_holds_are_counted,
+        the_records_a_run_wrote_are_listed_newest_first,
     );
 
     #[tokio::test]
@@ -605,6 +660,7 @@ mod postgres {
         a_rebuild_reproduces_the_index,
         a_preview_returns_the_events_and_writes_nothing,
         the_records_each_dataset_already_holds_are_counted,
+        the_records_a_run_wrote_are_listed_newest_first,
     );
 
     /// A seeded database closed and then changed by `statements`, the index the seeding made, and

@@ -948,11 +948,7 @@ pub fn history_panel(loc: &Localizer, entries: &[HistoryEntryVm], on_undo: Optio
     if entries.is_empty() {
         return rsx! { EmptyState { symbol: "🕓".to_owned(), message: loc.history_empty() } };
     }
-    let undo_text = loc.history_undo_short();
-    let entries: Vec<HistoryEntry> = entries
-        .iter()
-        .map(|entry| history_entry(loc, &undo_text, entry))
-        .collect();
+    let entries = history_entries(loc, entries);
     rsx! {
         HistoryTimeline {
             entries,
@@ -963,6 +959,15 @@ pub fn history_panel(loc: &Localizer, entries: &[HistoryEntryVm], on_undo: Optio
             },
         }
     }
+}
+
+/// The timeline rows for change-log `entries`, each carrying its localized undo control.
+pub(crate) fn history_entries(loc: &Localizer, entries: &[HistoryEntryVm]) -> Vec<HistoryEntry> {
+    let undo_text = loc.history_undo_short();
+    entries
+        .iter()
+        .map(|entry| history_entry(loc, &undo_text, entry))
+        .collect()
 }
 
 /// One History row for the timeline. An import-run row's changes come along behind its disclosure,

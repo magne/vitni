@@ -54,7 +54,7 @@ pub use bulk_review::{
 pub use citation::{
     CitationEditForm, citation_attributes_table, citation_create_fields, citation_overview, citation_record_fields,
 };
-pub use dashboard::{DashboardScreen, dashboard_view};
+pub use dashboard::{DashboardScreen, dashboard_view, run_record_changes_list, run_records_list};
 pub use detail_commits::{
     CitationCommits, DetailAggregate, DetailCommits, DnaMatchCommits, DnaTestCommits, EventCommits, FamilyCommits,
     MediaCommits, NoteCommits, PersonCommits, PlaceCommits, RepositoryCommits, ResearchNoteCommits, SourceCommits,

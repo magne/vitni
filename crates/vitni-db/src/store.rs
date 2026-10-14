@@ -894,6 +894,28 @@ impl Store {
         }
     }
 
+    /// The aggregates the import run `run` wrote to, each once, the one it wrote to last first:
+    /// `limit` of them after skipping `offset`. A resolution onto a record the run then left alone is
+    /// not a write, so that record is not listed.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read failure.
+    #[cfg(any(feature = "sqlite", feature = "postgres"))]
+    pub async fn run_records(
+        &self,
+        run: vitni_core::ids::ImportRunId,
+        offset: u32,
+        limit: u32,
+    ) -> Result<Vec<crate::record_origins::RunRecordRow>, DbError> {
+        match &self.backend {
+            #[cfg(feature = "sqlite")]
+            Backend::Sqlite(s) => s.run_records(run, offset, limit).await,
+            #[cfg(feature = "postgres")]
+            Backend::Postgres(p) => p.run_records(run, offset, limit).await,
+        }
+    }
+
     /// How many of `records` each dataset already holds as an aggregate of `kind`, created or resolved
     /// by its runs, as `(dataset, count)` in dataset order (ADR 0037 §3): the key overlap a file's
     /// dataset is proposed by.

@@ -76,6 +76,16 @@ pub struct OriginRow {
     pub live: bool,
 }
 
+/// One aggregate an import run wrote to, as
+/// [`Store::run_records`](crate::Store::run_records) lists it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunRecordRow {
+    /// The aggregate's kind (`Aggregate::TYPE`).
+    pub aggregate_kind: String,
+    /// The aggregate.
+    pub aggregate_id: String,
+}
+
 /// What an item resolved onto, as [`Store::resolve_origin`](crate::Store::resolve_origin) returns it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OriginResolution {

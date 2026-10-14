@@ -52,9 +52,13 @@ pub fn HistoryTimeline(
     entries: Vec<HistoryEntry>,
     /// Invoked with an entry's `assertion_id` when its undo control is activated.
     onundo: EventHandler<String>,
+    /// Whether the timeline nests under a row that discloses it, indented like an import run's
+    /// changes.
+    #[props(default)]
+    nested: bool,
 ) -> Element {
     rsx! {
-        div { class: "timeline",
+        div { class: if nested { "timeline tl-children" } else { "timeline" },
             for (index, entry) in entries.into_iter().enumerate() {
                 HistoryItem { key: "{index}-{entry.assertion_id}", entry, onundo }
             }

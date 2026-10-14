@@ -1,5 +1,10 @@
 use super::prelude::*;
-use vitni_app::RunResume;
+use vitni_app::{ImportRunId, RunResume};
+use vitni_ui::{HistoryEntryVm, RunRecordVm, RunRecordsVm};
+
+use crate::screens::tabs::history_entries;
+use crate::services::{load_run_record_changes, load_run_records};
+use crate::shell::nav_state::NavState;
 
 /// The workspace dashboard (ADR 0008 §5; `app-shell.html`): stat cards, a workspace-wide recent
 /// activity feed, quick entry points, and the computable data-quality checks. Refetches whenever a
@@ -128,8 +133,10 @@ fn activity_feed(loc: &Localizer, recent: &[ActivityVm]) -> Element {
     }
     rsx! {
         div { class: "timeline", style: "margin-top:8px",
-            for row in recent.iter() {
-                div { class: "tl-item",
+            for (index, row) in recent.iter().enumerate() {
+                div {
+                    key: "{activity_row_key(index, row)}",
+                    class: "tl-item",
                     div { class: "tl-when", "{row.when}" }
                     div { class: "tl-what",
                         if let Some(value) = &row.value {
@@ -159,8 +166,172 @@ fn activity_feed(loc: &Localizer, recent: &[ActivityVm]) -> Element {
                         }
                     }
                     div { class: "tl-who", "{row.who}" }
+                    if let Some(run) = &row.run {
+                        RunDisclosure {
+                            run: run.id,
+                            label: loc.history_run_changes_toggle(),
+                            aria_label: run.label.clone(),
+                        }
+                    }
                 }
             }
+        }
+    }
+}
+
+/// The key of an activity row: a run row by its run, so an open disclosure stays with its run when
+/// newer activity shifts the feed; any other row by its position.
+fn activity_row_key(index: usize, row: &ActivityVm) -> String {
+    match &row.run {
+        Some(run) => format!("run-{}", run.id),
+        None => format!("row-{index}"),
+    }
+}
+
+/// An import-run row's disclosure: closed, it reads nothing; open, it lists the records the run
+/// changed, read by run so a run of any size lists them all (#588).
+#[component]
+fn RunDisclosure(run: ImportRunId, label: String, aria_label: String) -> Element {
+    let mut open = use_signal(|| false);
+    rsx! {
+        div { class: "row-actions", style: "margin-top:4px",
+            button {
+                class: "btn sm ghost",
+                r#type: "button",
+                aria_expanded: if open() { "true" } else { "false" },
+                "aria-label": "{aria_label}",
+                onclick: move |_| open.toggle(),
+                if open() { "▾ {label}" } else { "▸ {label}" }
+            }
+        }
+        if open() {
+            RunRecordsPanel { run }
+        }
+    }
+}
+
+/// The records an open import-run row lists, a page at a time; *Show more* reads one more page.
+#[component]
+fn RunRecordsPanel(run: ImportRunId) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let services = state.services().clone();
+    let nav = use_context::<NavState>();
+    let mut pages = use_signal(|| 1_u32);
+    let records = use_resource(move || {
+        let services = services.clone();
+        let _ = nav.data_version.read();
+        let pages = pages();
+        async move { load_run_records(services, run, pages).await }
+    });
+    let loc = state.data_loc();
+    match &*records.read_unchecked() {
+        None => rsx! { p { class: "loading", "{state.chrome().loading()}" } },
+        Some(Err(message)) => rsx! { p { class: "empty", "{message}" } },
+        Some(Ok(page)) => run_records_list(loc, run, page, move |()| pages += 1),
+    }
+}
+
+/// The records an open import-run row lists, each behind its own disclosure of what the run changed
+/// in it, then *Show more* when the run changed more than are loaded.
+pub fn run_records_list(
+    loc: &Localizer,
+    run: ImportRunId,
+    page: &RunRecordsVm,
+    on_more: impl FnMut(()) + 'static,
+) -> Element {
+    if page.records.is_empty() {
+        return rsx! { p { class: "muted", "{loc.run_records_empty()}" } };
+    }
+    let on_more = EventHandler::new(on_more);
+    rsx! {
+        div { class: "timeline tl-children", "data-hook": "run-records",
+            for record in page.records.iter().cloned() {
+                RunRecordItem {
+                    key: "{record.kind}-{record.aggregate_id}",
+                    run,
+                    record,
+                    label: loc.history_run_changes_toggle(),
+                }
+            }
+        }
+        if page.more {
+            button {
+                class: "btn sm ghost",
+                r#type: "button",
+                style: "margin-top:4px",
+                onclick: move |_| on_more.call(()),
+                "{loc.run_records_more()}"
+            }
+        }
+    }
+}
+
+/// One record an open import-run row lists: a link to it, and a disclosure of what the run changed in
+/// it, named after the record.
+#[component]
+fn RunRecordItem(run: ImportRunId, record: RunRecordVm, label: String) -> Element {
+    let mut open = use_signal(|| false);
+    rsx! {
+        div { class: "tl-item",
+            div { class: "tl-what",
+                if let Some(link) = &record.record {
+                    RecordLink {
+                        category: link.category,
+                        human_id: link.human_id.clone(),
+                        label: link.label.clone(),
+                        icon: true,
+                    }
+                } else {
+                    "{record.label}"
+                }
+            }
+            div { class: "row-actions", style: "margin-top:4px",
+                button {
+                    class: "btn sm ghost",
+                    r#type: "button",
+                    aria_expanded: if open() { "true" } else { "false" },
+                    "aria-label": "{record.toggle_label}",
+                    onclick: move |_| open.toggle(),
+                    if open() { "▾ {label}" } else { "▸ {label}" }
+                }
+            }
+            if open() {
+                RunRecordChanges { run, record: record.clone() }
+            }
+        }
+    }
+}
+
+/// What the run changed in one record, read when the record's disclosure opens.
+#[component]
+fn RunRecordChanges(run: ImportRunId, record: RunRecordVm) -> Element {
+    let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let services = state.services().clone();
+    let nav = use_context::<NavState>();
+    let changes = use_resource(move || {
+        let services = services.clone();
+        let record = record.clone();
+        let _ = nav.data_version.read();
+        async move { load_run_record_changes(services, run, record).await }
+    });
+    match &*changes.read_unchecked() {
+        None => rsx! { p { class: "loading", "{state.chrome().loading()}" } },
+        Some(Err(message)) => rsx! { p { class: "empty", "{message}" } },
+        Some(Ok(entries)) => run_record_changes_list(state.data_loc(), entries),
+    }
+}
+
+/// What an import run changed in one record, nested under it. Display-only: the Dashboard undoes
+/// nothing, so no entry carries an undo control.
+pub fn run_record_changes_list(loc: &Localizer, entries: &[HistoryEntryVm]) -> Element {
+    let entries = history_entries(loc, entries);
+    rsx! {
+        div { "data-hook": "run-record-changes",
+            HistoryTimeline { entries, onundo: move |_| {}, nested: true }
         }
     }
 }

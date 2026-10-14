@@ -1,0 +1,105 @@
+# #588: an import run's row on the Dashboard opens to the records it changed, and each record opens to
+# what the run changed in it. SSR renders both disclosures closed and cannot load either level: only the
+# live app reads the run's records, then one record's changes, on a click.
+#
+# The fixture seeds `rerun.ged` beside the workspace's data without importing it, so the scenario
+# imports it first, then opens the Dashboard, whose newest row is that run.
+description = "An import run's Dashboard row opens to its records, and a record to its changes (#588)"
+
+[[step]]
+do = "click"
+at = { role = "listitem", text = "Import" }
+label = "rail: Import"
+
+[[step]]
+do = "click"
+at = { id = "bulk-import-source" }
+label = "source file field"
+
+[[step]]
+do = "text"
+text = "rerun.ged"
+label = "type: rerun.ged"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Import" }
+label = "Import"
+
+[[step]]
+do = "wait"
+seconds = 3
+label = "let the file be read and planned"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Import" }
+label = "Import, at the plan"
+
+[[step]]
+do = "wait"
+seconds = 3
+label = "let the import finish"
+
+[[step]]
+do = "click"
+at = { role = "listitem", text = "Dashboard" }
+label = "rail: Dashboard"
+
+[[step]]
+do = "shot"
+name = "folded"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "What the import from rerun.ged changed" }
+label = "the rerun.ged run row's disclosure"
+
+[[step]]
+do = "shot"
+name = "records"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "What it changed in Anders Strand" }
+label = "Anders Strand's disclosure"
+
+[[step]]
+do = "shot"
+name = "changes"
+
+[[assert]]
+kind = "absent"
+shot = "folded"
+element = { hook = "run-records" }
+because = "the run's records are read only once its disclosure opens"
+
+[[assert]]
+kind = "present"
+shot = "records"
+element = { hook = "run-records" }
+because = "the disclosure lists the records the run changed under its row"
+
+[[assert]]
+kind = "focus"
+shot = "records"
+element = { role = "button", text = "What the import from rerun.ged changed" }
+because = "focus stays on the disclosure that was activated"
+
+[[assert]]
+kind = "absent"
+shot = "records"
+element = { hook = "run-record-changes" }
+because = "a record's changes are read only once it opens"
+
+[[assert]]
+kind = "present"
+shot = "changes"
+element = { hook = "run-record-changes" }
+because = "the record's disclosure lays out what the run changed in it"
+
+[[assert]]
+kind = "differ"
+shots = ["records", "changes"]
+region = { role = "main" }
+because = "the opened changes are drawn, not only mounted"
