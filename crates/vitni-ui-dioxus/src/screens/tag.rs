@@ -161,38 +161,20 @@ pub(crate) fn TagDetailPane(id: String) -> Element {
     });
     use_save_on_request(EditKey::saved(Category::Tags, &id), edit, save_now);
 
-    match &*data.read_unchecked() {
-        None => rsx! { p { class: "loading", "{loading}" } },
-        Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },
-        Some(ScreenData::Loaded(IntentOutcome::NotFound { human_id })) => {
+    match detail_state(data.read_unchecked().as_ref(), |outcome| {
+        if let IntentOutcome::TagDetail(found) = outcome {
+            Some(found.as_ref())
+        } else {
+            None
+        }
+    }) {
+        DetailState::Loading => rsx! { p { class: "loading", "{loading}" } },
+        DetailState::Error(message) => rsx! { p { class: "empty", "{message}" } },
+        DetailState::NotFound(human_id) => {
             rsx! { p { class: "empty", "{chrome.not_found(human_id)}" } }
         }
-        Some(ScreenData::Loaded(IntentOutcome::TagDetail(detail))) => {
-            tag_detail(&state, detail, active, edit, name_touched, picker_open, on_save)
-        }
-        Some(ScreenData::Loaded(
-            IntentOutcome::List(_)
-            | IntentOutcome::Detail(_)
-            | IntentOutcome::CitationDetail(_)
-            | IntentOutcome::FamilyDetail(_)
-            | IntentOutcome::EventDetail(_)
-            | IntentOutcome::PlaceDetail(_)
-            | IntentOutcome::SourceDetail(_)
-            | IntentOutcome::RepositoryDetail(_)
-            | IntentOutcome::MediaDetail(_)
-            | IntentOutcome::NoteDetail(_)
-            | IntentOutcome::DnaTestDetail(_)
-            | IntentOutcome::DnaMatchDetail(_)
-            | IntentOutcome::Pedigree(_)
-            | IntentOutcome::Relationship(_)
-            | IntentOutcome::MatchQueue(_)
-            | IntentOutcome::MatchCompare(_)
-            | IntentOutcome::Similar(_)
-            | IntentOutcome::Geography(_)
-            | IntentOutcome::Dashboard(_)
-            | IntentOutcome::ResearchNoteDetail(_)
-            | IntentOutcome::DataQuality(_),
-        )) => rsx! {},
+        DetailState::Ready(detail) => tag_detail(&state, detail, active, edit, name_touched, picker_open, on_save),
+        DetailState::Other => rsx! {},
     }
 }
 

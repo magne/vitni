@@ -784,13 +784,19 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
         on_region,
     };
 
-    match &*data.read_unchecked() {
-        None => rsx! { p { class: "loading", "{loading}" } },
-        Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },
-        Some(ScreenData::Loaded(IntentOutcome::NotFound { human_id })) => {
+    match detail_state(data.read_unchecked().as_ref(), |outcome| {
+        if let IntentOutcome::Detail(found) = outcome {
+            Some(found.as_ref())
+        } else {
+            None
+        }
+    }) {
+        DetailState::Loading => rsx! { p { class: "loading", "{loading}" } },
+        DetailState::Error(message) => rsx! { p { class: "empty", "{message}" } },
+        DetailState::NotFound(human_id) => {
             rsx! { p { class: "empty", "{chrome.not_found(human_id)}" } }
         }
-        Some(ScreenData::Loaded(IntentOutcome::Detail(detail))) => {
+        DetailState::Ready(detail) => {
             let pane = PersonPane {
                 active,
                 side_edit: editing,
@@ -814,29 +820,7 @@ pub(crate) fn PersonDetailPane(human_id: String) -> Element {
             };
             person_detail(&state, detail, &pane, &callbacks, &human_id)
         }
-        Some(ScreenData::Loaded(
-            IntentOutcome::List(_)
-            | IntentOutcome::Dashboard(_)
-            | IntentOutcome::DataQuality(_)
-            | IntentOutcome::CitationDetail(_)
-            | IntentOutcome::FamilyDetail(_)
-            | IntentOutcome::EventDetail(_)
-            | IntentOutcome::PlaceDetail(_)
-            | IntentOutcome::SourceDetail(_)
-            | IntentOutcome::RepositoryDetail(_)
-            | IntentOutcome::MediaDetail(_)
-            | IntentOutcome::NoteDetail(_)
-            | IntentOutcome::TagDetail(_)
-            | IntentOutcome::DnaTestDetail(_)
-            | IntentOutcome::DnaMatchDetail(_)
-            | IntentOutcome::Pedigree(_)
-            | IntentOutcome::Relationship(_)
-            | IntentOutcome::MatchQueue(_)
-            | IntentOutcome::MatchCompare(_)
-            | IntentOutcome::Similar(_)
-            | IntentOutcome::ResearchNoteDetail(_)
-            | IntentOutcome::Geography(_),
-        )) => rsx! {},
+        DetailState::Other => rsx! {},
     }
 }
 

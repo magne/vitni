@@ -129,13 +129,13 @@ pub use research_note::{
     research_note_draft_subjects, research_note_record_fields, research_note_subjects_table, research_notes_table,
 };
 pub use shared::{
-    AttachLink, AttachPicker, CreateFormFocus, MediaTabState, RegisterFields, RetractSubject, RetractTarget,
-    RowRetract, RowVerb, attach_link_field, attach_link_form, create_record_frame, create_record_header,
-    edit_side_panel, finish_attach_create, media_crop_labels, media_gallery, media_tab, media_viewer_labels, non_empty,
-    picker_selection_id, provenance_block, provenance_block_dna, provenance_claim_row, provenance_cue,
-    provenance_origin_row, register_fields_form, restriction_display, retract_panel, retract_side_panel,
-    row_actions_cell, source_cue, source_media_type_choices, tag_chips, use_attach_picker, use_attach_save,
-    use_detail_tab, use_existing_picker, use_record_step, use_record_undo,
+    AttachLink, AttachPicker, CreateFormFocus, DetailState, MediaTabState, RegisterFields, RetractSubject,
+    RetractTarget, RowRetract, RowVerb, attach_link_field, attach_link_form, create_record_frame, create_record_header,
+    detail_state, edit_side_panel, finish_attach_create, media_crop_labels, media_gallery, media_tab,
+    media_viewer_labels, non_empty, picker_selection_id, provenance_block, provenance_block_dna, provenance_claim_row,
+    provenance_cue, provenance_origin_row, register_fields_form, restriction_display, retract_panel,
+    retract_side_panel, row_actions_cell, source_cue, source_media_type_choices, tag_chips, use_attach_picker,
+    use_attach_save, use_detail_tab, use_existing_picker, use_record_step, use_record_undo,
 };
 pub use similar::{
     FindSimilarButton, FindSimilarPanel, SimilarCallbacks, SimilarHint, create_form_hint, find_similar_action,
