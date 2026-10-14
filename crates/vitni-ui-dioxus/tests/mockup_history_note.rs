@@ -3,20 +3,23 @@
 //! The note is the one piece of explanatory prose all record screens share, so a mockup that words
 //! it differently advertises something the product does not say — eleven pages once claimed "no
 //! competitor offers it built-in" long after the shipped `history-note` dropped the claim. The
-//! expected text comes from the Fluent catalogue through the same lookup the History tab renders, so
-//! rewording the catalogue fails here until the mockups follow.
+//! expected text comes from the Fluent catalogue through the same lookups the History tab renders —
+//! the shared `history-note`, or Tag's own display-only note — so rewording the catalogue fails here
+//! until the mockups follow.
 
 use std::fs;
 use std::path::PathBuf;
 
 use vitni_ui::Localizer;
 
-/// Pages whose History note legitimately differs from the shared one, with why.
-const OWN_WORDING: [(&str, &str); 1] = [(
-    "tag.html",
-    "a tag has no retraction, so its note says History is display-only (the app still shows the shared note: \
-     #578, \"The Tag History tab says any entry can be undone\")",
-)];
+/// The History note a page's app screen ships: Tag has no retraction, so its History tab carries its
+/// own display-only note (#578); every other record shares `history-note`.
+fn shipped_note(loc: &Localizer, shared: &str, page: &str) -> String {
+    if page == "tag.html" {
+        return loc.tag_history_note();
+    }
+    shared.to_owned()
+}
 
 fn mockups_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../docs/mockups")
@@ -47,7 +50,7 @@ fn history_note(html: &str) -> Option<String> {
 #[test]
 fn every_history_pane_quotes_the_shipped_note() {
     let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
-    let shipped = loc.tab_note("history").expect("the History tab has a note");
+    let shared = loc.tab_note("history").expect("the History tab has a note");
     let mut checked = 0;
     let mut drifted = Vec::new();
     let mut entries: Vec<_> = fs::read_dir(mockups_dir())
@@ -62,39 +65,23 @@ fn every_history_pane_quotes_the_shipped_note() {
             .and_then(|name| name.to_str())
             .unwrap_or_default()
             .to_owned();
-        if OWN_WORDING.iter().any(|(page, _)| *page == name) {
-            continue;
-        }
         let html = fs::read_to_string(&path).expect("a mockup page is readable");
         let Some(note) = history_note(&html) else {
             continue;
         };
         checked += 1;
+        let shipped = shipped_note(&loc, &shared, &name);
         if !note.contains(&shipped) {
-            drifted.push(format!("{name}: {note}"));
+            drifted.push(format!("{name}: {note}\n  ships: {shipped}"));
         }
     }
     assert!(
-        checked >= 12,
+        checked >= 13,
         "expected every record mockup's History pane, found {checked}"
     );
     assert!(
         drifted.is_empty(),
-        "History notes that do not quote the shipped `history-note` ({shipped:?}):\n{}",
+        "History notes that do not quote the note the app ships:\n{}",
         drifted.join("\n")
     );
-}
-
-#[test]
-fn every_exempt_page_still_has_its_own_history_note() {
-    let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
-    let shipped = loc.tab_note("history").expect("the History tab has a note");
-    for (page, _) in OWN_WORDING {
-        let html = fs::read_to_string(mockups_dir().join(page)).expect("an exempt page exists");
-        let note = history_note(&html).expect("an exempt page has a History note");
-        assert!(
-            !note.contains(&shipped),
-            "{page} now quotes the shipped note; drop its exemption"
-        );
-    }
 }

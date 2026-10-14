@@ -70,6 +70,8 @@ timeline-kind-event = Event
 history-placeholder = The change log arrives in a later milestone.
 history-empty = No changes recorded yet.
 history-note = Every change is an immutable event recording who, when, and why — an audit trail that comes free from the event-sourced core. Any entry can be undone.
+# A tag has no retraction, so its History tab carries its own note in place of `history-note`.
+tag-history-note = Every change is an immutable event recording who, when, and why — an audit trail that comes free from the event-sourced core. Tag history is display-only: a tag has no retraction, so a correction is the next edit to its name, colour or priority (last-writer-wins).
 
 # Change-log summaries (History tab + activity feed) — one phrase per event type
 history-person-created = Person created

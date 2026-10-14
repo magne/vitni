@@ -357,24 +357,39 @@ fn the_history_tab_renders_byte_identically() {
     assert_identical("history", None, true, true);
 }
 
-/// Tag is the one aggregate with no retraction, so its ctx passes `on_undo: None`. That `Option`
-/// has to reach `history_panel` unchanged through the shared arm.
+/// Tag is the one aggregate with no retraction, so its ctx passes `on_undo: None` — and its History
+/// note must not promise that any entry can be undone (#578). The shared note stays on every History
+/// tab that can undo.
 #[test]
-fn the_history_tab_renders_byte_identically_without_undo() {
-    assert_identical("history", None, true, false);
+fn a_history_tab_without_undo_says_it_is_display_only() {
+    let loc = loc();
+    let shared_note = loc.tab_note("history").unwrap_or_default();
+    let wired = render("history", None, Shape::Shared, true, true);
+    let inert = render("history", None, Shape::Shared, true, false);
+    assert!(
+        wired.contains(&shared_note),
+        "an undoable History tab keeps the shared note:\n{wired}"
+    );
+    assert!(
+        inert.contains(&loc.tag_history_note()),
+        "a History tab without undo says it is display-only:\n{inert}"
+    );
+    assert!(
+        !inert.contains("can be undone"),
+        "a History tab without undo promises no undo:\n{inert}"
+    );
 }
 
-/// `on_undo: None` is invisible in the markup: the entry's undo control is drawn from
-/// `HistoryEntryVm::can_undo`, and the callback only decides whether pressing it does anything.
-/// Asserting that here pins what the byte-identity comparison above can and cannot see — an
-/// `on_undo` dropped on the floor by the shared arm would not show up as a rendering difference, so
-/// the wiring is checked by reading the one call site rather than by SSR.
+/// The entry's undo control is drawn from `HistoryEntryVm::can_undo`, not from `on_undo`, which only
+/// decides whether pressing it does anything (and which note frames the tab). An `on_undo` dropped
+/// on the floor by the shared arm would not show up in the rows, so the wiring is checked by reading
+/// the one call site rather than by SSR.
 #[test]
 fn the_undo_control_follows_can_undo_not_the_callback() {
     let wired = render("history", None, Shape::Shared, true, true);
     let inert = render("history", None, Shape::Shared, true, false);
     assert!(wired.contains("↩ Undo"), "an undoable entry offers Undo:\n{wired}");
-    assert_eq!(wired, inert, "and the callback changes no rendered byte");
+    assert!(inert.contains("↩ Undo"), "with or without the callback:\n{inert}");
 }
 
 /// `shared_tab` is reached only from a dispatcher's `_` arm, so it must decline every tab a screen

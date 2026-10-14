@@ -1766,6 +1766,13 @@ impl Localizer {
         Some(note)
     }
 
+    /// The Tag History tab's note, in place of the shared `history-note`: a tag has no retraction,
+    /// so its history is display-only and the shared note's "any entry can be undone" would be false.
+    #[must_use]
+    pub fn tag_history_note(&self) -> String {
+        fl!(self.loader, "tag-history-note")
+    }
+
     /// The Timeline tab's explanatory note — the genealogical life story derived from facts and
     /// events, distinct from the History tab's who/when/why change log.
     #[must_use]
@@ -4351,6 +4358,23 @@ mod tests {
                 "{id}'s Norwegian explanation is still the English string"
             );
         }
+    }
+
+    /// Tag has no retraction, so its History note is its own, says so, and never promises an undo
+    /// the shared `history-note` does (#578).
+    #[test]
+    fn the_tag_history_note_is_display_only_in_both_languages() {
+        let english = Localizer::for_test("en");
+        let note = english.tag_history_note();
+        assert!(note.contains("display-only"), "{note}");
+        assert!(!note.contains("can be undone"), "{note}");
+        assert_ne!(Some(note.clone()), english.tab_note("history"));
+        let norwegian = Localizer::for_test("no").tag_history_note();
+        assert_ne!(norwegian.trim(), "");
+        assert_ne!(
+            norwegian, note,
+            "the Norwegian tag History note is still the English string"
+        );
     }
 
     #[test]
