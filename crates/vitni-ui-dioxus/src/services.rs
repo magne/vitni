@@ -1144,7 +1144,7 @@ pub async fn resolve_map_source(provider: MapProvider, workspace_dir: PathBuf) -
 /// # Errors
 ///
 /// The technical cause as plain text — see [`store_map_config`]'s doc comment for why this is not
-/// already localized (the caller's own refresh silently drops this one rather than toasting it, since
+/// already localized (the caller logs this one rather than toasting it, since
 /// a failed background refresh is not worth interrupting the operator over).
 pub async fn refresh_map_attribution(
     provider: MapProvider,

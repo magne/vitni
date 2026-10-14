@@ -197,10 +197,16 @@ fn google_tile_url(session: &str, api_key: &str) -> String {
 
 /// The viewport `copyright` request URL for the camera `bounds` (`north, south, east, west`) at
 /// `zoom`, over `session`/`api_key`.
+///
+/// The endpoint takes an integer zoom and answers a fractional one with `400 INVALID_ARGUMENT`, while
+/// the map's camera zoom is almost always fractional — so `zoom` is rounded (the tile zoom the map
+/// shows a raster source at) and clamped to the levels Google serves.
 fn google_viewport_url(session: &str, api_key: &str, zoom: f64, bounds: (f64, f64, f64, f64)) -> String {
     let (north, south, east, west) = bounds;
+    // `abs` folds the `-0.0` a slightly negative zoom rounds to, which would print as `-0`.
+    let zoom = zoom.round().clamp(0.0, f64::from(GOOGLE_MAX_ZOOM)).abs();
     format!(
-        "https://tile.googleapis.com/tile/v1/viewport?session={session}&key={api_key}&zoom={zoom}\
+        "https://tile.googleapis.com/tile/v1/viewport?session={session}&key={api_key}&zoom={zoom:.0}\
          &north={north}&south={south}&east={east}&west={west}"
     )
 }
@@ -278,6 +284,13 @@ fn google_error_detail(body: &str) -> Option<String> {
     Some(truncated)
 }
 
+/// The [`AppError`] for a Map Tiles request that failed before a status came back, or whose body did
+/// not parse. A [`reqwest::Error`] names the request URL, which carries the API key, so the URL is
+/// stripped before the message reaches a toast or the log.
+fn google_transport_error(what: &str, error: reqwest::Error) -> AppError {
+    AppError::Config(format!("{what}: {}", error.without_url()))
+}
+
 /// The [`AppError`] for a non-success Map Tiles response, consuming it to read the body
 /// [`google_failure_message`] reports.
 async fn google_request_error(what: &str, response: reqwest::Response) -> AppError {
@@ -298,14 +311,14 @@ async fn google_create_session(api_key: &str) -> Result<GoogleSession, AppError>
         .json(&google_create_session_body())
         .send()
         .await
-        .map_err(|error| AppError::Config(format!("requesting a Google Maps session: {error}")))?;
+        .map_err(|error| google_transport_error("requesting a Google Maps session", error))?;
     if !response.status().is_success() {
         return Err(google_request_error("session", response).await);
     }
     response
         .json()
         .await
-        .map_err(|error| AppError::Config(format!("parsing the Google Maps session response: {error}")))
+        .map_err(|error| google_transport_error("parsing the Google Maps session response", error))
 }
 
 /// The response to a viewport `copyright` request.
@@ -334,14 +347,14 @@ pub async fn google_viewport_copyright(
         .get(google_viewport_url(session, api_key, zoom, bounds))
         .send()
         .await
-        .map_err(|error| AppError::Config(format!("requesting the Google Maps viewport copyright: {error}")))?;
+        .map_err(|error| google_transport_error("requesting the Google Maps viewport copyright", error))?;
     if !response.status().is_success() {
         return Err(google_request_error("viewport copyright", response).await);
     }
     let parsed: GoogleViewportResponse = response
         .json()
         .await
-        .map_err(|error| AppError::Config(format!("parsing the Google Maps viewport copyright response: {error}")))?;
+        .map_err(|error| google_transport_error("parsing the Google Maps viewport copyright response", error))?;
     Ok(parsed.copyright)
 }
 
@@ -377,8 +390,9 @@ mod tests {
 
     use super::{
         DEFAULT_RASTER_MAX_ZOOM, DEFAULT_RASTER_TILE_SIZE, GOOGLE_MAX_ZOOM, MAX_ERROR_BODY_CHARS, MapBasemap,
-        google_create_session_url, google_error_detail, google_failure_message, google_tile_url, google_viewport_url,
-        refresh_map_attribution, resolve_map_source, resolve_style_url,
+        google_create_session_url, google_error_detail, google_failure_message, google_tile_url,
+        google_transport_error, google_viewport_url, http_client, refresh_map_attribution, resolve_map_source,
+        resolve_style_url,
     };
     use crate::config::MapProvider;
     use crate::error::AppError;
@@ -520,18 +534,33 @@ mod tests {
 
     #[test]
     fn the_viewport_url_carries_the_camera_bounds_and_zoom() {
-        let url = google_viewport_url("SESSION1", "KEY123", 12.5, (60.0, 59.0, 11.0, 10.0));
+        let url = google_viewport_url("SESSION1", "KEY123", 12.0, (60.0, 59.0, 11.0, 10.0));
         assert!(url.starts_with("https://tile.googleapis.com/tile/v1/viewport?"));
         for fragment in [
             "session=SESSION1",
             "key=KEY123",
-            "zoom=12.5",
+            "zoom=12&",
             "north=60",
             "south=59",
             "east=11",
             "west=10",
         ] {
             assert!(url.contains(fragment), "{url} names {fragment}");
+        }
+    }
+
+    /// Google answers a fractional zoom with `400 INVALID_ARGUMENT` (confirmed against the live
+    /// service, #604), and the map's settled camera zoom is almost never whole.
+    #[test]
+    fn the_viewport_url_sends_a_whole_zoom_within_googles_range() {
+        for (camera_zoom, sent) in [
+            (6.37, "zoom=6&"),
+            (6.5, "zoom=7&"),
+            (-0.4, "zoom=0&"),
+            (23.8, "zoom=22&"),
+        ] {
+            let url = google_viewport_url("SESSION1", "KEY123", camera_zoom, (60.0, 59.0, 11.0, 10.0));
+            assert!(url.contains(sent), "camera zoom {camera_zoom} sends {sent}: {url}");
         }
     }
 
@@ -592,6 +621,21 @@ mod tests {
         let body = "©".repeat(MAX_ERROR_BODY_CHARS * 2);
         let detail = google_error_detail(&body).expect("a non-empty body has a detail");
         assert_eq!(detail.chars().count(), MAX_ERROR_BODY_CHARS);
+    }
+
+    #[tokio::test]
+    async fn a_transport_failure_never_reports_the_api_key() {
+        let error = http_client()
+            .get("http://127.0.0.1:1/tile/v1/viewport?key=SECRET-KEY")
+            .send()
+            .await
+            .expect_err("nothing listens on port 1");
+        assert!(
+            error.to_string().contains("SECRET-KEY"),
+            "reqwest names the URL: {error}"
+        );
+        let message = google_transport_error("requesting the Google Maps viewport copyright", error).to_string();
+        assert!(!message.contains("SECRET-KEY"), "{message}");
     }
 
     #[tokio::test]

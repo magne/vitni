@@ -174,15 +174,17 @@ pub fn GeographyScreen() -> Element {
         let active_provider = provider();
         let workspace_dir = workspace_dir.clone();
         spawn(async move {
-            if let Ok(Some(text)) = refresh_map_attribution(
+            let refreshed = refresh_map_attribution(
                 active_provider,
                 workspace_dir,
                 camera.zoom,
                 (camera.north, camera.south, camera.east, camera.west),
             )
-            .await
-            {
-                attribution.set(text);
+            .await;
+            match refreshed {
+                Ok(Some(text)) => attribution.set(text),
+                Ok(None) => {}
+                Err(error) => tracing::warn!(%error, "map attribution refresh failed; keeping the last credit shown"),
             }
         });
     });
