@@ -56,7 +56,8 @@ pub use intent::{
     dispatch_note_change_set, dispatch_note_edit, dispatch_person_change_set, dispatch_person_edit,
     dispatch_place_change_set, dispatch_place_edit, dispatch_repository_change_set, dispatch_repository_edit,
     dispatch_research_note_change_set, dispatch_research_note_edit, dispatch_source_change_set, dispatch_source_edit,
-    dispatch_tag_change_set, pin_publisher, resolve_record_name, unpin_publisher,
+    dispatch_tag_change_set, load_run_record_changes, load_run_records, pin_publisher, resolve_record_name,
+    unpin_publisher,
 };
 pub use list::{ListQuery, RowSort, RowVm, step_row, visible_rows};
 pub use navigation::{
@@ -102,10 +103,10 @@ pub use view_model::{
     PlaceGeometryVm, PlaceHierarchyVm, PlaceLinkVm, PlaceMarkerVm, PlaceNameVm, PlaceRowStatus, PlaceRowVm,
     PlaceSuccessionVm, PluginGrantVm, ProvenanceDraft, QueuedMatchVm, RecordDraft, RecordLink, RelationshipVm,
     RepositoryDetail, RepositoryDraft, RepositoryLinkVm, RepositoryUrlVm, ResearchNoteDetail, ResearchNoteDraft,
-    ResumeVm, RowOutcome, RunOptionVm, SUCCESSION_KINDS, SharedAncestorVm, ShortcutBindingVm, ShortcutsVm,
-    SimilarHitVm, SimilarVm, SourceAttributeVm, SourceCitationVm, SourceDetail, SourceDraft, SourceHeldVm,
-    SourceReliabilityVm, SubjectVm, TIME_SLIDER_RANGE, TagDetail, TagDraft, TagUsageGroupVm, TimelineKind,
-    TimelineRowVm, TranslationVm, TrustStoreVm, UsingRecordVm, ZOOM_RANGE, citation_row, citation_tabs,
+    ResumeVm, RowOutcome, RunOptionVm, RunRecordVm, RunRecordsVm, SUCCESSION_KINDS, SharedAncestorVm,
+    ShortcutBindingVm, ShortcutsVm, SimilarHitVm, SimilarVm, SourceAttributeVm, SourceCitationVm, SourceDetail,
+    SourceDraft, SourceHeldVm, SourceReliabilityVm, SubjectVm, TIME_SLIDER_RANGE, TagDetail, TagDraft, TagUsageGroupVm,
+    TimelineKind, TimelineRowVm, TranslationVm, TrustStoreVm, UsingRecordVm, ZOOM_RANGE, citation_row, citation_tabs,
     clamp_slider_year, clamp_zoom, collapse_history, display_coordinates, dna_match_row, dna_match_tabs, dna_test_row,
     dna_test_tabs, event_list_row, event_row, event_tabs, evidence_axes, family_list_row, family_row, family_tabs,
     first_undoable, format_date_point, link_is_savable, media_row, media_tabs, name_matches, note_row, note_tabs,

@@ -2187,6 +2187,24 @@ impl Localizer {
         fl!(self.loader, "history-import-run-changes-toggle")
     }
 
+    /// The accessible name of the disclosure that shows what an import run changed in one record.
+    #[must_use]
+    pub fn run_record_changes_toggle(&self, record: &str) -> String {
+        fl!(self.loader, "run-record-changes-toggle", record = record)
+    }
+
+    /// The button that loads the next page of the records an import run changed.
+    #[must_use]
+    pub fn run_records_more(&self) -> String {
+        fl!(self.loader, "run-records-more")
+    }
+
+    /// What an open import-run disclosure says when the run changed no records.
+    #[must_use]
+    pub fn run_records_empty(&self) -> String {
+        fl!(self.loader, "run-records-empty")
+    }
+
     /// The localized label for a person's evidence level — the personas badge (data-model §7).
     #[must_use]
     pub fn evidence_level_label(&self, level: EvidenceLevel) -> String {

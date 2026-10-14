@@ -4,13 +4,13 @@
 //! render-and-inspect — no window, no workspace — the same pattern as `person_detail.rs`.
 
 use dioxus::prelude::*;
-use vitni_app::{DatasetId, DecidableKind, RecentItem, RunResume};
+use vitni_app::{DatasetId, DecidableKind, ImportRunId, RecentItem, RunResume};
 use vitni_ui::{
-    ActivityVm, Category, DashboardStats, DashboardVm, DataQualityVm, JumpVm, Localizer, QueuedMatchVm, RecordRef,
-    ResumeVm,
+    ActivityVm, Category, DashboardStats, DashboardVm, DataQualityVm, HistoryEntryVm, JumpVm, Localizer, QueuedMatchVm,
+    RecordRef, ResumeVm, RunRecordVm, RunRecordsVm,
 };
 use vitni_ui_dioxus::components::{HistoryEntry, HistoryTimeline, RunChanges};
-use vitni_ui_dioxus::screens::dashboard_view;
+use vitni_ui_dioxus::screens::{dashboard_view, run_record_changes_list, run_records_list};
 use vitni_ui_dioxus::shell::nav_state::NavState;
 
 /// Renders the audit timeline with one undoable entry.
@@ -220,7 +220,7 @@ fn dashboard() -> Element {
                     label: "John Smith".to_owned(),
                 }),
                 count: None,
-                children: Vec::new(),
+                run: None,
                 resume: None,
                 value: Some("John Smith".to_owned()),
             },
@@ -230,7 +230,7 @@ fn dashboard() -> Element {
                 who: "gedcom-import (software agent)".to_owned(),
                 record: None,
                 count: Some("142 records".to_owned()),
-                children: Vec::new(),
+                run: Some(ImportRunId::from_uuid(uuid::Uuid::from_u128(7))),
                 resume: None,
                 value: None,
             },
@@ -240,7 +240,7 @@ fn dashboard() -> Element {
                 who: "gedcom-import (software agent)".to_owned(),
                 record: None,
                 count: Some("interrupted".to_owned()),
-                children: Vec::new(),
+                run: Some(ImportRunId::from_uuid(uuid::Uuid::from_u128(8))),
                 resume: Some(ResumeVm {
                     run: RunResume {
                         plugin: "gedcom-import".to_owned(),
@@ -502,4 +502,152 @@ fn a_history_row_without_a_value_reads_as_its_phrase() {
     vdom.rebuild_in_place();
     let html = dioxus_ssr::render(&vdom);
     assert!(!html.contains("<b>"), "no value, no bold:\n{html}");
+}
+
+#[test]
+fn an_import_run_row_on_the_dashboard_offers_its_records_behind_a_closed_disclosure() {
+    let mut vdom = VirtualDom::new(dashboard);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    assert_eq!(
+        html.matches(r#"aria-expanded="false""#).count(),
+        2,
+        "each run row carries a closed disclosure:\n{html}"
+    );
+    assert!(
+        html.contains("▸ What it changed"),
+        "named like the History tab's:\n{html}"
+    );
+    assert!(
+        !html.contains("run-records"),
+        "its records are read only once the disclosure opens:\n{html}"
+    );
+}
+
+fn run_record(kind: &str, record: Option<RecordRef>, label: &str) -> RunRecordVm {
+    RunRecordVm {
+        kind: kind.to_owned(),
+        aggregate_id: format!("{kind}-id"),
+        record,
+        label: label.to_owned(),
+        toggle_label: format!("What it changed in {label}"),
+    }
+}
+
+/// A page of a run's records: a linked person and a tag with no user-facing id, with more to load.
+fn run_records() -> Element {
+    use_context_provider(NavState::new);
+    let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
+    let person = RecordRef {
+        category: Category::People,
+        human_id: "I0001".to_owned(),
+        label: "John Smith".to_owned(),
+    };
+    let page = RunRecordsVm {
+        records: vec![
+            run_record("person", Some(person), "John Smith"),
+            run_record("tag", None, "tag"),
+        ],
+        more: true,
+    };
+    run_records_list(
+        &loc,
+        ImportRunId::from_uuid(uuid::Uuid::from_u128(7)),
+        &page,
+        move |()| {},
+    )
+}
+
+#[test]
+fn an_open_run_lists_its_records_each_behind_its_own_disclosure() {
+    let mut vdom = VirtualDom::new(run_records);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    assert!(
+        html.contains(r#"class="timeline tl-children""#) && html.contains(r#"data-hook="run-records""#),
+        "the records nest under the run like the History tab's changes:\n{html}"
+    );
+    assert!(
+        html.contains("John Smith") && html.contains("👤"),
+        "a person links by name:\n{html}"
+    );
+    assert!(html.contains(">tag<"), "a record with no id reads as its kind:\n{html}");
+    for name in ["What it changed in John Smith", "What it changed in tag"] {
+        assert!(
+            html.contains(&format!(r#"aria-expanded="false" aria-label="{name}""#))
+                || html.contains(&format!(r#"aria-label="{name}" aria-expanded="false""#)),
+            "each record's disclosure is closed and names its record ({name}):\n{html}"
+        );
+    }
+    assert!(
+        !html.contains("run-record-changes"),
+        "a record's changes are read only once it opens:\n{html}"
+    );
+    assert!(html.contains(">Show more<"), "more records load on demand:\n{html}");
+}
+
+/// A run's page with no records and nothing more.
+fn no_run_records() -> Element {
+    use_context_provider(NavState::new);
+    let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
+    let page = RunRecordsVm {
+        records: Vec::new(),
+        more: false,
+    };
+    run_records_list(
+        &loc,
+        ImportRunId::from_uuid(uuid::Uuid::from_u128(7)),
+        &page,
+        move |()| {},
+    )
+}
+
+#[test]
+fn a_run_that_changed_no_records_says_so() {
+    let mut vdom = VirtualDom::new(no_run_records);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    assert!(html.contains("It changed no records."), "{html}");
+    assert!(!html.contains("Show more"), "{html}");
+}
+
+/// What a run changed in one record: a supersession and its replacement, display-only.
+fn run_record_changes() -> Element {
+    let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
+    let change = |what: &str, why: Option<&str>| HistoryEntryVm {
+        when: "2026-06-22 14:35".to_owned(),
+        what: what.to_owned(),
+        who: "gedcom-import (software agent)".to_owned(),
+        why: why.map(ToOwned::to_owned),
+        assertion_id: what.to_owned(),
+        can_undo: false,
+        count: None,
+        evidence: None,
+        children: Vec::new(),
+        value: None,
+        replaced: None,
+    };
+    run_record_changes_list(
+        &loc,
+        &[
+            change("Date asserted", None),
+            change("Assertion superseded", Some("The file value replaced it.")),
+        ],
+    )
+}
+
+#[test]
+fn an_open_record_lists_what_the_run_changed_in_it_without_undo() {
+    let mut vdom = VirtualDom::new(run_record_changes);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    assert!(html.contains(r#"data-hook="run-record-changes""#), "{html}");
+    assert!(
+        html.contains(r#"class="timeline tl-children""#),
+        "nested like the run's records:\n{html}"
+    );
+    for needle in ["Date asserted", "Assertion superseded", "The file value replaced it."] {
+        assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
+    }
+    assert!(!html.contains("Undo"), "the Dashboard undoes nothing:\n{html}");
 }

@@ -1,6 +1,6 @@
 use super::{ActivityVm, ChangeLogEntry, HashMap, Localizer, QueuedMatchVm, RecordRef, WorkspaceCounts};
 use crate::navigation::Category;
-use vitni_app::{ActivityDetail, AggRef, CheckFinding, DataQuality, DecidableKind, EvidenceHealth, MatchableKind};
+use vitni_app::{AggRef, CheckFinding, DataQuality, DecidableKind, EvidenceHealth, MatchableKind};
 
 /// A quick entry point on the dashboard ("Jump back in") — a recently touched record.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -65,25 +65,19 @@ pub struct DashboardVm {
 }
 
 impl DashboardVm {
-    /// The persons `activity` names, its import runs' children included: those whose display names
-    /// [`build`](Self::build) labels its rows with.
+    /// The persons `activity` names: those whose display names [`build`](Self::build) labels its rows
+    /// with. An import run's records are read, and named, only when its row is opened.
     #[must_use]
     pub fn persons_named(activity: &[ChangeLogEntry]) -> Vec<String> {
-        fn gather(activity: &[ChangeLogEntry], persons: &mut Vec<String>) {
-            for entry in activity {
-                if entry.aggregate_kind == "person"
-                    && let Some(human_id) = &entry.aggregate_human_id
-                    && !persons.contains(human_id)
-                {
-                    persons.push(human_id.clone());
-                }
-                if let Some(ActivityDetail::ImportRun { children, .. }) = &entry.detail {
-                    gather(children, persons);
-                }
+        let mut persons = Vec::new();
+        for entry in activity {
+            if entry.aggregate_kind == "person"
+                && let Some(human_id) = &entry.aggregate_human_id
+                && !persons.contains(human_id)
+            {
+                persons.push(human_id.clone());
             }
         }
-        let mut persons = Vec::new();
-        gather(activity, &mut persons);
         persons
     }
 

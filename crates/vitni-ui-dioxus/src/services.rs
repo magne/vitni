@@ -19,12 +19,12 @@ use tokio::sync::{mpsc, oneshot};
 use unic_langid::LanguageIdentifier;
 use vitni_app::{
     AiConfig, BackupReport, BackupRequest, Confidence, Config, ConfigStore, DatasetChoice, DatasetProposal,
-    DatasetScope, FileConfigStore, FileDate, IdFormats, ImportRunSummary, LocaleDefaults, MapConfig, MapProvider,
-    MapSource, MatchQuestion, MatchReply, PlanReply, PlanSummary, PluginTrust, PluginTrustConfig, PreferenceLayers,
-    ReplaceReport, ReplaceRequest, ResolvedLocale, RestoreReport, RestoreRequest, Session, ShortcutConfig,
-    SuretyLabelOverrides, TagSummary, Workspace, WorkspaceCounts, WorkspaceSummary, config, list_tags, list_workspaces,
-    read_preference_layers, read_resolved_locale, read_resolved_surety_labels, read_surety_label_overrides,
-    workspace_counts,
+    DatasetScope, FileConfigStore, FileDate, IdFormats, ImportRunId, ImportRunSummary, LocaleDefaults, MapConfig,
+    MapProvider, MapSource, MatchQuestion, MatchReply, PlanReply, PlanSummary, PluginTrust, PluginTrustConfig,
+    PreferenceLayers, ReplaceReport, ReplaceRequest, ResolvedLocale, RestoreReport, RestoreRequest, Session,
+    ShortcutConfig, SuretyLabelOverrides, TagSummary, Workspace, WorkspaceCounts, WorkspaceSummary, config, list_tags,
+    list_workspaces, read_preference_layers, read_resolved_locale, read_resolved_surety_labels,
+    read_surety_label_overrides, workspace_counts,
 };
 use vitni_plugin_host::{
     BulkImported, Capability, DeferMatches, ExportTarget, Grants, HostPattern, ImportRunSpec, Invocation, NetPolicy,
@@ -33,10 +33,11 @@ use vitni_plugin_host::{
 };
 use vitni_ui::{
     Category, CitationChangeSetRequest, DataQualityVm, DecideMatch, DnaMatchChangeSetRequest, DnaTestChangeSetRequest,
-    EventChangeSetRequest, FamilyChangeSetRequest, ImportTargetChoice, Intent, IntentOutcome, Localizer,
-    MediaChangeSetRequest, MergeFailure, NewRecordRequest, NoteChangeSetRequest, Panel, PersonChangeSetRequest,
-    PickerHit, PlaceChangeSetRequest, ProvenanceDraft, RepositoryChangeSetRequest, ResearchNoteChangeSetRequest, RowVm,
-    SimilarHitVm, SourceChangeSetRequest, SubmitResult, TagChangeSetRequest, list_intent, query_draft,
+    EventChangeSetRequest, FamilyChangeSetRequest, HistoryEntryVm, ImportTargetChoice, Intent, IntentOutcome,
+    Localizer, MediaChangeSetRequest, MergeFailure, NewRecordRequest, NoteChangeSetRequest, Panel,
+    PersonChangeSetRequest, PickerHit, PlaceChangeSetRequest, ProvenanceDraft, RepositoryChangeSetRequest,
+    ResearchNoteChangeSetRequest, RowVm, RunRecordVm, RunRecordsVm, SimilarHitVm, SourceChangeSetRequest, SubmitResult,
+    TagChangeSetRequest, list_intent, query_draft,
 };
 
 use crate::detail_aggregates::for_each_detail_aggregate;
@@ -652,6 +653,43 @@ pub async fn load_palette_rows(services: Services) -> Vec<(Category, Vec<RowVm>)
         }
     }
     groups
+}
+
+/// Loads the first `pages` pages of the records the import run `run` changed, as one list: what an
+/// open import-run row on the Dashboard shows, *Show more* adding a page. Earlier pages are read again
+/// rather than kept, so a data change refreshes the whole list.
+pub async fn load_run_records(services: Services, run: ImportRunId, pages: u32) -> Result<RunRecordsVm, String> {
+    let loc = services.localizer();
+    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
+    let mut all = RunRecordsVm {
+        records: Vec::new(),
+        more: false,
+    };
+    for _ in 0..pages.max(1) {
+        let offset = u32::try_from(all.records.len()).unwrap_or(u32::MAX);
+        let page = vitni_ui::load_run_records(&workspace, &loc, run, offset)
+            .await
+            .map_err(|error| loc.error(&error))?;
+        all.records.extend(page.records);
+        all.more = page.more;
+        if !all.more {
+            break;
+        }
+    }
+    Ok(all)
+}
+
+/// Loads what the import run `run` changed in one of its records, newest first.
+pub async fn load_run_record_changes(
+    services: Services,
+    run: ImportRunId,
+    record: RunRecordVm,
+) -> Result<Vec<HistoryEntryVm>, String> {
+    let loc = services.localizer();
+    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
+    vitni_ui::load_run_record_changes(&workspace, &loc, run, &record)
+        .await
+        .map_err(|error| loc.error(&error))
 }
 
 /// Lists every tag (id + name + colour + priority) for the tag picker. The id is used internally to

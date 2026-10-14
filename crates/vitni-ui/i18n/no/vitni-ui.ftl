@@ -216,6 +216,11 @@ history-value-dna = { $cm } cM over { $segments ->
 history-value-no-restrictions = ingen
 # Utvideren på en importkjørings Historikk-rad som viser endringene den samler (ADR 0049 §3).
 history-import-run-changes-toggle = Hva den endret
+# På oversikten viser en imports utvidelse postene den endret; hver post har sin egen utvidelse med
+# endringene, navngitt etter posten. Flere poster lastes en side om gangen.
+run-record-changes-toggle = Hva den endret i { $record }
+run-records-more = Vis flere
+run-records-empty = Den endret ingen poster.
 
 # Redigeringsetiketter
 field-nickname = Kallenavn

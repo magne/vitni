@@ -1,4 +1,4 @@
-use vitni_app::{ActivityDetail, RunRef, RunResume};
+use vitni_app::{ActivityDetail, ImportRunId, RunRecords, RunRef, RunResume};
 
 use super::{Category, ChangeLogEntry, HashMap, Localizer, RecordRef};
 
@@ -148,8 +148,9 @@ pub struct ActivityVm {
     /// For an import-run row, the localized count shown muted beside it: the records the run
     /// imported once it has ended (e.g. `142 records`), else the changes the row folds.
     pub count: Option<String>,
-    /// For an import-run row, the entries it folds, newest first; empty otherwise.
-    pub children: Vec<ActivityVm>,
+    /// For an import-run row, its run, whose records the row discloses on demand ([`RunRecordsVm`]):
+    /// read by run rather than from the feed's window, which may hold only part of a large run.
+    pub run: Option<ImportRunId>,
     /// The localized value the change asserted, shown after `what`. The feed never names what a
     /// correction replaced: its window may not hold the replaced assertion.
     pub value: Option<String>,
@@ -181,18 +182,13 @@ impl ActivityVm {
     /// Builds an activity row from an app [`ChangeLogEntry`], linking the affected record by name/id.
     #[must_use]
     pub(crate) fn from_entry(entry: &ChangeLogEntry, loc: &Localizer, names: &HashMap<String, String>) -> Self {
-        let (count, children, resume) = match &entry.detail {
-            Some(ActivityDetail::ImportRun { run, count, children }) => (
+        let (count, run, resume) = match &entry.detail {
+            Some(ActivityDetail::ImportRun { run, count, .. }) => (
                 Some(run_count(run, *count, loc)),
-                children
-                    .iter()
-                    .map(|child| Self::from_entry(child, loc, names))
-                    .collect(),
+                Some(run.id),
                 ResumeVm::of(run.resume.as_ref(), &run.source_label, loc),
             ),
-            Some(ActivityDetail::Fact { .. } | ActivityDetail::IdentityDecision { .. }) | None => {
-                (None, Vec::new(), None)
-            }
+            Some(ActivityDetail::Fact { .. } | ActivityDetail::IdentityDecision { .. }) | None => (None, None, None),
         };
         Self {
             when: friendly_timestamp(&entry.occurred_at),
@@ -200,9 +196,82 @@ impl ActivityVm {
             who: loc.operator_line(entry),
             record: record_for(entry, names),
             count,
-            children,
+            run,
             resume,
             value: entry.value.as_ref().map(|value| loc.change_value(value)),
+        }
+    }
+}
+
+/// One record an import run changed, as the Dashboard's run row discloses it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunRecordVm {
+    /// The record's aggregate kind, which its changes are read by.
+    pub kind: String,
+    /// The record's aggregate id, which its changes are read by.
+    pub aggregate_id: String,
+    /// The record, when it has a user-facing id to link it by.
+    pub record: Option<RecordRef>,
+    /// What the record reads as: a person's display name, else its user-facing id, else its kind.
+    pub label: String,
+    /// The accessible name of the disclosure that shows its changes, naming the record.
+    pub toggle_label: String,
+}
+
+/// A page of the records an import run changed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunRecordsVm {
+    /// The page's records, the one the run changed last first.
+    pub records: Vec<RunRecordVm>,
+    /// Whether records remain after this page.
+    pub more: bool,
+}
+
+impl RunRecordsVm {
+    /// The persons `page` lists: those whose display names [`build`](Self::build) labels them with.
+    #[must_use]
+    pub fn persons_named(page: &RunRecords) -> Vec<String> {
+        let mut persons = Vec::new();
+        for record in &page.records {
+            if record.kind == "person"
+                && let Some(human_id) = &record.human_id
+            {
+                persons.push(human_id.clone());
+            }
+        }
+        persons
+    }
+
+    /// Builds the page, labelling each person by its display name in `names` (by `human_id`).
+    #[must_use]
+    pub fn build(page: &RunRecords, names: &HashMap<String, String>, loc: &Localizer) -> Self {
+        let mut records = Vec::with_capacity(page.records.len());
+        for record in &page.records {
+            let category = Category::from_aggregate_kind(&record.kind);
+            let link = match (category, &record.human_id) {
+                (Some(category), Some(human_id)) => Some(RecordRef {
+                    category,
+                    label: names.get(human_id).cloned().unwrap_or_else(|| human_id.clone()),
+                    human_id: human_id.clone(),
+                }),
+                (None, _) | (_, None) => None,
+            };
+            let label = match (&link, category) {
+                (Some(link), _) => link.label.clone(),
+                (None, Some(category)) => loc.picker_entity(category),
+                (None, None) => record.kind.clone(),
+            };
+            records.push(RunRecordVm {
+                kind: record.kind.clone(),
+                aggregate_id: record.aggregate_id.clone(),
+                toggle_label: loc.run_record_changes_toggle(&label),
+                record: link,
+                label,
+            });
+        }
+        Self {
+            records,
+            more: page.more,
         }
     }
 }
