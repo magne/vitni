@@ -359,6 +359,72 @@ fn run_row(anchor: ChangeLogEntry, children: Vec<ChangeLogEntry>) -> ChangeLogEn
     }
 }
 
+/// One record an import run wrote to, as an import-run row discloses it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunRecord {
+    /// The record's aggregate kind (the stored `Aggregate::TYPE`, e.g. `person`).
+    pub kind: String,
+    /// The record's aggregate id, which [`run_record_changes`] reads its changes by.
+    pub aggregate_id: String,
+    /// The record's user-facing id, when it has one (a Tag has none).
+    pub human_id: Option<String>,
+}
+
+/// A page of the records an import run wrote to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunRecords {
+    /// The page's records, the one the run wrote to last first.
+    pub records: Vec<RunRecord>,
+    /// Whether records remain after this page.
+    pub more: bool,
+}
+
+/// Reads a page of the records the import run `run` wrote to, from the `record_origins` index rather
+/// than the activity feed's window, so a run of any size discloses all of them: `limit` records after
+/// skipping `offset`, the one it wrote to last first.
+///
+/// # Errors
+///
+/// [`AppError`] on a store read failure.
+pub async fn run_records(
+    workspace: &Workspace,
+    run: ImportRunId,
+    offset: u32,
+    limit: u32,
+) -> Result<RunRecords, AppError> {
+    let store = workspace.store();
+    let mut rows = store.run_records(run, offset, limit.saturating_add(1)).await?;
+    let more = rows.len() > limit as usize;
+    rows.truncate(limit as usize);
+    let mut records = Vec::with_capacity(rows.len());
+    for row in rows {
+        records.push(RunRecord {
+            human_id: human_id_of(store, &row.aggregate_kind, &row.aggregate_id).await?,
+            kind: row.aggregate_kind,
+            aggregate_id: row.aggregate_id,
+        });
+    }
+    Ok(RunRecords { records, more })
+}
+
+/// Reads the changes the import run `run` made to one record — the record's change log narrowed to
+/// the run's entries, newest first. Display-only: no entry is undoable.
+///
+/// # Errors
+///
+/// [`AppError`] on a store read or payload-parse failure.
+pub async fn run_record_changes(
+    workspace: &Workspace,
+    run: ImportRunId,
+    kind: &str,
+    aggregate_id: &str,
+) -> Result<Vec<ChangeLogEntry>, AppError> {
+    let human_id = human_id_of(workspace.store(), kind, aggregate_id).await?;
+    let mut changes = record_log(workspace, kind, aggregate_id, human_id.as_deref(), false).await?;
+    changes.retain(|entry| entry.run.as_ref().is_some_and(|entry_run| entry_run.id == run));
+    Ok(changes)
+}
+
 /// Undoes an assertion by retracting it (non-destructive — the event log is append-only).
 ///
 /// Emits a `RetractAssertion` against the person, stamped with the session operator and an "Undo"
@@ -1480,7 +1546,7 @@ async fn resolve_dna_match_id(store: &Store, human_id: &str) -> Result<vitni_cor
 mod tests {
     use super::{
         ActivityDetail, ChangeLogEntry, ChangeValue, OperatorKind, RunRef, change_log_for_person, group_runs,
-        recent_activity, undo_assertion, workspace_counts,
+        recent_activity, run_record_changes, run_records, undo_assertion, workspace_counts,
     };
     use super::{change_log_for_research_note, undo_research_note_assertion};
     use crate::config::{AppDefaults, IdFormats, OperatorConfig, WorkspaceDefaults};
@@ -2083,6 +2149,60 @@ mod tests {
                 .any(|entry| entry.event_type == "SexAsserted" && entry.operator_kind == OperatorKind::Human),
             "the human change before the run is still visible"
         );
+    }
+
+    #[tokio::test]
+    async fn run_records_names_each_record_a_run_wrote_newest_first_a_page_at_a_time() {
+        let (workspace, human, _dir) = setup().await;
+        let keyboard = create_bare(&workspace, &human).await;
+        let dataset = DatasetId::lineage("gedcom", Uuid::from_u128(5));
+        let run = run_importing(&workspace, &human, (&dataset, None), 3).await;
+
+        let first = run_records(&workspace, run, 0, 2).await.expect("first page");
+        let human_ids: Vec<_> = first.records.iter().map(|record| record.human_id.clone()).collect();
+        assert_eq!(
+            human_ids,
+            [Some("I0004".to_owned()), Some("I0003".to_owned())],
+            "newest first"
+        );
+        assert!(first.records.iter().all(|record| record.kind == "person"));
+        assert!(first.more, "a third record is left");
+        let rest = run_records(&workspace, run, 2, 2).await.expect("second page");
+        assert_eq!(rest.records.len(), 1);
+        assert_eq!(rest.records[0].human_id.as_deref(), Some("I0002"));
+        assert!(!rest.more);
+        assert!(
+            !first
+                .records
+                .iter()
+                .chain(&rest.records)
+                .any(|r| r.human_id.as_deref() == Some(keyboard.as_str())),
+            "a record made at the keyboard is not the run's"
+        );
+    }
+
+    #[tokio::test]
+    async fn run_record_changes_lists_only_the_runs_changes_on_the_record() {
+        let (workspace, human, _dir) = setup().await;
+        let dataset = DatasetId::lineage("gedcom", Uuid::from_u128(5));
+        let run = run_importing(&workspace, &human, (&dataset, None), 1).await;
+        let record = run_records(&workspace, run, 0, 1)
+            .await
+            .expect("records")
+            .records
+            .remove(0);
+        let human_id = record.human_id.clone().expect("human id");
+        assert_sex(&workspace, &human, &human_id, Sex::Male, MutationMeta::default())
+            .await
+            .expect("keyboard edit");
+
+        let changes = run_record_changes(&workspace, run, &record.kind, &record.aggregate_id)
+            .await
+            .expect("changes");
+        let types: Vec<_> = changes.iter().map(|entry| entry.event_type.as_str()).collect();
+        assert_eq!(types, ["PersonCreated"], "the keyboard edit is not the run's");
+        assert!(changes.iter().all(|entry| !entry.can_undo), "display-only");
+        assert_eq!(changes[0].aggregate_human_id.as_deref(), Some(human_id.as_str()));
     }
 
     #[tokio::test]
