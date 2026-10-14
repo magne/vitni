@@ -284,7 +284,7 @@ pub struct TabActionStyle {
 /// its label through the [`ActionLabel`] its own [`DetailTab::action`] declares (issue #314 slice 3)
 /// instead of a bare `ActionLabel` picked independently at each call site — the drift that once left
 /// six labels wrong. `tab.action: None` or `target: TabActionTarget::None` renders the explanation and
-/// `body` with no bar between them, for a read-only tab such as History.
+/// `body` with no bar between them, for a read-only tab.
 pub fn tab_frame<E: Clone + PartialEq + 'static>(
     loc: &Localizer,
     tab: &DetailTab,
@@ -488,14 +488,24 @@ pub fn shared_tab<E: Clone + PartialEq + 'static>(
                 }
             })
         }
-        "history" => Some(tab_frame::<()>(
-            loc,
-            tab,
-            TabActionTarget::None,
-            None,
-            history_panel(loc, ctx.history, ctx.on_undo),
-        )),
+        "history" => Some(history_tab(loc, ctx.history, ctx.on_undo)),
         _ => shared_form_tab(loc, tab, ctx.forms.as_ref()?),
+    }
+}
+
+/// The History tab: its note over [`history_panel`]. It has no action bar, so it skips
+/// [`tab_frame`] to pick its note by whether the screen can undo — the shared note promises that
+/// any entry can be undone, which is false for Tag, the one aggregate without a retraction (#578).
+fn history_tab(loc: &Localizer, history: &[HistoryEntryVm], on_undo: Option<Callback<String>>) -> Element {
+    let note = match on_undo {
+        Some(_) => loc.tab_note("history"),
+        None => Some(loc.tag_history_note()),
+    };
+    rsx! {
+        if let Some(note) = note {
+            div { class: "section-note", "{note}" }
+        }
+        {history_panel(loc, history, on_undo)}
     }
 }
 

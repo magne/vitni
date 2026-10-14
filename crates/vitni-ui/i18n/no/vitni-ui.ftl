@@ -70,6 +70,8 @@ timeline-kind-event = Hendelse
 history-placeholder = Endringsloggen kommer i en senere milepæl.
 history-empty = Ingen endringer registrert ennå.
 history-note = Hver endring er en uforanderlig hendelse som registrerer hvem, når og hvorfor — et revisjonsspor som følger gratis fra den hendelseskildede kjernen. Enhver oppføring kan angres.
+# En etikett kan ikke trekkes tilbake, så Historikk-fanen dens har sitt eget notat i stedet for `history-note`.
+tag-history-note = Hver endring er en uforanderlig hendelse som registrerer hvem, når og hvorfor — et revisjonsspor som følger gratis fra den hendelseskildede kjernen. Etiketthistorikken er bare til visning: en etikett kan ikke trekkes tilbake, så en rettelse er neste endring av navn, farge eller prioritet (siste skriving gjelder).
 
 # Endringslogg-sammendrag (Historikk-fanen + aktivitetsstrøm) — én frase per hendelsestype
 history-person-created = Person opprettet
