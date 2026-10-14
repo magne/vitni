@@ -889,36 +889,35 @@ pub fn citation_attributes_table(
 /// The citation editing side panel: renders the form for the open [`CitationEditForm`], or nothing.
 fn citation_edit_panel(
     state: &AppState,
-    mut editing: Signal<Option<CitationEditForm>>,
+    editing: Signal<Option<CitationEditForm>>,
     on_submit: Callback<(CitationEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
-    let Some(form) = editing() else {
-        return rsx! {};
-    };
-    let title = match &form {
-        CitationEditForm::Attribute(None) => loc.action_label(ActionLabel::AddAttribute),
-        CitationEditForm::Attribute(Some(_)) => loc.panel_title("edit-attribute"),
-        CitationEditForm::Media => loc.action_label(ActionLabel::AttachMedia),
-        CitationEditForm::Note => loc.action_label(ActionLabel::AttachNote),
-        CitationEditForm::Tag => loc.action_label(ActionLabel::AddTag),
-    };
     let human_id = human_id.to_owned();
-    rsx! {
-        SidePanel {
-            title,
-            open: true,
-            close_label: loc.action_label(ActionLabel::Cancel),
-            onclose: move |()| editing.set(None),
-            {match form {
-                CitationEditForm::Attribute(seed) => rsx! { CitationAttributeForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
-                CitationEditForm::Media => rsx! { CitationAttachForm { human_id, is_note: false, onsubmit: move |edit| on_submit.call(edit) } },
-                CitationEditForm::Note => rsx! { CitationAttachForm { human_id, is_note: true, onsubmit: move |edit| on_submit.call(edit) } },
-                CitationEditForm::Tag => rsx! { CitationTagForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
-            }}
-        }
-    }
+    edit_side_panel(
+        loc,
+        editing,
+        |form| match form {
+            CitationEditForm::Attribute(None) => loc.action_label(ActionLabel::AddAttribute),
+            CitationEditForm::Attribute(Some(_)) => loc.panel_title("edit-attribute"),
+            CitationEditForm::Media => loc.action_label(ActionLabel::AttachMedia),
+            CitationEditForm::Note => loc.action_label(ActionLabel::AttachNote),
+            CitationEditForm::Tag => loc.action_label(ActionLabel::AddTag),
+        },
+        |form| match form {
+            CitationEditForm::Attribute(seed) => {
+                rsx! { CitationAttributeForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } }
+            }
+            CitationEditForm::Media => {
+                rsx! { CitationAttachForm { human_id, is_note: false, onsubmit: move |edit| on_submit.call(edit) } }
+            }
+            CitationEditForm::Note => {
+                rsx! { CitationAttachForm { human_id, is_note: true, onsubmit: move |edit| on_submit.call(edit) } }
+            }
+            CitationEditForm::Tag => rsx! { CitationTagForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
+        },
+    )
 }
 
 /// The "Add attribute" form → [`CitationEdit::AddAttribute`]. `seed: None` adds a new attribute;

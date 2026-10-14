@@ -1131,48 +1131,53 @@ pub fn family_events_table(
 fn family_edit_panel(
     state: &AppState,
     detail: &FamilyDetail,
-    mut editing: Signal<Option<FamilyEditForm>>,
+    editing: Signal<Option<FamilyEditForm>>,
     on_submit: Callback<(FamilyEdit, ProvenanceDraft)>,
     on_submit_batch: Callback<Vec<(FamilyEdit, ProvenanceDraft)>>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
-    let Some(form) = editing() else {
-        return rsx! {};
-    };
-    let title = match &form {
-        FamilyEditForm::Partner => loc.action_label(ActionLabel::AddPartner),
-        FamilyEditForm::Child(None) => loc.action_label(ActionLabel::AddChild),
-        FamilyEditForm::Child(Some(_)) => loc.panel_title("edit-child"),
-        FamilyEditForm::Event => loc.action_label(ActionLabel::LinkEvent),
-        FamilyEditForm::Citation => loc.action_label(ActionLabel::AttachCitation),
-        FamilyEditForm::Media => loc.action_label(ActionLabel::AttachMedia),
-        FamilyEditForm::Note => loc.action_label(ActionLabel::AttachNote),
-        FamilyEditForm::Tag => loc.action_label(ActionLabel::AddTag),
-    };
     let human_id = human_id.to_owned();
-    let partners: Vec<(String, String)> = detail
-        .partners
-        .iter()
-        .map(|partner| (partner.human_id.clone(), partner.name.clone()))
-        .collect();
-    rsx! {
-        SidePanel {
-            title,
-            open: true,
-            close_label: loc.action_label(ActionLabel::Cancel),
-            onclose: move |()| editing.set(None),
-            {match form {
-                FamilyEditForm::Partner => rsx! { FamilyAddPartnerForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
-                FamilyEditForm::Child(seed) => rsx! { FamilyAddChildForm { human_id, partners, seed, onsubmit: move |edits| on_submit_batch.call(edits) } },
-                FamilyEditForm::Event => rsx! { FamilyLinkEventForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
-                FamilyEditForm::Citation => rsx! { FamilyAttachForm { human_id, field: "citation".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
-                FamilyEditForm::Media => rsx! { FamilyAttachForm { human_id, field: "media".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
-                FamilyEditForm::Note => rsx! { FamilyAttachForm { human_id, field: "note".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
-                FamilyEditForm::Tag => rsx! { FamilyTagForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
-            }}
-        }
-    }
+    edit_side_panel(
+        loc,
+        editing,
+        |form| match form {
+            FamilyEditForm::Partner => loc.action_label(ActionLabel::AddPartner),
+            FamilyEditForm::Child(None) => loc.action_label(ActionLabel::AddChild),
+            FamilyEditForm::Child(Some(_)) => loc.panel_title("edit-child"),
+            FamilyEditForm::Event => loc.action_label(ActionLabel::LinkEvent),
+            FamilyEditForm::Citation => loc.action_label(ActionLabel::AttachCitation),
+            FamilyEditForm::Media => loc.action_label(ActionLabel::AttachMedia),
+            FamilyEditForm::Note => loc.action_label(ActionLabel::AttachNote),
+            FamilyEditForm::Tag => loc.action_label(ActionLabel::AddTag),
+        },
+        |form| match form {
+            FamilyEditForm::Partner => {
+                rsx! { FamilyAddPartnerForm { human_id, onsubmit: move |edit| on_submit.call(edit) } }
+            }
+            FamilyEditForm::Child(seed) => {
+                let partners: Vec<(String, String)> = detail
+                    .partners
+                    .iter()
+                    .map(|partner| (partner.human_id.clone(), partner.name.clone()))
+                    .collect();
+                rsx! { FamilyAddChildForm { human_id, partners, seed, onsubmit: move |edits| on_submit_batch.call(edits) } }
+            }
+            FamilyEditForm::Event => {
+                rsx! { FamilyLinkEventForm { human_id, onsubmit: move |edit| on_submit.call(edit) } }
+            }
+            FamilyEditForm::Citation => {
+                rsx! { FamilyAttachForm { human_id, field: "citation".to_owned(), onsubmit: move |edit| on_submit.call(edit) } }
+            }
+            FamilyEditForm::Media => {
+                rsx! { FamilyAttachForm { human_id, field: "media".to_owned(), onsubmit: move |edit| on_submit.call(edit) } }
+            }
+            FamilyEditForm::Note => {
+                rsx! { FamilyAttachForm { human_id, field: "note".to_owned(), onsubmit: move |edit| on_submit.call(edit) } }
+            }
+            FamilyEditForm::Tag => rsx! { FamilyTagForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
+        },
+    )
 }
 
 /// The "Add partner" form: a person `human_id` → [`FamilyEdit::AddPartner`].

@@ -593,32 +593,27 @@ pub fn note_references_table(loc: &Localizer, references: &[UsingRecordVm]) -> E
 /// (translation or tag), or nothing. The note's scalar record is edited in place via the sticky header.
 fn note_edit_panel(
     state: &AppState,
-    mut editing: Signal<Option<NoteEditForm>>,
+    editing: Signal<Option<NoteEditForm>>,
     on_submit: Callback<(NoteEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
-    let Some(form) = editing() else {
-        return rsx! {};
-    };
-    let title = match &form {
-        NoteEditForm::Translation(None) => loc.action_label(ActionLabel::AddTranslation),
-        NoteEditForm::Translation(Some(_)) => loc.panel_title("edit-translation"),
-        NoteEditForm::Tag => loc.action_label(ActionLabel::AddTag),
-    };
     let human_id = human_id.to_owned();
-    rsx! {
-        SidePanel {
-            title,
-            open: true,
-            close_label: loc.action_label(ActionLabel::Cancel),
-            onclose: move |()| editing.set(None),
-            {match form {
-                NoteEditForm::Translation(seed) => rsx! { NoteTranslationForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
-                NoteEditForm::Tag => rsx! { NoteTagForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
-            }}
-        }
-    }
+    edit_side_panel(
+        loc,
+        editing,
+        |form| match form {
+            NoteEditForm::Translation(None) => loc.action_label(ActionLabel::AddTranslation),
+            NoteEditForm::Translation(Some(_)) => loc.panel_title("edit-translation"),
+            NoteEditForm::Tag => loc.action_label(ActionLabel::AddTag),
+        },
+        |form| match form {
+            NoteEditForm::Translation(seed) => {
+                rsx! { NoteTranslationForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } }
+            }
+            NoteEditForm::Tag => rsx! { NoteTagForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
+        },
+    )
 }
 
 /// The translation form: language + text + translator → [`NoteEdit::AddTranslation`]. `seed: None`

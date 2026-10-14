@@ -650,36 +650,35 @@ pub fn media_used_by(loc: &Localizer, used_by: &[UsingRecordVm]) -> Element {
 /// The media editing side panel: renders the form for the open [`MediaEditForm`], or nothing.
 fn media_edit_panel(
     state: &AppState,
-    mut editing: Signal<Option<MediaEditForm>>,
+    editing: Signal<Option<MediaEditForm>>,
     on_submit: Callback<(MediaEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
-    let Some(form) = editing() else {
-        return rsx! {};
-    };
-    let title = match &form {
-        MediaEditForm::Attribute(None) => loc.action_label(ActionLabel::AddAttribute),
-        MediaEditForm::Attribute(Some(_)) => loc.panel_title("edit-attribute"),
-        MediaEditForm::Citation => loc.action_label(ActionLabel::AttachCitation),
-        MediaEditForm::Note => loc.action_label(ActionLabel::AttachNote),
-        MediaEditForm::Tag => loc.action_label(ActionLabel::AddTag),
-    };
     let human_id = human_id.to_owned();
-    rsx! {
-        SidePanel {
-            title,
-            open: true,
-            close_label: loc.action_label(ActionLabel::Cancel),
-            onclose: move |()| editing.set(None),
-            {match form {
-                MediaEditForm::Attribute(seed) => rsx! { MediaAttributeForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
-                MediaEditForm::Citation => rsx! { MediaAttachForm { human_id, field: "citation".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
-                MediaEditForm::Note => rsx! { MediaAttachForm { human_id, field: "note".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
-                MediaEditForm::Tag => rsx! { MediaTagForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
-            }}
-        }
-    }
+    edit_side_panel(
+        loc,
+        editing,
+        |form| match form {
+            MediaEditForm::Attribute(None) => loc.action_label(ActionLabel::AddAttribute),
+            MediaEditForm::Attribute(Some(_)) => loc.panel_title("edit-attribute"),
+            MediaEditForm::Citation => loc.action_label(ActionLabel::AttachCitation),
+            MediaEditForm::Note => loc.action_label(ActionLabel::AttachNote),
+            MediaEditForm::Tag => loc.action_label(ActionLabel::AddTag),
+        },
+        |form| match form {
+            MediaEditForm::Attribute(seed) => {
+                rsx! { MediaAttributeForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } }
+            }
+            MediaEditForm::Citation => {
+                rsx! { MediaAttachForm { human_id, field: "citation".to_owned(), onsubmit: move |edit| on_submit.call(edit) } }
+            }
+            MediaEditForm::Note => {
+                rsx! { MediaAttachForm { human_id, field: "note".to_owned(), onsubmit: move |edit| on_submit.call(edit) } }
+            }
+            MediaEditForm::Tag => rsx! { MediaTagForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
+        },
+    )
 }
 
 /// The "Add attribute" form → [`MediaEdit::AddAttribute`]. `seed: None` adds a new attribute;

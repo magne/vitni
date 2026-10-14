@@ -1190,43 +1190,48 @@ fn succession_row(
 /// The place editing side panel: renders the form for the open [`PlaceEditForm`], or nothing.
 fn place_edit_panel(
     state: &AppState,
-    mut editing: Signal<Option<PlaceEditForm>>,
+    editing: Signal<Option<PlaceEditForm>>,
     on_submit: Callback<(PlaceEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
-    let Some(form) = editing() else {
-        return rsx! {};
-    };
-    let title = match &form {
-        PlaceEditForm::Name(None) => loc.action_label(ActionLabel::AddName),
-        PlaceEditForm::Name(Some(_)) => loc.panel_title("edit-name"),
-        PlaceEditForm::Enclosing(None) => loc.action_label(ActionLabel::AddEnclosing),
-        PlaceEditForm::Enclosing(Some(_)) => loc.panel_title("edit-enclosing"),
-        PlaceEditForm::Succession => loc.action_label(ActionLabel::AddSuccession),
-        PlaceEditForm::Citation => loc.action_label(ActionLabel::AttachCitation),
-        PlaceEditForm::Media => loc.action_label(ActionLabel::AttachMedia),
-        PlaceEditForm::Note => loc.action_label(ActionLabel::AttachNote),
-        PlaceEditForm::Tag => loc.action_label(ActionLabel::AddTag),
-    };
     let human_id = human_id.to_owned();
-    rsx! {
-        SidePanel {
-            title,
-            open: true,
-            close_label: loc.action_label(ActionLabel::Cancel),
-            onclose: move |()| editing.set(None),
-            {match form {
-                PlaceEditForm::Name(seed) => rsx! { PlaceNameForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
-                PlaceEditForm::Enclosing(seed) => rsx! { PlaceEnclosingForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
-                PlaceEditForm::Succession => rsx! { PlaceSuccessionForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
-                PlaceEditForm::Citation => rsx! { PlaceLinkForm { human_id, field: "citation".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
-                PlaceEditForm::Media => rsx! { PlaceLinkForm { human_id, field: "media".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
-                PlaceEditForm::Note => rsx! { PlaceLinkForm { human_id, field: "note".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
-                PlaceEditForm::Tag => rsx! { PlaceTagForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
-            }}
-        }
-    }
+    edit_side_panel(
+        loc,
+        editing,
+        |form| match form {
+            PlaceEditForm::Name(None) => loc.action_label(ActionLabel::AddName),
+            PlaceEditForm::Name(Some(_)) => loc.panel_title("edit-name"),
+            PlaceEditForm::Enclosing(None) => loc.action_label(ActionLabel::AddEnclosing),
+            PlaceEditForm::Enclosing(Some(_)) => loc.panel_title("edit-enclosing"),
+            PlaceEditForm::Succession => loc.action_label(ActionLabel::AddSuccession),
+            PlaceEditForm::Citation => loc.action_label(ActionLabel::AttachCitation),
+            PlaceEditForm::Media => loc.action_label(ActionLabel::AttachMedia),
+            PlaceEditForm::Note => loc.action_label(ActionLabel::AttachNote),
+            PlaceEditForm::Tag => loc.action_label(ActionLabel::AddTag),
+        },
+        |form| match form {
+            PlaceEditForm::Name(seed) => {
+                rsx! { PlaceNameForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } }
+            }
+            PlaceEditForm::Enclosing(seed) => {
+                rsx! { PlaceEnclosingForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } }
+            }
+            PlaceEditForm::Succession => {
+                rsx! { PlaceSuccessionForm { human_id, onsubmit: move |edit| on_submit.call(edit) } }
+            }
+            PlaceEditForm::Citation => {
+                rsx! { PlaceLinkForm { human_id, field: "citation".to_owned(), onsubmit: move |edit| on_submit.call(edit) } }
+            }
+            PlaceEditForm::Media => {
+                rsx! { PlaceLinkForm { human_id, field: "media".to_owned(), onsubmit: move |edit| on_submit.call(edit) } }
+            }
+            PlaceEditForm::Note => {
+                rsx! { PlaceLinkForm { human_id, field: "note".to_owned(), onsubmit: move |edit| on_submit.call(edit) } }
+            }
+            PlaceEditForm::Tag => rsx! { PlaceTagForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
+        },
+    )
 }
 
 /// The place name form → [`PlaceEdit::AddName`]. `seed: None` adds a new name (a free-text place-name

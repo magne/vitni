@@ -613,46 +613,47 @@ pub fn repository_sources_table(loc: &Localizer, detail: &RepositoryDetail) -> E
 /// The repository editing side panel: renders the form for the open [`RepositoryEditForm`], or nothing.
 fn repository_edit_panel(
     state: &AppState,
-    mut editing: Signal<Option<RepositoryEditForm>>,
+    editing: Signal<Option<RepositoryEditForm>>,
     on_submit: Callback<(RepositoryEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
-    let Some(form) = editing() else {
-        return rsx! {};
-    };
-    let title = match &form {
-        RepositoryEditForm::Address(None) => loc.action_label(ActionLabel::AddAddress),
-        RepositoryEditForm::Address(Some(_)) => loc.panel_title("edit-address"),
-        RepositoryEditForm::Url(None) => loc.action_label(ActionLabel::AddUrl),
-        RepositoryEditForm::Url(Some(_)) => loc.panel_title("edit-url"),
-        RepositoryEditForm::Source => loc.action_label(ActionLabel::LinkSource),
-        RepositoryEditForm::Note => loc.action_label(ActionLabel::AttachNote),
-        RepositoryEditForm::Tag => loc.action_label(ActionLabel::AddTag),
-    };
     let human_id = human_id.to_owned();
-    rsx! {
-        SidePanel {
-            title,
-            open: true,
-            close_label: loc.action_label(ActionLabel::Cancel),
-            onclose: move |()| editing.set(None),
-            {match form {
-                RepositoryEditForm::Address(seed) => rsx! {
-                    AddressForm {
-                        seed,
-                        onsubmit: move |(address, prov): (Address, ProvenanceDraft)| {
-                            on_submit.call((RepositoryEdit::AddAddress { human_id: human_id.clone(), address }, prov));
-                        },
-                    }
-                },
-                RepositoryEditForm::Url(seed) => rsx! { RepositoryUrlForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
-                RepositoryEditForm::Source => rsx! { RepositoryLinkSourceForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
-                RepositoryEditForm::Note => rsx! { RepositoryNoteForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
-                RepositoryEditForm::Tag => rsx! { RepositoryTagForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
-            }}
-        }
-    }
+    edit_side_panel(
+        loc,
+        editing,
+        |form| match form {
+            RepositoryEditForm::Address(None) => loc.action_label(ActionLabel::AddAddress),
+            RepositoryEditForm::Address(Some(_)) => loc.panel_title("edit-address"),
+            RepositoryEditForm::Url(None) => loc.action_label(ActionLabel::AddUrl),
+            RepositoryEditForm::Url(Some(_)) => loc.panel_title("edit-url"),
+            RepositoryEditForm::Source => loc.action_label(ActionLabel::LinkSource),
+            RepositoryEditForm::Note => loc.action_label(ActionLabel::AttachNote),
+            RepositoryEditForm::Tag => loc.action_label(ActionLabel::AddTag),
+        },
+        |form| match form {
+            RepositoryEditForm::Address(seed) => rsx! {
+                AddressForm {
+                    seed,
+                    onsubmit: move |(address, prov): (Address, ProvenanceDraft)| {
+                        on_submit.call((RepositoryEdit::AddAddress { human_id: human_id.clone(), address }, prov));
+                    },
+                }
+            },
+            RepositoryEditForm::Url(seed) => {
+                rsx! { RepositoryUrlForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } }
+            }
+            RepositoryEditForm::Source => {
+                rsx! { RepositoryLinkSourceForm { human_id, onsubmit: move |edit| on_submit.call(edit) } }
+            }
+            RepositoryEditForm::Note => {
+                rsx! { RepositoryNoteForm { human_id, onsubmit: move |edit| on_submit.call(edit) } }
+            }
+            RepositoryEditForm::Tag => {
+                rsx! { RepositoryTagForm { human_id, onsubmit: move |edit| on_submit.call(edit) } }
+            }
+        },
+    )
 }
 
 /// The "Add URL" form → [`RepositoryEdit::AddUrl`]. `seed: None` adds a new URL; `Some(row)` edits an

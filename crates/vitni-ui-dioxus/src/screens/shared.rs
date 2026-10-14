@@ -1025,6 +1025,30 @@ pub fn retract_side_panel(
     }
 }
 
+/// The collection-row editing side panel every record screen opens (`record-editing.html` §8): while a
+/// form is open (`editing` is `Some`), renders a [`SidePanel`] titled by `title(&form)` around
+/// `body(form)`; Cancel, the scrim and `Esc` all close it by clearing `editing`. Only the title and the
+/// body are a screen's own — the form carries its own Save, so the panel has no footer.
+pub fn edit_side_panel<E: Clone + 'static>(
+    loc: &Localizer,
+    mut editing: Signal<Option<E>>,
+    title: impl FnOnce(&E) -> String,
+    body: impl FnOnce(E) -> Element,
+) -> Element {
+    let Some(form) = editing() else {
+        return rsx! {};
+    };
+    rsx! {
+        SidePanel {
+            title: title(&form),
+            open: true,
+            close_label: loc.action_label(ActionLabel::Cancel),
+            onclose: move |()| editing.set(None),
+            {body(form)}
+        }
+    }
+}
+
 /// The retract/remove/unlink/detach spec for a collection row's actions cell (`record-editing.html`
 /// §8). All four verbs dispatch the same non-destructive `UndoAssertion`; they differ only in the
 /// button label, the mockup tooltip, and whether the panel says "Detach" or "Retract".
