@@ -1020,7 +1020,6 @@ pub fn retract_side_panel(
             open: true,
             close_label: loc.action_label(ActionLabel::Cancel),
             onclose: move |()| retract.set(None),
-            footer: rsx! {},
             {retract_panel(loc, &loc.panel_title(title_id), &label, accessible, &note, loc.action_button(action), reason, on_confirm)}
         }
     }

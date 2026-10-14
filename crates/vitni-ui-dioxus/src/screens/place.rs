@@ -1216,7 +1216,6 @@ fn place_edit_panel(
             open: true,
             close_label: loc.action_label(ActionLabel::Cancel),
             onclose: move |()| editing.set(None),
-            footer: rsx! {},
             {match form {
                 PlaceEditForm::Name(seed) => rsx! { PlaceNameForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
                 PlaceEditForm::Enclosing(seed) => rsx! { PlaceEnclosingForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },

@@ -243,7 +243,6 @@ pub fn FindSimilarPanel(category: Category, human_id: String) -> Element {
             open: open(),
             close_label: loc.action_label(ActionLabel::Close),
             onclose: move |()| nav.close_similar(),
-            footer: rsx! {},
             {body}
         }
     }

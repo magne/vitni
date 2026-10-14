@@ -788,7 +788,6 @@ fn research_note_edit_panel(
             open: true,
             close_label: loc.action_label(ActionLabel::Cancel),
             onclose: move |()| editing.set(None),
-            footer: rsx! {},
             {match form {
                 ResearchNoteEditForm::Subject => rsx! { ResearchNoteSubjectForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
                 ResearchNoteEditForm::Tag => rsx! { ResearchNoteTagForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },

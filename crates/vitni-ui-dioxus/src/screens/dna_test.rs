@@ -774,7 +774,6 @@ fn dna_test_edit_panel(
             open: true,
             close_label: loc.action_label(ActionLabel::Cancel),
             onclose: move |()| editing.set(None),
-            footer: rsx! {},
             {match form {
                 DnaTestEditForm::Haplogroup(seed) => rsx! { DnaTestHaplogroupForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
                 DnaTestEditForm::Note => rsx! { DnaTestNoteForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },

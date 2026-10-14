@@ -79,7 +79,8 @@ pub fn SidePanel(
     onclose: EventHandler<()>,
     /// The panel body.
     children: Element,
-    /// The footer (e.g. action buttons).
+    /// The footer (e.g. action buttons); empty by default — every editor's Save sits in its body.
+    #[props(default = VNode::empty())]
     footer: Element,
     /// Escapes all the way to the viewport instead of the nearest positioned ancestor — for a panel
     /// mounted outside a record's `.detail` pane (Geography's geometry panel).

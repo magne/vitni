@@ -1005,7 +1005,6 @@ fn event_edit_panel(
             open: true,
             close_label: loc.action_label(ActionLabel::Cancel),
             onclose: move |()| editing.set(None),
-            footer: rsx! {},
             {match form {
                 EventEditForm::Address(seed) => rsx! {
                     AddressForm {

@@ -887,7 +887,6 @@ fn dna_match_edit_panel(
             open: true,
             close_label: loc.action_label(ActionLabel::Cancel),
             onclose: move |()| editing.set(None),
-            footer: rsx! {},
             {match form {
                 DnaMatchEditForm::Segment(seed) => rsx! { DnaMatchSegmentForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
                 DnaMatchEditForm::Ancestor(seed) => rsx! { DnaMatchAncestorForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },

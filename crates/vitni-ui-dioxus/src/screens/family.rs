@@ -967,7 +967,6 @@ pub fn child_removal_side_panel(
             open: true,
             close_label: loc.action_label(ActionLabel::Cancel),
             onclose: move |()| removing.set(None),
-            footer: rsx! {},
             div { class: "stack",
                 h3 { style: "font-size:var(--fs-lg);margin:0", "{title}" }
                 div { class: "muted", "{label}" }
@@ -1163,7 +1162,6 @@ fn family_edit_panel(
             open: true,
             close_label: loc.action_label(ActionLabel::Cancel),
             onclose: move |()| editing.set(None),
-            footer: rsx! {},
             {match form {
                 FamilyEditForm::Partner => rsx! { FamilyAddPartnerForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
                 FamilyEditForm::Child(seed) => rsx! { FamilyAddChildForm { human_id, partners, seed, onsubmit: move |edits| on_submit_batch.call(edits) } },

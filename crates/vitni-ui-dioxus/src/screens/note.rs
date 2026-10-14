@@ -613,7 +613,6 @@ fn note_edit_panel(
             open: true,
             close_label: loc.action_label(ActionLabel::Cancel),
             onclose: move |()| editing.set(None),
-            footer: rsx! {},
             {match form {
                 NoteEditForm::Translation(seed) => rsx! { NoteTranslationForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
                 NoteEditForm::Tag => rsx! { NoteTagForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },

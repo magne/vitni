@@ -1167,7 +1167,6 @@ pub fn unlink_side_panel(
             open: true,
             close_label: loc.action_label(ActionLabel::Cancel),
             onclose: move |()| unlinking.set(None),
-            footer: rsx! {},
             {retract_panel(loc, &title, &label, loc.action_unlink_row(&label), &loc.unlink_note(), loc.action_button(ActionLabel::Unlink), reason, on_confirm)}
         }
     }
@@ -1685,7 +1684,6 @@ fn edit_panel(
             open: true,
             close_label: loc.action_label(ActionLabel::Cancel),
             onclose: move |()| editing.set(None),
-            footer: rsx! {},
             {match form {
                 EditForm::Name(seed) => rsx! { AddNameForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
                 EditForm::CiteName(name) => rsx! { CiteNameForm { human_id, name, onsubmit: move |edit| on_submit.call(edit) } },

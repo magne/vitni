@@ -713,7 +713,6 @@ fn source_edit_panel(
             open: true,
             close_label: loc.action_label(ActionLabel::Cancel),
             onclose: move |()| editing.set(None),
-            footer: rsx! {},
             {match form {
                 SourceEditForm::Repository(seed) => rsx! { SourceLinkRepositoryForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
                 SourceEditForm::Attribute(seed) => rsx! { SourceAttributeForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },

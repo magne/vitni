@@ -190,3 +190,26 @@ fn a_closed_modal_renders_nothing() {
     assert!(!html.contains("modal"), "no modal surface while closed:\n{html}");
     assert!(!html.contains("focus-guard"), "no guards while closed:\n{html}");
 }
+
+fn footerless_side_panel_view() -> Element {
+    let onclose = use_callback(|(): ()| {});
+    rsx! {
+        SidePanel {
+            title: "Edit name".to_owned(),
+            open: true,
+            close_label: "Close".to_owned(),
+            onclose,
+            div { "body" }
+        }
+    }
+}
+
+#[test]
+fn a_side_panel_without_a_footer_renders_an_empty_foot() {
+    let html = render(footerless_side_panel_view);
+    assert!(html.contains("body"), "the panel body renders:\n{html}");
+    assert!(
+        html.contains(r#"<div class="sp-foot"></div>"#),
+        "an omitted footer leaves the foot empty:\n{html}"
+    );
+}

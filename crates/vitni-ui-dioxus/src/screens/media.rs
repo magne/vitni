@@ -672,7 +672,6 @@ fn media_edit_panel(
             open: true,
             close_label: loc.action_label(ActionLabel::Cancel),
             onclose: move |()| editing.set(None),
-            footer: rsx! {},
             {match form {
                 MediaEditForm::Attribute(seed) => rsx! { MediaAttributeForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
                 MediaEditForm::Citation => rsx! { MediaAttachForm { human_id, field: "citation".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },

@@ -911,7 +911,6 @@ fn citation_edit_panel(
             open: true,
             close_label: loc.action_label(ActionLabel::Cancel),
             onclose: move |()| editing.set(None),
-            footer: rsx! {},
             {match form {
                 CitationEditForm::Attribute(seed) => rsx! { CitationAttributeForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
                 CitationEditForm::Media => rsx! { CitationAttachForm { human_id, is_note: false, onsubmit: move |edit| on_submit.call(edit) } },

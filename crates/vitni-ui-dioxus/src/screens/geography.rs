@@ -729,7 +729,6 @@ fn geo_edit_panel(
             open: true,
             close_label: chrome.close(),
             onclose: move |()| panel.set(GeoPanel::None),
-            footer: rsx! {},
             // Mounted outside any `.detail` pane (this is a tool screen, not a record detail), so it
             // needs to escape all the way to the viewport itself rather than fall through to
             // `.workarea` (the toast layer's own containing block, #208).
