@@ -864,38 +864,36 @@ fn dna_match_ancestors_rows(
 /// The DNA-match editing side panel: renders the form for the open [`DnaMatchEditForm`], or nothing.
 fn dna_match_edit_panel(
     state: &AppState,
-    mut editing: Signal<Option<DnaMatchEditForm>>,
+    editing: Signal<Option<DnaMatchEditForm>>,
     on_submit: Callback<(DnaMatchEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
-    let Some(form) = editing() else {
-        return rsx! {};
-    };
-    let title = match &form {
-        DnaMatchEditForm::Segment(Some(_)) => loc.panel_title("edit-segment"),
-        DnaMatchEditForm::Segment(None) => loc.panel_title("add-segment"),
-        DnaMatchEditForm::Ancestor(Some(_)) => loc.panel_title("edit-ancestor"),
-        DnaMatchEditForm::Ancestor(None) => loc.panel_title("add-ancestor"),
-        DnaMatchEditForm::Note => loc.action_label(ActionLabel::AttachNote),
-        DnaMatchEditForm::Tag => loc.action_label(ActionLabel::AddTag),
-    };
     let human_id = human_id.to_owned();
-    rsx! {
-        SidePanel {
-            title,
-            open: true,
-            close_label: loc.action_label(ActionLabel::Cancel),
-            onclose: move |()| editing.set(None),
-            footer: rsx! {},
-            {match form {
-                DnaMatchEditForm::Segment(seed) => rsx! { DnaMatchSegmentForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
-                DnaMatchEditForm::Ancestor(seed) => rsx! { DnaMatchAncestorForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
-                DnaMatchEditForm::Note => rsx! { DnaMatchNoteForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
-                DnaMatchEditForm::Tag => rsx! { DnaMatchTagForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
-            }}
-        }
-    }
+    edit_side_panel(
+        loc,
+        editing,
+        |form| match form {
+            DnaMatchEditForm::Segment(Some(_)) => loc.panel_title("edit-segment"),
+            DnaMatchEditForm::Segment(None) => loc.panel_title("add-segment"),
+            DnaMatchEditForm::Ancestor(Some(_)) => loc.panel_title("edit-ancestor"),
+            DnaMatchEditForm::Ancestor(None) => loc.panel_title("add-ancestor"),
+            DnaMatchEditForm::Note => loc.action_label(ActionLabel::AttachNote),
+            DnaMatchEditForm::Tag => loc.action_label(ActionLabel::AddTag),
+        },
+        |form| match form {
+            DnaMatchEditForm::Segment(seed) => {
+                rsx! { DnaMatchSegmentForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } }
+            }
+            DnaMatchEditForm::Ancestor(seed) => {
+                rsx! { DnaMatchAncestorForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } }
+            }
+            DnaMatchEditForm::Note => {
+                rsx! { DnaMatchNoteForm { human_id, onsubmit: move |edit| on_submit.call(edit) } }
+            }
+            DnaMatchEditForm::Tag => rsx! { DnaMatchTagForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
+        },
+    )
 }
 
 /// The "edit segment" form → [`DnaMatchEdit::AddSegment`]. `seed: Some(row)` pre-fills the chromosome,

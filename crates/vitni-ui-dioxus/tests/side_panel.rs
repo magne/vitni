@@ -7,7 +7,9 @@
 //! record-picker's measured position in `record_picker.rs`.
 
 use dioxus::prelude::*;
+use vitni_ui::Localizer;
 use vitni_ui_dioxus::components::{Modal, SidePanel};
+use vitni_ui_dioxus::screens::edit_side_panel;
 
 fn render(view: fn() -> Element) -> String {
     let mut vdom = VirtualDom::new(view);
@@ -189,4 +191,85 @@ fn a_closed_modal_renders_nothing() {
     let html = render(closed_modal_view);
     assert!(!html.contains("modal"), "no modal surface while closed:\n{html}");
     assert!(!html.contains("focus-guard"), "no guards while closed:\n{html}");
+}
+
+fn footerless_side_panel_view() -> Element {
+    let onclose = use_callback(|(): ()| {});
+    rsx! {
+        SidePanel {
+            title: "Edit name".to_owned(),
+            open: true,
+            close_label: "Close".to_owned(),
+            onclose,
+            div { "body" }
+        }
+    }
+}
+
+#[test]
+fn a_side_panel_without_a_footer_renders_an_empty_foot() {
+    let html = render(footerless_side_panel_view);
+    assert!(html.contains("body"), "the panel body renders:\n{html}");
+    assert!(
+        html.contains(r#"<div class="sp-foot"></div>"#),
+        "an omitted footer leaves the foot empty:\n{html}"
+    );
+}
+
+/// A screen's edit-form enum, as `edit_side_panel` sees it: one variant per panel the screen opens.
+#[derive(Clone, PartialEq)]
+enum DemoForm {
+    Name(String),
+    Tag,
+}
+
+fn edit_panel_view(form: Option<DemoForm>) -> Element {
+    let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
+    let editing = use_signal(|| form);
+    edit_side_panel(
+        &loc,
+        editing,
+        |form| match form {
+            DemoForm::Name(_) => "Edit name".to_owned(),
+            DemoForm::Tag => "Add tag".to_owned(),
+        },
+        |form| match form {
+            DemoForm::Name(name) => rsx! { p { "editing {name}" } },
+            DemoForm::Tag => rsx! { p { "tag picker" } },
+        },
+    )
+}
+
+#[test]
+fn an_edit_side_panel_with_no_open_form_renders_nothing() {
+    let html = render(|| edit_panel_view(None));
+    assert!(html.is_empty(), "no panel while nothing is being edited:\n{html}");
+}
+
+#[test]
+fn an_edit_side_panel_renders_the_open_forms_title_and_body() {
+    let html = render(|| edit_panel_view(Some(DemoForm::Name("Ola".to_owned()))));
+    assert!(
+        html.contains(r#"aria-label="Edit name""#),
+        "the dialog is named by the form's title:\n{html}"
+    );
+    assert!(html.contains("editing Ola"), "the form's body renders:\n{html}");
+    assert!(
+        !html.contains("tag picker"),
+        "only the open form's body renders:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="Cancel""#),
+        "the close control reads Cancel:\n{html}"
+    );
+}
+
+#[test]
+fn an_edit_side_panel_picks_the_title_per_form() {
+    let html = render(|| edit_panel_view(Some(DemoForm::Tag)));
+    assert!(
+        html.contains(r#"aria-label="Add tag""#),
+        "the Tag form's title:\n{html}"
+    );
+    assert!(html.contains("tag picker"), "the Tag form's body:\n{html}");
 }

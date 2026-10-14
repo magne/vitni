@@ -769,32 +769,28 @@ pub fn research_notes_table(loc: &Localizer, rows: &[RowVm]) -> Element {
 /// nothing. The note's scalar record is edited in place via the sticky header.
 fn research_note_edit_panel(
     state: &AppState,
-    mut editing: Signal<Option<ResearchNoteEditForm>>,
+    editing: Signal<Option<ResearchNoteEditForm>>,
     on_submit: Callback<(ResearchNoteEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
-    let Some(form) = editing() else {
-        return rsx! {};
-    };
-    let title = match &form {
-        ResearchNoteEditForm::Subject => loc.panel_title("add-subject"),
-        ResearchNoteEditForm::Tag => loc.action_label(ActionLabel::AddTag),
-    };
     let human_id = human_id.to_owned();
-    rsx! {
-        SidePanel {
-            title,
-            open: true,
-            close_label: loc.action_label(ActionLabel::Cancel),
-            onclose: move |()| editing.set(None),
-            footer: rsx! {},
-            {match form {
-                ResearchNoteEditForm::Subject => rsx! { ResearchNoteSubjectForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
-                ResearchNoteEditForm::Tag => rsx! { ResearchNoteTagForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
-            }}
-        }
-    }
+    edit_side_panel(
+        loc,
+        editing,
+        |form| match form {
+            ResearchNoteEditForm::Subject => loc.panel_title("add-subject"),
+            ResearchNoteEditForm::Tag => loc.action_label(ActionLabel::AddTag),
+        },
+        |form| match form {
+            ResearchNoteEditForm::Subject => {
+                rsx! { ResearchNoteSubjectForm { human_id, onsubmit: move |edit| on_submit.call(edit) } }
+            }
+            ResearchNoteEditForm::Tag => {
+                rsx! { ResearchNoteTagForm { human_id, onsubmit: move |edit| on_submit.call(edit) } }
+            }
+        },
+    )
 }
 
 /// The "Add subject" form: a kind select + that kind's record picker + the provenance block →

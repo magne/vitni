@@ -689,40 +689,40 @@ pub fn source_attributes_table(
 /// The source editing side panel: renders the form for the open [`SourceEditForm`], or nothing.
 fn source_edit_panel(
     state: &AppState,
-    mut editing: Signal<Option<SourceEditForm>>,
+    editing: Signal<Option<SourceEditForm>>,
     on_submit: Callback<(SourceEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
-    let Some(form) = editing() else {
-        return rsx! {};
-    };
-    let title = match &form {
-        SourceEditForm::Repository(None) => loc.action_label(ActionLabel::LinkRepository),
-        SourceEditForm::Repository(Some(_)) => loc.panel_title("edit-repository"),
-        SourceEditForm::Attribute(None) => loc.action_label(ActionLabel::AddAttribute),
-        SourceEditForm::Attribute(Some(_)) => loc.panel_title("edit-attribute"),
-        SourceEditForm::Media => loc.action_label(ActionLabel::AttachMedia),
-        SourceEditForm::Note => loc.action_label(ActionLabel::AttachNote),
-        SourceEditForm::Tag => loc.action_label(ActionLabel::AddTag),
-    };
     let human_id = human_id.to_owned();
-    rsx! {
-        SidePanel {
-            title,
-            open: true,
-            close_label: loc.action_label(ActionLabel::Cancel),
-            onclose: move |()| editing.set(None),
-            footer: rsx! {},
-            {match form {
-                SourceEditForm::Repository(seed) => rsx! { SourceLinkRepositoryForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
-                SourceEditForm::Attribute(seed) => rsx! { SourceAttributeForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
-                SourceEditForm::Media => rsx! { SourceAttachForm { human_id, field: "media".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
-                SourceEditForm::Note => rsx! { SourceAttachForm { human_id, field: "note".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
-                SourceEditForm::Tag => rsx! { SourceTagForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
-            }}
-        }
-    }
+    edit_side_panel(
+        loc,
+        editing,
+        |form| match form {
+            SourceEditForm::Repository(None) => loc.action_label(ActionLabel::LinkRepository),
+            SourceEditForm::Repository(Some(_)) => loc.panel_title("edit-repository"),
+            SourceEditForm::Attribute(None) => loc.action_label(ActionLabel::AddAttribute),
+            SourceEditForm::Attribute(Some(_)) => loc.panel_title("edit-attribute"),
+            SourceEditForm::Media => loc.action_label(ActionLabel::AttachMedia),
+            SourceEditForm::Note => loc.action_label(ActionLabel::AttachNote),
+            SourceEditForm::Tag => loc.action_label(ActionLabel::AddTag),
+        },
+        |form| match form {
+            SourceEditForm::Repository(seed) => {
+                rsx! { SourceLinkRepositoryForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } }
+            }
+            SourceEditForm::Attribute(seed) => {
+                rsx! { SourceAttributeForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } }
+            }
+            SourceEditForm::Media => {
+                rsx! { SourceAttachForm { human_id, field: "media".to_owned(), onsubmit: move |edit| on_submit.call(edit) } }
+            }
+            SourceEditForm::Note => {
+                rsx! { SourceAttachForm { human_id, field: "note".to_owned(), onsubmit: move |edit| on_submit.call(edit) } }
+            }
+            SourceEditForm::Tag => rsx! { SourceTagForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
+        },
+    )
 }
 
 /// The "Link repository" form → [`SourceEdit::LinkRepository`]. `seed: None` links a new repository

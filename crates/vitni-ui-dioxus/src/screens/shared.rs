@@ -986,42 +986,76 @@ pub struct RetractTarget {
 /// `"detach-media"`, `"detach-note"`), and unread by the other two cases, which have notes of their own.
 pub fn retract_side_panel(
     loc: &Localizer,
-    mut retract: Signal<Option<RetractTarget>>,
+    retract: Signal<Option<RetractTarget>>,
     reason: Signal<String>,
     on_confirm: Callback<()>,
     detach_note_id: &str,
 ) -> Element {
-    let Some(RetractTarget { subject, label }) = retract() else {
+    edit_side_panel(
+        loc,
+        retract,
+        |target| loc.panel_title(retract_title_id(&target.subject)),
+        |RetractTarget { subject, label }| {
+            let (action, note, accessible) = match subject {
+                RetractSubject::Tag { .. } => (
+                    ActionLabel::RemoveTag,
+                    loc.untag_note(),
+                    loc.action_remove_tag_named(&label),
+                ),
+                RetractSubject::Assertion { detach: true, .. } => (
+                    ActionLabel::Detach,
+                    loc.action_title(detach_note_id),
+                    loc.action_detach_row(&label),
+                ),
+                RetractSubject::Assertion { detach: false, .. } => {
+                    (ActionLabel::Retract, loc.retract_note(), loc.action_retract_row(&label))
+                }
+            };
+            let title = loc.panel_title(retract_title_id(&subject));
+            retract_panel(
+                loc,
+                &title,
+                &label,
+                accessible,
+                &note,
+                loc.action_button(action),
+                reason,
+                on_confirm,
+            )
+        },
+    )
+}
+
+/// The `panel_title` id the retract side panel is headed by, per correction kind.
+fn retract_title_id(subject: &RetractSubject) -> &'static str {
+    match subject {
+        RetractSubject::Tag { .. } => "untag",
+        RetractSubject::Assertion { detach: true, .. } => "detach",
+        RetractSubject::Assertion { detach: false, .. } => "retract",
+    }
+}
+
+/// The side panel every record screen opens over a collection row (`record-editing.html` §8) — its
+/// edit forms and its retract/unlink/remove confirms alike: while one is open (`editing` is `Some`),
+/// renders a [`SidePanel`] titled by `title(&form)` around `body(form)`; Cancel, the scrim and `Esc` all
+/// close it by clearing `editing`. Only the title and the body are a screen's own — the body carries its
+/// own Save or confirm, so the panel has no footer.
+pub fn edit_side_panel<E: Clone + 'static>(
+    loc: &Localizer,
+    mut editing: Signal<Option<E>>,
+    title: impl FnOnce(&E) -> String,
+    body: impl FnOnce(E) -> Element,
+) -> Element {
+    let Some(form) = editing() else {
         return rsx! {};
-    };
-    let (title_id, action, note, accessible) = match subject {
-        RetractSubject::Tag { .. } => (
-            "untag",
-            ActionLabel::RemoveTag,
-            loc.untag_note(),
-            loc.action_remove_tag_named(&label),
-        ),
-        RetractSubject::Assertion { detach: true, .. } => (
-            "detach",
-            ActionLabel::Detach,
-            loc.action_title(detach_note_id),
-            loc.action_detach_row(&label),
-        ),
-        RetractSubject::Assertion { detach: false, .. } => (
-            "retract",
-            ActionLabel::Retract,
-            loc.retract_note(),
-            loc.action_retract_row(&label),
-        ),
     };
     rsx! {
         SidePanel {
-            title: loc.panel_title(title_id),
+            title: title(&form),
             open: true,
             close_label: loc.action_label(ActionLabel::Cancel),
-            onclose: move |()| retract.set(None),
-            footer: rsx! {},
-            {retract_panel(loc, &loc.panel_title(title_id), &label, accessible, &note, loc.action_button(action), reason, on_confirm)}
+            onclose: move |()| editing.set(None),
+            {body(form)}
         }
     }
 }

@@ -1153,24 +1153,28 @@ pub fn linked_tab(loc: &Localizer, records: &[LinkedRecordVm], onunlink: Callbac
 /// label))`), asks for the reason the merge is being retracted and confirms through `on_confirm`.
 pub fn unlink_side_panel(
     loc: &Localizer,
-    mut unlinking: Signal<Option<(String, String)>>,
+    unlinking: Signal<Option<(String, String)>>,
     reason: Signal<String>,
     on_confirm: Callback<()>,
 ) -> Element {
-    let Some((_, label)) = unlinking() else {
-        return rsx! {};
-    };
     let title = loc.panel_title("unlink");
-    rsx! {
-        SidePanel {
-            title: title.clone(),
-            open: true,
-            close_label: loc.action_label(ActionLabel::Cancel),
-            onclose: move |()| unlinking.set(None),
-            footer: rsx! {},
-            {retract_panel(loc, &title, &label, loc.action_unlink_row(&label), &loc.unlink_note(), loc.action_button(ActionLabel::Unlink), reason, on_confirm)}
-        }
-    }
+    edit_side_panel(
+        loc,
+        unlinking,
+        |_| title.clone(),
+        |(_, label)| {
+            retract_panel(
+                loc,
+                &title,
+                &label,
+                loc.action_unlink_row(&label),
+                &loc.unlink_note(),
+                loc.action_button(ActionLabel::Unlink),
+                reason,
+                on_confirm,
+            )
+        },
+    )
 }
 
 /// The Overview tab, read-first (`record-editing.html` §1/§2): the person's scalar identity record
@@ -1655,78 +1659,82 @@ fn timeline_row(loc: &Localizer, row: &TimelineRowVm) -> Element {
 fn edit_panel(
     state: &AppState,
     _detail: &PersonDetail,
-    mut editing: Signal<Option<EditForm>>,
+    editing: Signal<Option<EditForm>>,
     on_submit: Callback<(PersonEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
-    let Some(form) = editing() else {
-        return rsx! {};
-    };
-    let title = match &form {
-        EditForm::Name(None) => loc.action_label(ActionLabel::AddName),
-        EditForm::Name(Some(_)) => loc.panel_title("edit-name"),
-        EditForm::CiteName(_) => loc.panel_title("cite-name"),
-        EditForm::Fact(None) => loc.action_label(ActionLabel::AddFact),
-        EditForm::Fact(Some(_)) => loc.panel_title("edit-fact"),
-        EditForm::CiteFact(_) => loc.panel_title("cite-fact"),
-        EditForm::Association(None) => loc.action_label(ActionLabel::AddAssociation),
-        EditForm::Association(Some(_)) => loc.panel_title("edit-association"),
-        EditForm::Participation(_) => loc.panel_title("edit-participation"),
-        EditForm::Citation => loc.action_label(ActionLabel::AttachCitation),
-        EditForm::Media => loc.action_label(ActionLabel::AttachMedia),
-        EditForm::Note => loc.action_label(ActionLabel::AttachNote),
-        EditForm::Tag => loc.action_label(ActionLabel::AddTag),
-    };
     let human_id = human_id.to_owned();
-    rsx! {
-        SidePanel {
-            title,
-            open: true,
-            close_label: loc.action_label(ActionLabel::Cancel),
-            onclose: move |()| editing.set(None),
-            footer: rsx! {},
-            {match form {
-                EditForm::Name(seed) => rsx! { AddNameForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
-                EditForm::CiteName(name) => rsx! { CiteNameForm { human_id, name, onsubmit: move |edit| on_submit.call(edit) } },
-                EditForm::Fact(seed) => rsx! { AddFactForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
-                EditForm::CiteFact(fact) => rsx! { CiteFactForm { human_id, fact, onsubmit: move |edit| on_submit.call(edit) } },
-                EditForm::Association(seed) => rsx! { AssociationForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
-                EditForm::Participation(seed) => {
-                    let event_id = seed.event_id.clone();
-                    let participation_seed = ParticipationSeed {
-                        role: seed.role.clone(),
-                        age: seed.age.clone(),
-                        attributes: seed.attributes.clone(),
-                        notes: seed.notes.clone(),
-                        supersedes: Some(seed.assertion_id.clone()),
-                    };
-                    rsx! {
-                        ParticipationForm {
-                            seed: participation_seed,
-                            onsubmit: move |(fields, prov): (NewParticipation, ProvenanceDraft)| {
-                                on_submit.call((
-                                    PersonEdit::AssertParticipation {
-                                        human_id: human_id.clone(),
-                                        event_id: event_id.clone(),
-                                        role: fields.role,
-                                        age: fields.age,
-                                        attributes: fields.attributes,
-                                        notes: fields.notes,
-                                    },
-                                    prov,
-                                ));
-                            },
-                        }
+    edit_side_panel(
+        loc,
+        editing,
+        |form| match form {
+            EditForm::Name(None) => loc.action_label(ActionLabel::AddName),
+            EditForm::Name(Some(_)) => loc.panel_title("edit-name"),
+            EditForm::CiteName(_) => loc.panel_title("cite-name"),
+            EditForm::Fact(None) => loc.action_label(ActionLabel::AddFact),
+            EditForm::Fact(Some(_)) => loc.panel_title("edit-fact"),
+            EditForm::CiteFact(_) => loc.panel_title("cite-fact"),
+            EditForm::Association(None) => loc.action_label(ActionLabel::AddAssociation),
+            EditForm::Association(Some(_)) => loc.panel_title("edit-association"),
+            EditForm::Participation(_) => loc.panel_title("edit-participation"),
+            EditForm::Citation => loc.action_label(ActionLabel::AttachCitation),
+            EditForm::Media => loc.action_label(ActionLabel::AttachMedia),
+            EditForm::Note => loc.action_label(ActionLabel::AttachNote),
+            EditForm::Tag => loc.action_label(ActionLabel::AddTag),
+        },
+        |form| match form {
+            EditForm::Name(seed) => rsx! { AddNameForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
+            EditForm::CiteName(name) => {
+                rsx! { CiteNameForm { human_id, name, onsubmit: move |edit| on_submit.call(edit) } }
+            }
+            EditForm::Fact(seed) => rsx! { AddFactForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
+            EditForm::CiteFact(fact) => {
+                rsx! { CiteFactForm { human_id, fact, onsubmit: move |edit| on_submit.call(edit) } }
+            }
+            EditForm::Association(seed) => {
+                rsx! { AssociationForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } }
+            }
+            EditForm::Participation(seed) => {
+                let event_id = seed.event_id.clone();
+                let participation_seed = ParticipationSeed {
+                    role: seed.role.clone(),
+                    age: seed.age.clone(),
+                    attributes: seed.attributes.clone(),
+                    notes: seed.notes.clone(),
+                    supersedes: Some(seed.assertion_id.clone()),
+                };
+                rsx! {
+                    ParticipationForm {
+                        seed: participation_seed,
+                        onsubmit: move |(fields, prov): (NewParticipation, ProvenanceDraft)| {
+                            on_submit.call((
+                                PersonEdit::AssertParticipation {
+                                    human_id: human_id.clone(),
+                                    event_id: event_id.clone(),
+                                    role: fields.role,
+                                    age: fields.age,
+                                    attributes: fields.attributes,
+                                    notes: fields.notes,
+                                },
+                                prov,
+                            ));
+                        },
                     }
                 }
-                EditForm::Citation => rsx! { AttachForm { human_id, kind: EditForm::Citation, onsubmit: move |edit| on_submit.call(edit) } },
-                EditForm::Media => rsx! { AttachForm { human_id, kind: EditForm::Media, onsubmit: move |edit| on_submit.call(edit) } },
-                EditForm::Note => rsx! { AttachForm { human_id, kind: EditForm::Note, onsubmit: move |edit| on_submit.call(edit) } },
-                EditForm::Tag => rsx! { PersonTagForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
-            }}
-        }
-    }
+            }
+            EditForm::Citation => {
+                rsx! { AttachForm { human_id, kind: EditForm::Citation, onsubmit: move |edit| on_submit.call(edit) } }
+            }
+            EditForm::Media => {
+                rsx! { AttachForm { human_id, kind: EditForm::Media, onsubmit: move |edit| on_submit.call(edit) } }
+            }
+            EditForm::Note => {
+                rsx! { AttachForm { human_id, kind: EditForm::Note, onsubmit: move |edit| on_submit.call(edit) } }
+            }
+            EditForm::Tag => rsx! { PersonTagForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
+        },
+    )
 }
 
 /// The person "Add tag" side-panel form: a picker of existing tags by name → [`PersonEdit::Tag`]

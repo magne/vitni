@@ -753,35 +753,29 @@ pub fn dna_test_matches_table(loc: &Localizer, matches: &[DnaTestMatchVm]) -> El
 /// The DNA-test editing side panel: renders the form for the open [`DnaTestEditForm`], or nothing.
 fn dna_test_edit_panel(
     state: &AppState,
-    mut editing: Signal<Option<DnaTestEditForm>>,
+    editing: Signal<Option<DnaTestEditForm>>,
     on_submit: Callback<(DnaTestEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
-    let Some(form) = editing() else {
-        return rsx! {};
-    };
-    let title = match &form {
-        DnaTestEditForm::Haplogroup(None) => loc.action_label(ActionLabel::AddHaplogroup),
-        DnaTestEditForm::Haplogroup(Some(_)) => loc.panel_title("edit-haplogroup"),
-        DnaTestEditForm::Note => loc.action_label(ActionLabel::AttachNote),
-        DnaTestEditForm::Tag => loc.action_label(ActionLabel::AddTag),
-    };
     let human_id = human_id.to_owned();
-    rsx! {
-        SidePanel {
-            title,
-            open: true,
-            close_label: loc.action_label(ActionLabel::Cancel),
-            onclose: move |()| editing.set(None),
-            footer: rsx! {},
-            {match form {
-                DnaTestEditForm::Haplogroup(seed) => rsx! { DnaTestHaplogroupForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
-                DnaTestEditForm::Note => rsx! { DnaTestNoteForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
-                DnaTestEditForm::Tag => rsx! { DnaTestTagForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
-            }}
-        }
-    }
+    edit_side_panel(
+        loc,
+        editing,
+        |form| match form {
+            DnaTestEditForm::Haplogroup(None) => loc.action_label(ActionLabel::AddHaplogroup),
+            DnaTestEditForm::Haplogroup(Some(_)) => loc.panel_title("edit-haplogroup"),
+            DnaTestEditForm::Note => loc.action_label(ActionLabel::AttachNote),
+            DnaTestEditForm::Tag => loc.action_label(ActionLabel::AddTag),
+        },
+        |form| match form {
+            DnaTestEditForm::Haplogroup(seed) => {
+                rsx! { DnaTestHaplogroupForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } }
+            }
+            DnaTestEditForm::Note => rsx! { DnaTestNoteForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
+            DnaTestEditForm::Tag => rsx! { DnaTestTagForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
+        },
+    )
 }
 
 /// The "add haplogroup" form → [`DnaTestEdit::AddHaplogroup`]. `seed: None` adds a new haplogroup;

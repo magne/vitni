@@ -980,49 +980,49 @@ fn event_participant_row(
 /// The event editing side panel: renders the form for the open [`EventEditForm`], or nothing.
 fn event_edit_panel(
     state: &AppState,
-    mut editing: Signal<Option<EventEditForm>>,
+    editing: Signal<Option<EventEditForm>>,
     on_submit: Callback<(EventEdit, ProvenanceDraft)>,
     human_id: &str,
 ) -> Element {
     let loc = state.data_loc();
-    let Some(form) = editing() else {
-        return rsx! {};
-    };
-    let title = match &form {
-        EventEditForm::Address(None) => loc.action_label(ActionLabel::AddAddress),
-        EventEditForm::Address(Some(_)) => loc.panel_title("edit-address"),
-        EventEditForm::Participant(None) => loc.action_label(ActionLabel::AddParticipant),
-        EventEditForm::Participant(Some(_)) => loc.panel_title("edit-participation"),
-        EventEditForm::Citation => loc.action_label(ActionLabel::AttachCitation),
-        EventEditForm::Media => loc.action_label(ActionLabel::AttachMedia),
-        EventEditForm::Note => loc.action_label(ActionLabel::AttachNote),
-        EventEditForm::Tag => loc.action_label(ActionLabel::AddTag),
-    };
     let human_id = human_id.to_owned();
-    rsx! {
-        SidePanel {
-            title,
-            open: true,
-            close_label: loc.action_label(ActionLabel::Cancel),
-            onclose: move |()| editing.set(None),
-            footer: rsx! {},
-            {match form {
-                EventEditForm::Address(seed) => rsx! {
-                    AddressForm {
-                        seed: seed.map(|card| *card),
-                        onsubmit: move |(address, prov): (Address, ProvenanceDraft)| {
-                            on_submit.call((EventEdit::AddAddress { human_id: human_id.clone(), address }, prov));
-                        },
-                    }
-                },
-                EventEditForm::Participant(seed) => rsx! { EventAddParticipantForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } },
-                EventEditForm::Citation => rsx! { EventAttachForm { human_id, field: "citation".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
-                EventEditForm::Media => rsx! { EventAttachForm { human_id, field: "media".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
-                EventEditForm::Note => rsx! { EventAttachForm { human_id, field: "note".to_owned(), onsubmit: move |edit| on_submit.call(edit) } },
-                EventEditForm::Tag => rsx! { EventTagForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
-            }}
-        }
-    }
+    edit_side_panel(
+        loc,
+        editing,
+        |form| match form {
+            EventEditForm::Address(None) => loc.action_label(ActionLabel::AddAddress),
+            EventEditForm::Address(Some(_)) => loc.panel_title("edit-address"),
+            EventEditForm::Participant(None) => loc.action_label(ActionLabel::AddParticipant),
+            EventEditForm::Participant(Some(_)) => loc.panel_title("edit-participation"),
+            EventEditForm::Citation => loc.action_label(ActionLabel::AttachCitation),
+            EventEditForm::Media => loc.action_label(ActionLabel::AttachMedia),
+            EventEditForm::Note => loc.action_label(ActionLabel::AttachNote),
+            EventEditForm::Tag => loc.action_label(ActionLabel::AddTag),
+        },
+        |form| match form {
+            EventEditForm::Address(seed) => rsx! {
+                AddressForm {
+                    seed: seed.map(|card| *card),
+                    onsubmit: move |(address, prov): (Address, ProvenanceDraft)| {
+                        on_submit.call((EventEdit::AddAddress { human_id: human_id.clone(), address }, prov));
+                    },
+                }
+            },
+            EventEditForm::Participant(seed) => {
+                rsx! { EventAddParticipantForm { human_id, seed, onsubmit: move |edit| on_submit.call(edit) } }
+            }
+            EventEditForm::Citation => {
+                rsx! { EventAttachForm { human_id, field: "citation".to_owned(), onsubmit: move |edit| on_submit.call(edit) } }
+            }
+            EventEditForm::Media => {
+                rsx! { EventAttachForm { human_id, field: "media".to_owned(), onsubmit: move |edit| on_submit.call(edit) } }
+            }
+            EventEditForm::Note => {
+                rsx! { EventAttachForm { human_id, field: "note".to_owned(), onsubmit: move |edit| on_submit.call(edit) } }
+            }
+            EventEditForm::Tag => rsx! { EventTagForm { human_id, onsubmit: move |edit| on_submit.call(edit) } },
+        },
+    )
 }
 
 /// The participant form → [`EventEdit::AddParticipant`], at full person-screen parity (role · age ·
