@@ -52,8 +52,8 @@ name = "folded"
 
 [[step]]
 do = "click"
-at = { role = "button", text = "What it changed", index = 0 }
-label = "the newest run row's disclosure"
+at = { role = "button", text = "What the import from rerun.ged changed" }
+label = "the rerun.ged run row's disclosure"
 
 [[step]]
 do = "shot"
@@ -83,7 +83,7 @@ because = "the disclosure lists the records the run changed under its row"
 [[assert]]
 kind = "focus"
 shot = "records"
-element = { role = "button", text = "What it changed", index = 0 }
+element = { role = "button", text = "What the import from rerun.ged changed" }
 because = "focus stays on the disclosure that was activated"
 
 [[assert]]

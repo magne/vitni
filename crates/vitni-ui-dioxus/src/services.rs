@@ -661,22 +661,9 @@ pub async fn load_palette_rows(services: Services) -> Vec<(Category, Vec<RowVm>)
 pub async fn load_run_records(services: Services, run: ImportRunId, pages: u32) -> Result<RunRecordsVm, String> {
     let loc = services.localizer();
     let workspace = services.open().await.map_err(|error| loc.error(&error))?;
-    let mut all = RunRecordsVm {
-        records: Vec::new(),
-        more: false,
-    };
-    for _ in 0..pages.max(1) {
-        let offset = u32::try_from(all.records.len()).unwrap_or(u32::MAX);
-        let page = vitni_ui::load_run_records(&workspace, &loc, run, offset)
-            .await
-            .map_err(|error| loc.error(&error))?;
-        all.records.extend(page.records);
-        all.more = page.more;
-        if !all.more {
-            break;
-        }
-    }
-    Ok(all)
+    vitni_ui::load_run_records(&workspace, &loc, run, pages)
+        .await
+        .map_err(|error| loc.error(&error))
 }
 
 /// Loads what the import run `run` changed in one of its records, newest first.

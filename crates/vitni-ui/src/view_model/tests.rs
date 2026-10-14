@@ -1,7 +1,7 @@
 use super::{
     AttachedRefVm, CitationDetail, DEFAULT_TAG_COLOR, DEFAULT_TAG_PRIORITY, DashboardStats, DashboardVm, DataQualityVm,
-    MediaRefVm, PersonDetail, PersonDraft, ProvenanceDraft, RecordDraft, RunRecordsVm, TagDetail, TagDraft,
-    TimelineKind, citation_row, citation_tabs, collapse_history, evidence_axes, person_row, person_tabs,
+    MediaRefVm, PersonDetail, PersonDraft, ProvenanceDraft, RecordDraft, RunDisclosureVm, RunRecordsVm, TagDetail,
+    TagDraft, TimelineKind, citation_row, citation_tabs, collapse_history, evidence_axes, person_row, person_tabs,
 };
 use crate::i18n::Localizer;
 use crate::presentation::ConfidenceLevel;
@@ -98,8 +98,11 @@ fn dashboard_renders_an_import_run_row_and_labels_records_by_name() {
     );
     assert_eq!(
         vm.recent[0].run,
-        Some(run_ref(Some(3)).id),
-        "the row names its run, which discloses its records on demand"
+        Some(RunDisclosureVm {
+            id: run_ref(Some(3)).id,
+            label: "What the import from tree.ged changed".to_owned(),
+        }),
+        "the row names its run, which discloses its records on demand, by its file"
     );
     assert_eq!(vm.recent[1].run, None, "a keyboard change names no run");
     assert!(vm.recent[0].record.is_none(), "an import run spans many records");

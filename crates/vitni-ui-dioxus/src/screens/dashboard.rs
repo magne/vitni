@@ -133,8 +133,10 @@ fn activity_feed(loc: &Localizer, recent: &[ActivityVm]) -> Element {
     }
     rsx! {
         div { class: "timeline", style: "margin-top:8px",
-            for row in recent.iter() {
-                div { class: "tl-item",
+            for (index, row) in recent.iter().enumerate() {
+                div {
+                    key: "{activity_row_key(index, row)}",
+                    class: "tl-item",
                     div { class: "tl-when", "{row.when}" }
                     div { class: "tl-what",
                         if let Some(value) = &row.value {
@@ -164,8 +166,12 @@ fn activity_feed(loc: &Localizer, recent: &[ActivityVm]) -> Element {
                         }
                     }
                     div { class: "tl-who", "{row.who}" }
-                    if let Some(run) = row.run {
-                        RunDisclosure { run, label: loc.history_run_changes_toggle() }
+                    if let Some(run) = &row.run {
+                        RunDisclosure {
+                            run: run.id,
+                            label: loc.history_run_changes_toggle(),
+                            aria_label: run.label.clone(),
+                        }
                     }
                 }
             }
@@ -173,10 +179,19 @@ fn activity_feed(loc: &Localizer, recent: &[ActivityVm]) -> Element {
     }
 }
 
+/// The key of an activity row: a run row by its run, so an open disclosure stays with its run when
+/// newer activity shifts the feed; any other row by its position.
+fn activity_row_key(index: usize, row: &ActivityVm) -> String {
+    match &row.run {
+        Some(run) => format!("run-{}", run.id),
+        None => format!("row-{index}"),
+    }
+}
+
 /// An import-run row's disclosure: closed, it reads nothing; open, it lists the records the run
 /// changed, read by run so a run of any size lists them all (#588).
 #[component]
-fn RunDisclosure(run: ImportRunId, label: String) -> Element {
+fn RunDisclosure(run: ImportRunId, label: String, aria_label: String) -> Element {
     let mut open = use_signal(|| false);
     rsx! {
         div { class: "row-actions", style: "margin-top:4px",
@@ -184,6 +199,7 @@ fn RunDisclosure(run: ImportRunId, label: String) -> Element {
                 class: "btn sm ghost",
                 r#type: "button",
                 aria_expanded: if open() { "true" } else { "false" },
+                "aria-label": "{aria_label}",
                 onclick: move |_| open.toggle(),
                 if open() { "▾ {label}" } else { "▸ {label}" }
             }

@@ -7,7 +7,7 @@ use dioxus::prelude::*;
 use vitni_app::{DatasetId, DecidableKind, ImportRunId, RecentItem, RunResume};
 use vitni_ui::{
     ActivityVm, Category, DashboardStats, DashboardVm, DataQualityVm, HistoryEntryVm, JumpVm, Localizer, QueuedMatchVm,
-    RecordRef, ResumeVm, RunRecordVm, RunRecordsVm,
+    RecordRef, ResumeVm, RunDisclosureVm, RunRecordVm, RunRecordsVm,
 };
 use vitni_ui_dioxus::components::{HistoryEntry, HistoryTimeline, RunChanges};
 use vitni_ui_dioxus::screens::{dashboard_view, run_record_changes_list, run_records_list};
@@ -230,7 +230,10 @@ fn dashboard() -> Element {
                 who: "gedcom-import (software agent)".to_owned(),
                 record: None,
                 count: Some("142 records".to_owned()),
-                run: Some(ImportRunId::from_uuid(uuid::Uuid::from_u128(7))),
+                run: Some(RunDisclosureVm {
+                    id: ImportRunId::from_uuid(uuid::Uuid::from_u128(7)),
+                    label: "What the import from tree.ged changed".to_owned(),
+                }),
                 resume: None,
                 value: None,
             },
@@ -240,7 +243,10 @@ fn dashboard() -> Element {
                 who: "gedcom-import (software agent)".to_owned(),
                 record: None,
                 count: Some("interrupted".to_owned()),
-                run: Some(ImportRunId::from_uuid(uuid::Uuid::from_u128(8))),
+                run: Some(RunDisclosureVm {
+                    id: ImportRunId::from_uuid(uuid::Uuid::from_u128(8)),
+                    label: "What the import from big.ged changed".to_owned(),
+                }),
                 resume: Some(ResumeVm {
                     run: RunResume {
                         plugin: "gedcom-import".to_owned(),
@@ -517,6 +523,11 @@ fn an_import_run_row_on_the_dashboard_offers_its_records_behind_a_closed_disclos
     assert!(
         html.contains("▸ What it changed"),
         "named like the History tab's:\n{html}"
+    );
+    assert!(
+        html.contains(r#"aria-label="What the import from tree.ged changed""#)
+            && html.contains(r#"aria-label="What the import from big.ged changed""#),
+        "each run's disclosure names its file, so the two read apart:\n{html}"
     );
     assert!(
         !html.contains("run-records"),

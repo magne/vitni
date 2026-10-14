@@ -103,7 +103,7 @@ pub use view_model::{
     PlaceGeometryVm, PlaceHierarchyVm, PlaceLinkVm, PlaceMarkerVm, PlaceNameVm, PlaceRowStatus, PlaceRowVm,
     PlaceSuccessionVm, PluginGrantVm, ProvenanceDraft, QueuedMatchVm, RecordDraft, RecordLink, RelationshipVm,
     RepositoryDetail, RepositoryDraft, RepositoryLinkVm, RepositoryUrlVm, ResearchNoteDetail, ResearchNoteDraft,
-    ResumeVm, RowOutcome, RunOptionVm, RunRecordVm, RunRecordsVm, SUCCESSION_KINDS, SharedAncestorVm,
+    ResumeVm, RowOutcome, RunDisclosureVm, RunOptionVm, RunRecordVm, RunRecordsVm, SUCCESSION_KINDS, SharedAncestorVm,
     ShortcutBindingVm, ShortcutsVm, SimilarHitVm, SimilarVm, SourceAttributeVm, SourceCitationVm, SourceDetail,
     SourceDraft, SourceHeldVm, SourceReliabilityVm, SubjectVm, TIME_SLIDER_RANGE, TagDetail, TagDraft, TagUsageGroupVm,
     TimelineKind, TimelineRowVm, TranslationVm, TrustStoreVm, UsingRecordVm, ZOOM_RANGE, citation_row, citation_tabs,

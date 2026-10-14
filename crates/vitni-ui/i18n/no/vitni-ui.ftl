@@ -218,6 +218,7 @@ history-value-no-restrictions = ingen
 history-import-run-changes-toggle = Hva den endret
 # På oversikten viser en imports utvidelse postene den endret; hver post har sin egen utvidelse med
 # endringene, navngitt etter posten. Flere poster lastes en side om gangen.
+run-changes-toggle-aria = Hva importen fra { $source } endret
 run-record-changes-toggle = Hva den endret i { $record }
 run-records-more = Vis flere
 run-records-empty = Den endret ingen poster.

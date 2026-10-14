@@ -2187,6 +2187,12 @@ impl Localizer {
         fl!(self.loader, "history-import-run-changes-toggle")
     }
 
+    /// The accessible name of an import run's Dashboard disclosure, naming the run's file.
+    #[must_use]
+    pub fn run_changes_toggle_aria(&self, source: &str) -> String {
+        fl!(self.loader, "run-changes-toggle-aria", source = source)
+    }
+
     /// The accessible name of the disclosure that shows what an import run changed in one record.
     #[must_use]
     pub fn run_record_changes_toggle(&self, record: &str) -> String {

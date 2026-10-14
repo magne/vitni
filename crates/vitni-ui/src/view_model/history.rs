@@ -150,7 +150,7 @@ pub struct ActivityVm {
     pub count: Option<String>,
     /// For an import-run row, its run, whose records the row discloses on demand ([`RunRecordsVm`]):
     /// read by run rather than from the feed's window, which may hold only part of a large run.
-    pub run: Option<ImportRunId>,
+    pub run: Option<RunDisclosureVm>,
     /// The localized value the change asserted, shown after `what`. The feed never names what a
     /// correction replaced: its window may not hold the replaced assertion.
     pub value: Option<String>,
@@ -185,7 +185,10 @@ impl ActivityVm {
         let (count, run, resume) = match &entry.detail {
             Some(ActivityDetail::ImportRun { run, count, .. }) => (
                 Some(run_count(run, *count, loc)),
-                Some(run.id),
+                Some(RunDisclosureVm {
+                    id: run.id,
+                    label: loc.run_changes_toggle_aria(&run.source_label),
+                }),
                 ResumeVm::of(run.resume.as_ref(), &run.source_label, loc),
             ),
             Some(ActivityDetail::Fact { .. } | ActivityDetail::IdentityDecision { .. }) | None => (None, None, None),
@@ -201,6 +204,16 @@ impl ActivityVm {
             value: entry.value.as_ref().map(|value| loc.change_value(value)),
         }
     }
+}
+
+/// The disclosure on an import run's Dashboard row: the run it reads records by, and its accessible
+/// name, which names the run's file so two runs' disclosures read apart.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunDisclosureVm {
+    /// The run.
+    pub id: ImportRunId,
+    /// The disclosure's accessible name.
+    pub label: String,
 }
 
 /// One record an import run changed, as the Dashboard's run row discloses it.

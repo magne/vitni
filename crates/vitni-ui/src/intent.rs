@@ -518,8 +518,9 @@ pub async fn dispatch_decide_match(
 /// How many of an import run's records [`load_run_records`] reads at a time.
 const RUN_RECORDS_PAGE: u32 = 50;
 
-/// Reads the page of the records the import run `run` changed that starts at `offset`, labelling
-/// people by their display names: what an import-run row on the Dashboard discloses.
+/// Reads the first `pages` pages of the records the import run `run` changed, in one read, labelling
+/// people by their display names: what an import-run row on the Dashboard discloses, *Show more*
+/// adding a page.
 ///
 /// # Errors
 ///
@@ -528,9 +529,10 @@ pub async fn load_run_records(
     workspace: &Workspace,
     loc: &Localizer,
     run: ImportRunId,
-    offset: u32,
+    pages: u32,
 ) -> Result<RunRecordsVm, AppError> {
-    let page = run_records(workspace, run, offset, RUN_RECORDS_PAGE).await?;
+    let limit = pages.max(1).saturating_mul(RUN_RECORDS_PAGE);
+    let page = run_records(workspace, run, 0, limit).await?;
     let names = person_names(workspace, &RunRecordsVm::persons_named(&page)).await?;
     Ok(RunRecordsVm::build(&page, &names, loc))
 }
