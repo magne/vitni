@@ -66,6 +66,12 @@ change ([`issue-tracking.md`](issue-tracking.md) §4). Check here before filing 
   (host-api 0.21.0), but `source-dto`/`citation-dto`/`place-dto` have no `media` field at all (no
   exporter reads media off those three today); widening them is deferred until a real consumer appears
   (YAGNI).
+- **Repository carries no media refs (#584).** Neither interchange format has a slot: the Gramps DTD's
+  `repository` is `(rname, type, address*, url*, noteref*, tagref*)` and the GEDCOM 7 `REPO` record has
+  no `OBJE`, so repository media would be vitni-only data that every export drops. Media on a repository
+  (a building photo, a logo) is not evidence for any conclusion, and the useful cases are already
+  covered: a finding aid or reading-room page is a repository `url` or note, and a digitised catalogue is
+  a Source with its own media.
 - **External ids have no frontend entry point** — person `add_external_id` (module-level, not even
   root-exported) and `add_family_external_id` are used only inside `import.rs` for resolve-or-create.
   External ids are importer bookkeeping, not user-editable data.
