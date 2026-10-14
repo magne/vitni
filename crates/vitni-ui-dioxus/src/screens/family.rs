@@ -952,43 +952,41 @@ pub struct ChildRemoval {
 /// signals and callback are passed in), so the SSR tests render it without `AppCtx`.
 pub fn child_removal_side_panel(
     loc: &Localizer,
-    mut removing: Signal<Option<ChildRemoval>>,
+    removing: Signal<Option<ChildRemoval>>,
     reason: Signal<String>,
     on_confirm: Callback<()>,
 ) -> Element {
-    let Some(ChildRemoval { label, .. }) = removing() else {
-        return rsx! {};
-    };
     let mut reason = reason;
     let title = loc.panel_title("remove-child");
-    rsx! {
-        SidePanel {
-            title: title.clone(),
-            open: true,
-            close_label: loc.action_label(ActionLabel::Cancel),
-            onclose: move |()| removing.set(None),
-            div { class: "stack",
-                h3 { style: "font-size:var(--fs-lg);margin:0", "{title}" }
-                div { class: "muted", "{label}" }
-                div { class: "field",
-                    label { r#for: "remove-child-reason", "{loc.provenance_reason_label()}" }
-                    TextInput {
-                        id: "remove-child-reason",
-                        name: "remove-child-reason",
-                        value: "{reason}",
-                        oninput: move |event: FormEvent| reason.set(event.value()),
+    edit_side_panel(
+        loc,
+        removing,
+        |_| title.clone(),
+        |ChildRemoval { label, .. }| {
+            rsx! {
+                div { class: "stack",
+                    h3 { style: "font-size:var(--fs-lg);margin:0", "{title}" }
+                    div { class: "muted", "{label}" }
+                    div { class: "field",
+                        label { r#for: "remove-child-reason", "{loc.provenance_reason_label()}" }
+                        TextInput {
+                            id: "remove-child-reason",
+                            name: "remove-child-reason",
+                            value: "{reason}",
+                            oninput: move |event: FormEvent| reason.set(event.value()),
+                        }
+                    }
+                    div { class: "muted", style: "font-size:var(--fs-sm)", "{loc.remove_child_note()}" }
+                    Button {
+                        label: loc.action_button(ActionLabel::Remove),
+                        variant: ButtonVariant::Danger,
+                        aria_label: loc.action_remove_row(&label),
+                        onclick: move |_| on_confirm.call(()),
                     }
                 }
-                div { class: "muted", style: "font-size:var(--fs-sm)", "{loc.remove_child_note()}" }
-                Button {
-                    label: loc.action_button(ActionLabel::Remove),
-                    variant: ButtonVariant::Danger,
-                    aria_label: loc.action_remove_row(&label),
-                    onclick: move |_| on_confirm.call(()),
-                }
             }
-        }
-    }
+        },
+    )
 }
 
 /// A child row's actions cell — the one collection row carrying two distinct undo verbs, so it is

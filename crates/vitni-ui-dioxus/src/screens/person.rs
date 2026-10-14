@@ -1153,23 +1153,28 @@ pub fn linked_tab(loc: &Localizer, records: &[LinkedRecordVm], onunlink: Callbac
 /// label))`), asks for the reason the merge is being retracted and confirms through `on_confirm`.
 pub fn unlink_side_panel(
     loc: &Localizer,
-    mut unlinking: Signal<Option<(String, String)>>,
+    unlinking: Signal<Option<(String, String)>>,
     reason: Signal<String>,
     on_confirm: Callback<()>,
 ) -> Element {
-    let Some((_, label)) = unlinking() else {
-        return rsx! {};
-    };
     let title = loc.panel_title("unlink");
-    rsx! {
-        SidePanel {
-            title: title.clone(),
-            open: true,
-            close_label: loc.action_label(ActionLabel::Cancel),
-            onclose: move |()| unlinking.set(None),
-            {retract_panel(loc, &title, &label, loc.action_unlink_row(&label), &loc.unlink_note(), loc.action_button(ActionLabel::Unlink), reason, on_confirm)}
-        }
-    }
+    edit_side_panel(
+        loc,
+        unlinking,
+        |_| title.clone(),
+        |(_, label)| {
+            retract_panel(
+                loc,
+                &title,
+                &label,
+                loc.action_unlink_row(&label),
+                &loc.unlink_note(),
+                loc.action_button(ActionLabel::Unlink),
+                reason,
+                on_confirm,
+            )
+        },
+    )
 }
 
 /// The Overview tab, read-first (`record-editing.html` §1/§2): the person's scalar identity record
