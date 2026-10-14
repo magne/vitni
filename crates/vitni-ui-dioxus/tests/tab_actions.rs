@@ -7,7 +7,7 @@
 use dioxus::prelude::*;
 use vitni_app::TagRef;
 use vitni_ui::{ActionLabel, DetailTab, HistoryEntryVm, Localizer};
-use vitni_ui_dioxus::screens::{TabActionTarget, history_panel, tab_frame, tags_panel};
+use vitni_ui_dioxus::screens::{SharedTabCtx, TabActionTarget, shared_tab, tab_frame, tags_panel};
 
 /// The stand-in side-panel form the test's `TabActionTarget::Form` arms — the tests never open it,
 /// they only assert the bar that would arm it.
@@ -182,11 +182,12 @@ fn a_screen_owned_tab_gets_no_explanation_from_the_frame() {
     }
 }
 
-/// The real History tab, frame and body together: `history_panel` used to carry its own
-/// `.section-note`, so once the frame emits one the two must not both fire.
-#[test]
-fn the_real_history_tab_renders_exactly_one_explanation() {
-    fn history_tab() -> Element {
+/// Renders the shipped History tab through [`shared_tab`], the arm every screen dispatches it by:
+/// `populated` gives it one entry, and `undoable` is whether the screen wires an undo callback —
+/// which also picks the tab's note (Tag, the one aggregate without, gets its own; #578).
+fn render_history(populated: bool, undoable: bool) -> String {
+    #[component]
+    fn History(populated: bool, undoable: bool) -> Element {
         let loc = loc();
         let tab = DetailTab {
             id: "history",
@@ -194,61 +195,67 @@ fn the_real_history_tab_renders_exactly_one_explanation() {
             count: None,
             action: None,
         };
-        let entries = vec![HistoryEntryVm {
-            when: "2026-06-22 14:35".to_owned(),
-            what: "Name asserted".to_owned(),
-            who: "magne".to_owned(),
-            why: None,
-            assertion_id: "a-1".to_owned(),
-            can_undo: true,
-            count: None,
-            evidence: None,
-            children: Vec::new(),
-            value: None,
-            replaced: None,
-        }];
-        tab_frame::<TestForm>(
-            &loc,
-            &tab,
-            TabActionTarget::None,
-            None,
-            history_panel(&loc, &entries, None),
-        )
+        let entries = if populated {
+            vec![HistoryEntryVm {
+                when: "2026-06-22 14:35".to_owned(),
+                what: "Name asserted".to_owned(),
+                who: "magne".to_owned(),
+                why: None,
+                assertion_id: "a-1".to_owned(),
+                can_undo: true,
+                count: None,
+                evidence: None,
+                children: Vec::new(),
+                value: None,
+                replaced: None,
+            }]
+        } else {
+            Vec::new()
+        };
+        let on_undo = use_callback(|_assertion_id: String| {});
+        let ctx = SharedTabCtx::<TestForm> {
+            forms: None,
+            research_notes: None,
+            history: &entries,
+            on_undo: undoable.then_some(on_undo),
+        };
+        shared_tab(&loc, &tab, &ctx).unwrap_or_else(|| rsx! { div { "DECLINED" } })
     }
+    let mut vdom = VirtualDom::new_with_props(History, HistoryProps { populated, undoable });
+    vdom.rebuild_in_place();
+    dioxus_ssr::render(&vdom)
+}
 
-    let html = render(history_tab);
-    assert_eq!(
-        html.matches(r#"class="section-note""#).count(),
-        1,
-        "the frame is the only explanation site:\n{html}"
-    );
-    assert!(html.contains("Name asserted"), "the timeline still renders:\n{html}");
+/// The real History tab, note and body together: `history_panel` used to carry its own
+/// `.section-note`, so once the tab emits one the two must not both fire — with or without undo.
+#[test]
+fn the_real_history_tab_renders_exactly_one_explanation() {
+    for undoable in [true, false] {
+        let html = render_history(true, undoable);
+        assert_eq!(
+            html.matches(r#"class="section-note""#).count(),
+            1,
+            "the tab is the only explanation site (undoable: {undoable}):\n{html}"
+        );
+        assert!(html.contains("Name asserted"), "the timeline still renders:\n{html}");
+    }
 }
 
 /// An empty History tab is the case the old placement lost: `history_panel` early-returns its empty
-/// state, so a note inside it never reached a record with no changes yet.
+/// state, so a note inside it never reached a record with no changes yet. Tag's own note too.
 #[test]
 fn an_empty_history_tab_still_explains_itself() {
-    fn empty_history_tab() -> Element {
-        let loc = loc();
-        let tab = DetailTab {
-            id: "history",
-            label: String::new(),
-            count: None,
-            action: None,
-        };
-        tab_frame::<TestForm>(&loc, &tab, TabActionTarget::None, None, history_panel(&loc, &[], None))
+    for undoable in [true, false] {
+        let html = render_history(false, undoable);
+        assert!(
+            html.contains(r#"class="section-note""#),
+            "an empty History tab explains what it will hold (undoable: {undoable}):\n{html}"
+        );
+        assert!(
+            html.contains("audit trail"),
+            "and it is still the audit-trail wording:\n{html}"
+        );
     }
-
-    let html = render(empty_history_tab);
-    assert!(
-        html.contains(r#"class="section-note""#),
-        "an empty History tab explains what it will hold:\n{html}"
-    );
-    assert!(
-        html.contains("audit trail"),
-        "and it is still the audit-trail wording:\n{html}"
-    );
 }
 
 /// The Tags tab's chips read a size larger than a table cell's chips, which is a class on their

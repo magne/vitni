@@ -380,7 +380,8 @@ pub struct SharedTabCtx<'a, E> {
     /// The audit timeline. Not optional: all 13 screens carry History.
     pub history: &'a [HistoryEntryVm],
     /// Undoes an assertion from the History tab, forwarded to [`history_panel`] as it stands.
-    /// `None` for an aggregate with no retraction (Tag).
+    /// `None` for an aggregate with no retraction (Tag), which also gives the tab Tag's display-only
+    /// note in place of the shared one that promises an undo (#578).
     pub on_undo: Option<Callback<String>>,
 }
 
