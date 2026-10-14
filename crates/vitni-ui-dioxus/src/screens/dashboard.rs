@@ -33,10 +33,16 @@ pub fn DashboardScreen() -> Element {
     });
     // The dashboard is the workspace overview, rendered at the root of the work area (not inside a
     // record-tab body), matching `app-shell.html`.
-    match &*data.read_unchecked() {
-        None => rsx! { p { class: "loading", "{loading}" } },
-        Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },
-        Some(ScreenData::Loaded(IntentOutcome::Dashboard(dashboard))) => {
+    match detail_state(data.read_unchecked().as_ref(), |outcome| {
+        if let IntentOutcome::Dashboard(found) = outcome {
+            Some(found.as_ref())
+        } else {
+            None
+        }
+    }) {
+        DetailState::Loading => rsx! { p { class: "loading", "{loading}" } },
+        DetailState::Error(message) => rsx! { p { class: "empty", "{message}" } },
+        DetailState::Ready(dashboard) => {
             let recent = nav.recent.read().clone();
             let quality = quality.read_unchecked();
             let data_quality = match &*quality {
@@ -45,30 +51,7 @@ pub fn DashboardScreen() -> Element {
             };
             dashboard_view(state.data_loc(), &recent, dashboard, data_quality)
         }
-        Some(ScreenData::Loaded(
-            IntentOutcome::List(_)
-            | IntentOutcome::DataQuality(_)
-            | IntentOutcome::Detail(_)
-            | IntentOutcome::CitationDetail(_)
-            | IntentOutcome::FamilyDetail(_)
-            | IntentOutcome::EventDetail(_)
-            | IntentOutcome::PlaceDetail(_)
-            | IntentOutcome::SourceDetail(_)
-            | IntentOutcome::RepositoryDetail(_)
-            | IntentOutcome::NotFound { .. }
-            | IntentOutcome::MediaDetail(_)
-            | IntentOutcome::NoteDetail(_)
-            | IntentOutcome::TagDetail(_)
-            | IntentOutcome::DnaTestDetail(_)
-            | IntentOutcome::DnaMatchDetail(_)
-            | IntentOutcome::Pedigree(_)
-            | IntentOutcome::Relationship(_)
-            | IntentOutcome::MatchQueue(_)
-            | IntentOutcome::MatchCompare(_)
-            | IntentOutcome::Similar(_)
-            | IntentOutcome::ResearchNoteDetail(_)
-            | IntentOutcome::Geography(_),
-        )) => rsx! {},
+        DetailState::NotFound(_) | DetailState::Other => rsx! {},
     }
 }
 

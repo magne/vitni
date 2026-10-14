@@ -14,8 +14,8 @@ use vitni_ui::{Category, Intent, IntentOutcome, ListQuery, RecordRef, RowVm};
 
 use crate::app::AppCtx;
 use crate::master_detail::{ListChrome, ListPane, SortChrome};
-use crate::screens::use_record_step;
-use crate::services::{ScreenData, load_screen};
+use crate::screens::{DetailState, detail_state, use_record_step};
+use crate::services::load_screen;
 use crate::shell::nav_state::{NavState, entity_category};
 
 /// The Explorer column. Renders the active entity category's list, or nothing when the active
@@ -81,10 +81,16 @@ fn ExplorerList(category: Category) -> Element {
         async move { load_screen(services, intent).await }
     });
     use_record_step(nav, category, list, query, selected);
-    match &*list.read_unchecked() {
-        None => rsx! { p { class: "loading", "{loading}" } },
-        Some(ScreenData::Error(message)) => rsx! { p { class: "empty", "{message}" } },
-        Some(ScreenData::Loaded(IntentOutcome::List(rows))) => rsx! {
+    match detail_state(list.read_unchecked().as_ref(), |outcome| {
+        if let IntentOutcome::List(rows) = outcome {
+            Some(rows)
+        } else {
+            None
+        }
+    }) {
+        DetailState::Loading => rsx! { p { class: "loading", "{loading}" } },
+        DetailState::Error(message) => rsx! { p { class: "empty", "{message}" } },
+        DetailState::Ready(rows) => rsx! {
             ListPane {
                 rows: rows.clone(),
                 query,
@@ -97,30 +103,7 @@ fn ExplorerList(category: Category) -> Element {
                 }),
             }
         },
-        Some(ScreenData::Loaded(
-            IntentOutcome::Detail(_)
-            | IntentOutcome::CitationDetail(_)
-            | IntentOutcome::FamilyDetail(_)
-            | IntentOutcome::EventDetail(_)
-            | IntentOutcome::PlaceDetail(_)
-            | IntentOutcome::NotFound { .. }
-            | IntentOutcome::Dashboard(_)
-            | IntentOutcome::DataQuality(_)
-            | IntentOutcome::SourceDetail(_)
-            | IntentOutcome::RepositoryDetail(_)
-            | IntentOutcome::MediaDetail(_)
-            | IntentOutcome::NoteDetail(_)
-            | IntentOutcome::TagDetail(_)
-            | IntentOutcome::DnaTestDetail(_)
-            | IntentOutcome::DnaMatchDetail(_)
-            | IntentOutcome::Pedigree(_)
-            | IntentOutcome::Relationship(_)
-            | IntentOutcome::MatchQueue(_)
-            | IntentOutcome::MatchCompare(_)
-            | IntentOutcome::Similar(_)
-            | IntentOutcome::ResearchNoteDetail(_)
-            | IntentOutcome::Geography(_),
-        )) => rsx! {},
+        DetailState::NotFound(_) | DetailState::Other => rsx! {},
     }
 }
 

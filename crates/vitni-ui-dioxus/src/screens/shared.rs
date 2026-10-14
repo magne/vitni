@@ -183,6 +183,65 @@ pub fn use_detail_tab(category: Category, human_id: &str) -> Signal<usize> {
     active
 }
 
+/// Where a single-outcome screen's load stands, as [`detail_state`] classifies it.
+#[derive(Debug)]
+pub enum DetailState<'a, T: ?Sized> {
+    /// The load has not resolved yet.
+    Loading,
+    /// The load failed with this localized message.
+    Error(&'a str),
+    /// The requested record id was not found.
+    NotFound(&'a str),
+    /// The screen's own outcome loaded.
+    Ready(&'a T),
+    /// Another screen's outcome loaded — the screen renders nothing.
+    Other,
+}
+
+/// Classifies a screen's loaded data, so each screen (a detail pane, the dashboard, the Explorer list)
+/// names only its own [`IntentOutcome`].
+///
+/// The exhaustive listing of [`IntentOutcome`] lives here alone: adding a variant fails to compile in
+/// this one place rather than in every screen. `pick` returns the screen's own view-model when the
+/// loaded outcome is its variant, and `None` otherwise.
+pub fn detail_state<'a, T: ?Sized>(
+    data: Option<&'a ScreenData>,
+    pick: impl Fn(&'a IntentOutcome) -> Option<&'a T>,
+) -> DetailState<'a, T> {
+    let Some(data) = data else {
+        return DetailState::Loading;
+    };
+    let outcome = match data {
+        ScreenData::Error(message) => return DetailState::Error(message),
+        ScreenData::Loaded(outcome) => outcome,
+    };
+    match outcome {
+        IntentOutcome::NotFound { human_id } => DetailState::NotFound(human_id),
+        IntentOutcome::Dashboard(_)
+        | IntentOutcome::DataQuality(_)
+        | IntentOutcome::List(_)
+        | IntentOutcome::Detail(_)
+        | IntentOutcome::CitationDetail(_)
+        | IntentOutcome::FamilyDetail(_)
+        | IntentOutcome::EventDetail(_)
+        | IntentOutcome::PlaceDetail(_)
+        | IntentOutcome::SourceDetail(_)
+        | IntentOutcome::RepositoryDetail(_)
+        | IntentOutcome::MediaDetail(_)
+        | IntentOutcome::NoteDetail(_)
+        | IntentOutcome::ResearchNoteDetail(_)
+        | IntentOutcome::TagDetail(_)
+        | IntentOutcome::DnaTestDetail(_)
+        | IntentOutcome::DnaMatchDetail(_)
+        | IntentOutcome::Pedigree(_)
+        | IntentOutcome::Relationship(_)
+        | IntentOutcome::MatchQueue(_)
+        | IntentOutcome::MatchCompare(_)
+        | IntentOutcome::Similar(_)
+        | IntentOutcome::Geography(_) => pick(outcome).map_or(DetailState::Other, DetailState::Ready),
+    }
+}
+
 /// A clickable link to another record's detail screen: opens it as a tab and navigates to its
 /// category (resolving `NavState` from context, so any screen can drop it in). Shared by the
 /// dashboard feed/jump-back and every detail tab that references a record.
@@ -1446,4 +1505,65 @@ pub fn source_media_type_choices() -> [SourceMediaType; 6] {
         SourceMediaType::Manuscript,
         SourceMediaType::Photo,
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn pick_list(outcome: &IntentOutcome) -> Option<&Vec<RowVm>> {
+        if let IntentOutcome::List(rows) = outcome {
+            Some(rows)
+        } else {
+            None
+        }
+    }
+
+    fn pick_nothing(_: &IntentOutcome) -> Option<&Vec<RowVm>> {
+        None
+    }
+
+    #[test]
+    fn unloaded_data_is_loading() {
+        let DetailState::Loading = detail_state(None, pick_list) else {
+            unreachable!("expected Loading");
+        };
+    }
+
+    #[test]
+    fn an_error_carries_its_message() {
+        let data = Some(ScreenData::Error("boom".to_owned()));
+        let DetailState::Error(message) = detail_state(data.as_ref(), pick_list) else {
+            unreachable!("expected Error");
+        };
+        assert_eq!(message, "boom");
+    }
+
+    #[test]
+    fn not_found_carries_the_looked_up_id() {
+        let data = Some(ScreenData::Loaded(IntentOutcome::NotFound {
+            human_id: "N0007".to_owned(),
+        }));
+        let DetailState::NotFound(id) = detail_state(data.as_ref(), pick_list) else {
+            unreachable!("expected NotFound");
+        };
+        assert_eq!(id, "N0007");
+    }
+
+    #[test]
+    fn the_screens_own_outcome_is_ready() {
+        let data = Some(ScreenData::Loaded(IntentOutcome::List(Vec::new())));
+        let DetailState::Ready(rows) = detail_state(data.as_ref(), pick_list) else {
+            unreachable!("expected Ready");
+        };
+        assert_eq!(rows, &Vec::<RowVm>::new());
+    }
+
+    #[test]
+    fn another_screens_outcome_is_other() {
+        let data = Some(ScreenData::Loaded(IntentOutcome::List(Vec::new())));
+        let DetailState::Other = detail_state(data.as_ref(), pick_nothing) else {
+            unreachable!("expected Other");
+        };
+    }
 }
