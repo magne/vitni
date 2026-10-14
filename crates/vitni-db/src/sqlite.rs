@@ -679,6 +679,16 @@ impl SqliteStore {
         crate::record_origins::sqlite::assertion_origins(&self.pool, kind, aggregate_id).await
     }
 
+    /// The aggregates one import run wrote to, the last first.
+    pub(crate) async fn run_records(
+        &self,
+        run: vitni_core::ids::ImportRunId,
+        offset: u32,
+        limit: u32,
+    ) -> Result<Vec<crate::record_origins::RunRecordRow>, DbError> {
+        crate::record_origins::sqlite::run_records(&self.pool, run, offset, limit).await
+    }
+
     /// How many of `records` each dataset holds as an aggregate of `kind` (ADR 0037 §3).
     pub(crate) async fn origin_overlap(
         &self,
