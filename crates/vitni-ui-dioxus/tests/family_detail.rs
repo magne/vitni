@@ -407,9 +407,12 @@ fn the_child_removal_panel_records_a_change_and_never_says_retract() {
 #[test]
 fn the_child_removal_confirm_sits_in_the_sticky_actions_row() {
     let html = render(child_removal_panel_view);
-    let actions = html.find(r#"class="sp-actions""#);
-    assert!(actions.is_some(), "the panel carries the shared actions row:\n{html}");
-    let actions = actions.unwrap_or_default();
+    let body = html.find("sp-body").unwrap();
+    let actions = html.find(r#"class="sp-actions""#).unwrap();
+    assert!(
+        body < actions,
+        "the row sits inside the scrolling body, where it can stick:\n{html}"
+    );
     assert!(
         html[actions..].contains(r#"aria-label="Remove Jonathan Smith""#),
         "the confirm is inside the row:\n{html}"

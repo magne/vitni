@@ -117,7 +117,7 @@ fn an_open_side_panel_brackets_its_content_with_focus_guards() {
     let leading = html.find("focus-guard").unwrap_or_default();
     let head = html.find("sp-head").unwrap_or_default();
     let trailing = html.rfind("focus-guard").unwrap_or_default();
-    let body = html.find("sp-body").unwrap_or_default();
+    let body = html.find("sp-body").unwrap();
     assert!(leading < head, "the leading guard precedes the head:\n{html}");
     assert!(body < trailing, "the trailing guard follows the body:\n{html}");
     let scrim = html.find("sidepanel-scrim").unwrap_or_default();
@@ -215,10 +215,10 @@ fn side_panel_with_actions_view() -> Element {
 #[test]
 fn a_side_panels_actions_row_is_the_last_thing_in_its_body() {
     let html = render(side_panel_with_actions_view);
-    let body = html.find("sp-body").unwrap_or_default();
-    let actions = html.find(r#"<div class="sp-actions"><button>Save</button></div>"#);
-    assert!(actions.is_some(), "the row wraps the Save button:\n{html}");
-    let actions = actions.unwrap_or_default();
+    let body = html.find("sp-body").unwrap();
+    let actions = html
+        .find(r#"<div class="sp-actions"><button>Save</button></div>"#)
+        .unwrap();
     assert!(body < actions, "the row sits inside the body:\n{html}");
     assert!(
         html[actions..].starts_with(r#"<div class="sp-actions"><button>Save</button></div></div>"#),
