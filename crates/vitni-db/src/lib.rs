@@ -18,7 +18,7 @@
 
 #[cfg(any(feature = "sqlite", feature = "postgres"))]
 mod exclusive;
-#[cfg(feature = "sqlite")]
+#[cfg(any(feature = "sqlite", feature = "postgres"))]
 mod geo_index;
 #[cfg(any(feature = "sqlite", feature = "postgres"))]
 mod identity_links;

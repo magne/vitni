@@ -10,7 +10,7 @@ repository.workspace = true
 [features]
 default = ["sqlite"]
 sqlite = ["dep:sqlite-es", "dep:sqlx", "dep:serde", "dep:async-trait", "dep:geo-types", "dep:geozero", "dep:sha2", "dep:tokio"]
-postgres = ["dep:postgres-es", "dep:sqlx", "dep:serde", "dep:async-trait", "dep:sha2", "dep:tokio"]
+postgres = ["dep:postgres-es", "dep:sqlx", "dep:serde", "dep:async-trait", "dep:geo-types", "dep:geozero", "dep:sha2", "dep:tokio"]
 
 [dependencies]
 vitni-core = { workspace = true }
