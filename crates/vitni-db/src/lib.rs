@@ -66,4 +66,4 @@ pub use record_origins::{
     IndexedField, OriginRow, RunGroupRow, RunKindCount, RunMemberRow, created_key, digest, field_key, indexed_field,
     resolved_key, single_valued,
 };
-pub use store::{CommandError, DbError, IdentityLink, PlaceSuccessionRecord, Store, StoredEvent};
+pub use store::{CommandError, DbError, IdentityLink, ListPage, PlaceSuccessionRecord, Store, StoredEvent};

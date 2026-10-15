@@ -3,13 +3,14 @@
 use clap::Subcommand;
 use uuid::Uuid;
 use vitni_app::{
-    AppError, Centimorgans, DnaSegment, MutationMeta, NewDnaMatch, PercentShared, Provenance, Session, SharedAncestor,
-    Workspace, add_dna_match_segment, assert_dna_match_shared_ancestor, attach_dna_match_note, list_dna_matches,
-    observe_dna_match, set_dna_match_restrictions, set_dna_match_status, show_dna_match, tag_dna_match,
+    AppError, Centimorgans, DnaSegment, ListPage, MutationMeta, NewDnaMatch, PercentShared, Provenance, Session,
+    SharedAncestor, Workspace, add_dna_match_segment, assert_dna_match_shared_ancestor, attach_dna_match_note,
+    list_dna_matches_page, observe_dna_match, set_dna_match_restrictions, set_dna_match_status, show_dna_match,
+    tag_dna_match,
 };
 use vitni_core::ids::PersonId;
 
-use crate::args::{ChromosomeSideArg, DnaProviderArg, RestrictionsArgs};
+use crate::args::{ChromosomeSideArg, DnaProviderArg, ListArgs, RestrictionsArgs};
 use crate::i18n::Localizer;
 
 /// `DnaMatch` subcommands.
@@ -125,8 +126,8 @@ pub enum DnaMatchCmd {
         /// The match's human id (e.g. `X0001`).
         human_id: String,
     },
-    /// List all DNA matches.
-    List,
+    /// List the DNA matches by human id, all of them or one window.
+    List(ListArgs),
 }
 
 /// Runs a `DnaMatch` subcommand against the open workspace.
@@ -229,7 +230,7 @@ pub async fn run(
             restrict(workspace, session, &human_id, restrictions, localizer).await
         }
         DnaMatchCmd::Show { human_id } => show(workspace, &human_id, localizer).await,
-        DnaMatchCmd::List => list(workspace, localizer).await,
+        DnaMatchCmd::List(window) => list(workspace, window.page(), localizer).await,
     }
 }
 
@@ -264,11 +265,11 @@ async fn show(workspace: &Workspace, human_id: &str, localizer: &Localizer) -> R
     }
 }
 
-/// Renders every DNA match, ordered by human id.
-async fn list(workspace: &Workspace, localizer: &Localizer) -> Result<(), AppError> {
-    let matches = list_dna_matches(workspace).await?;
+/// Renders the `page` of DNA match records, ordered by human id.
+async fn list(workspace: &Workspace, page: ListPage, localizer: &Localizer) -> Result<(), AppError> {
+    let matches = list_dna_matches_page(workspace, page).await?;
     if matches.is_empty() {
-        println!("{}", localizer.dna_match_list_empty());
+        println!("{}", localizer.empty_page(page, localizer.dna_match_list_empty()));
         return Ok(());
     }
     for summary in &matches {

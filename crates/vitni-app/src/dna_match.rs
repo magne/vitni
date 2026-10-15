@@ -15,7 +15,7 @@ use vitni_core::dna_test::DnaTestView;
 use vitni_core::enums::Restriction;
 use vitni_core::ids::{AssertionId, DnaMatchId, DnaTestId, HumanId, NoteId, PersonId, TagId};
 use vitni_core::provenance::{Confidence, EvidenceRef};
-use vitni_db::Store;
+use vitni_db::{ListPage, Store};
 
 use crate::citation::TagRef;
 use crate::dna_match_usage::DnaMatchUsage;
@@ -355,7 +355,16 @@ pub async fn show_dna_match(workspace: &Workspace, human_id: &str) -> Result<Opt
 ///
 /// A store/read-model error.
 pub async fn list_dna_matches(workspace: &Workspace) -> Result<Vec<DnaMatchSummary>, AppError> {
-    let views = workspace.store().list_dna_matches().await?;
+    list_dna_matches_page(workspace, ListPage::ALL).await
+}
+
+/// One `page` of [`list_dna_matches`].
+///
+/// # Errors
+///
+/// A store/read-model error.
+pub async fn list_dna_matches_page(workspace: &Workspace, page: ListPage) -> Result<Vec<DnaMatchSummary>, AppError> {
+    let views = workspace.store().list_dna_matches_page(page).await?;
     let lookups = DnaMatchLookups::load(workspace).await?;
     Ok(views.iter().map(|view| summarize(view, &lookups)).collect())
 }

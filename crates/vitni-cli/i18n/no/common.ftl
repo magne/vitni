@@ -6,6 +6,8 @@
 ## Command output
 created = Opprettet { $id }
 updated = Oppdatert { $id }
+# A `list --offset` page that starts past the last record.
+list-page-empty = Ingenting å vise etter de første { $offset }.
 init-success = Initialiserte arbeidsområde "{ $name }" i { $path }
 config-line = Konfigurasjon: { $path }
 rebuild-success = Bygde alle projeksjoner på nytt fra hendelsesloggen.

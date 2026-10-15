@@ -35,7 +35,7 @@ use vitni_core::place::command::{PlaceCommand, PlaceCommandEnvelope};
 use vitni_core::provenance::{Agent, AgentKind, AssertionMeta, Confidence, EventContext, Timestamp};
 use vitni_core::repository::{RepositoryCommand, RepositoryCommandEnvelope};
 use vitni_core::source::{SourceCommand, SourceCommandEnvelope};
-use vitni_db::{CommandError, PlaceSuccessionRecord, Store};
+use vitni_db::{CommandError, ListPage, PlaceSuccessionRecord, Store};
 
 /// The shared container name; one container is started per test process and reused across tests.
 const CONTAINER: &str = "vitni-pg";
@@ -866,6 +866,47 @@ async fn every_record_kind_indexes_its_merges_on_postgres() {
     for (kind, kind_links) in &expected {
         assert_eq!(&links(*kind).await, kind_links, "rebuild reproduces {kind:?}");
     }
+}
+
+/// The `human_id`s of one page of listed persons.
+async fn page_ids(store: &Store, offset: u32, limit: Option<u32>) -> Vec<String> {
+    store
+        .list_persons_page(ListPage { offset, limit })
+        .await
+        .unwrap()
+        .iter()
+        .filter_map(|v| v.human_id().map(|h| h.as_str().to_owned()))
+        .collect()
+}
+
+#[tokio::test]
+async fn a_list_page_is_a_window_of_the_listed_records_on_postgres() {
+    let (store, _db) = store().await;
+    for (n, human_id) in [(3, "I0003"), (1, "I0001"), (4, "I0004"), (2, "I0002")] {
+        create(&store, n, human_id).await;
+    }
+    let id = |n: u128| PersonId::from_uuid(Uuid::from_u128(n));
+    let merge = PersonCommand::MergePersons {
+        surviving: id(1),
+        merged: id(3),
+        assessment: None,
+    };
+    person_command(&store, 1, 100, merge).await;
+
+    assert_eq!(
+        page_ids(&store, 0, None).await,
+        ["I0001", "I0002", "I0004"],
+        "a merged record is not listed"
+    );
+    assert_eq!(page_ids(&store, 0, Some(2)).await, ["I0001", "I0002"]);
+    assert_eq!(
+        page_ids(&store, 2, Some(2)).await,
+        ["I0004"],
+        "the window skips the merged record"
+    );
+    assert_eq!(page_ids(&store, 1, None).await, ["I0002", "I0004"]);
+    assert!(page_ids(&store, 3, Some(2)).await.is_empty(), "past the end");
+    assert!(page_ids(&store, 0, Some(0)).await.is_empty(), "an empty window");
 }
 
 /// The ordered `human_id`s of every person projection.

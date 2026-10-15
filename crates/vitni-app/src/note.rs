@@ -9,7 +9,7 @@ use vitni_core::note::NoteView;
 use vitni_core::note::command::{NoteCommand, NoteCommandEnvelope};
 use vitni_core::provenance::EvidenceRef;
 use vitni_core::text::{MediaType, RichText};
-use vitni_db::Store;
+use vitni_db::{ListPage, Store};
 
 use crate::citation::TagRef;
 use crate::dto::{AggRef, UsingRecordRef, tag_refs};
@@ -441,9 +441,18 @@ pub async fn show_note(workspace: &Workspace, human_id: &str) -> Result<Option<N
 ///
 /// A store/read-model error.
 pub async fn list_notes(workspace: &Workspace) -> Result<Vec<NoteSummary>, AppError> {
+    list_notes_page(workspace, ListPage::ALL).await
+}
+
+/// One `page` of [`list_notes`]: a window over the records it lists, a merged record taking no slot.
+///
+/// # Errors
+///
+/// A store/read-model error.
+pub async fn list_notes_page(workspace: &Workspace, page: ListPage) -> Result<Vec<NoteSummary>, AppError> {
     let store = workspace.store();
-    let views = store.list_notes().await?;
     let clusters = NoteClusters::load(store).await?;
+    let views: Vec<NoteView> = identity::listed_page(store, &clusters, page).await?;
     let lookups = NoteLookups::load(workspace).await?;
     let mut summaries = Vec::with_capacity(views.len());
     for cluster in identity::group_clusters(&views, &clusters) {

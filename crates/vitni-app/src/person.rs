@@ -21,7 +21,7 @@ use vitni_core::person::command::{PersonCommand, PersonCommandEnvelope};
 use vitni_core::person::error::PersonError;
 use vitni_core::provenance::{Confidence, EvidenceRef};
 use vitni_core::text::{Attribute, ExternalId, MediaRef};
-use vitni_db::Store;
+use vitni_db::{ListPage, Store};
 
 use crate::dto::{AggRef, AttachedRef, MediaLookup, MediaRefSummary};
 use crate::error::AppError;
@@ -1034,9 +1034,18 @@ pub async fn show_person(workspace: &Workspace, human_id: &str) -> Result<Option
 ///
 /// A store/read-model error.
 pub async fn list_persons(workspace: &Workspace) -> Result<Vec<PersonSummary>, AppError> {
+    list_persons_page(workspace, ListPage::ALL).await
+}
+
+/// One `page` of [`list_persons`]: a window over the records it lists, a merged record taking no slot.
+///
+/// # Errors
+///
+/// A store/read-model error.
+pub async fn list_persons_page(workspace: &Workspace, page: ListPage) -> Result<Vec<PersonSummary>, AppError> {
     let store = workspace.store();
-    let views = store.list_persons().await?;
     let clusters = PersonClusters::load(store).await?;
+    let views: Vec<PersonView> = crate::identity::listed_page(store, &clusters, page).await?;
     let lookups = Lookups::load(workspace).await?;
     let mut by_id: HashMap<PersonId, &PersonView> = HashMap::with_capacity(views.len());
     for view in &views {

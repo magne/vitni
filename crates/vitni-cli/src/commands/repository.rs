@@ -3,12 +3,12 @@
 use clap::Subcommand;
 use uuid::Uuid;
 use vitni_app::{
-    Address, AppError, MatchableKind, MutationMeta, NewRepository, Provenance, Session, Url, Workspace,
-    add_repository_address, add_repository_url, attach_repository_note, create_repository, list_repositories,
+    Address, AppError, ListPage, MatchableKind, MutationMeta, NewRepository, Provenance, Session, Url, Workspace,
+    add_repository_address, add_repository_url, attach_repository_note, create_repository, list_repositories_page,
     set_repository_name, set_repository_restrictions, set_repository_type, show_repository, tag_repository,
 };
 
-use crate::args::{RepositoryTypeArg, RestrictionsArgs};
+use crate::args::{ListArgs, RepositoryTypeArg, RestrictionsArgs};
 use crate::commands::similar::hint_similar;
 use crate::i18n::Localizer;
 
@@ -108,8 +108,8 @@ pub enum RepositoryCmd {
         /// The repository's human id (e.g. `R0001`).
         human_id: String,
     },
-    /// List all repositories.
-    List,
+    /// List the repositories by human id, all of them or one window.
+    List(ListArgs),
 }
 
 /// Runs a repository subcommand against the open workspace.
@@ -198,7 +198,7 @@ pub async fn run(
             restrict(workspace, session, &human_id, restrictions, localizer).await
         }
         RepositoryCmd::Show { human_id } => show(workspace, &human_id, localizer).await,
-        RepositoryCmd::List => list(workspace, localizer).await,
+        RepositoryCmd::List(window) => list(workspace, window.page(), localizer).await,
     }
 }
 
@@ -233,11 +233,11 @@ async fn show(workspace: &Workspace, human_id: &str, localizer: &Localizer) -> R
     }
 }
 
-/// Renders every repository, ordered by human id.
-async fn list(workspace: &Workspace, localizer: &Localizer) -> Result<(), AppError> {
-    let repositories = list_repositories(workspace).await?;
+/// Renders the `page` of repository records, ordered by human id.
+async fn list(workspace: &Workspace, page: ListPage, localizer: &Localizer) -> Result<(), AppError> {
+    let repositories = list_repositories_page(workspace, page).await?;
     if repositories.is_empty() {
-        println!("{}", localizer.repository_list_empty());
+        println!("{}", localizer.empty_page(page, localizer.repository_list_empty()));
         return Ok(());
     }
     for summary in &repositories {

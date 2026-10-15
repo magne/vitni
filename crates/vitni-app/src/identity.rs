@@ -35,7 +35,7 @@ use vitni_core::person::error::PersonError;
 use vitni_core::place::{PlaceCommand, PlaceError, PlaceView};
 use vitni_core::repository::{RepositoryCommand, RepositoryError, RepositoryView};
 use vitni_core::source::{SourceCommand, SourceError, SourceView};
-use vitni_db::{DbError, Store};
+use vitni_db::{DbError, ListPage, Store};
 
 use crate::error::AppError;
 use crate::session::Session;
@@ -93,6 +93,12 @@ pub(crate) trait ClusterView: ClusterRecord<Id: ClusterId<View = Self>> + Sized 
     /// The record with `human_id`, if any.
     fn find(store: &Store, human_id: &str) -> impl Future<Output = Result<Option<Self>, AppError>> + Send;
 
+    /// One page of the records of this kind a list shows, merged records left out.
+    fn list_page(store: &Store, page: ListPage) -> impl Future<Output = Result<Vec<Self>, AppError>> + Send;
+
+    /// The records with the aggregate ids `ids`, in id order, skipping an id with none.
+    fn by_ids(store: &Store, ids: &[String]) -> impl Future<Output = Result<Vec<Self>, AppError>> + Send;
+
     /// The error for a `human_id` that names no record of this kind.
     fn not_found(human_id: &str) -> AppError;
 
@@ -130,6 +136,14 @@ impl ClusterView for PersonView {
 
     async fn find(store: &Store, human_id: &str) -> Result<Option<Self>, AppError> {
         Ok(store.find_person(human_id).await?)
+    }
+
+    async fn list_page(store: &Store, page: ListPage) -> Result<Vec<Self>, AppError> {
+        Ok(store.list_persons_page(page).await?)
+    }
+
+    async fn by_ids(store: &Store, ids: &[String]) -> Result<Vec<Self>, AppError> {
+        Ok(store.persons_by_ids(ids).await?)
     }
 
     fn not_found(human_id: &str) -> AppError {
@@ -190,6 +204,14 @@ impl ClusterView for EventView {
         Ok(store.find_event(human_id).await?)
     }
 
+    async fn list_page(store: &Store, page: ListPage) -> Result<Vec<Self>, AppError> {
+        Ok(store.list_events_page(page).await?)
+    }
+
+    async fn by_ids(store: &Store, ids: &[String]) -> Result<Vec<Self>, AppError> {
+        Ok(store.events_by_ids(ids).await?)
+    }
+
     fn not_found(human_id: &str) -> AppError {
         AppError::EventNotFound(human_id.to_owned())
     }
@@ -246,6 +268,14 @@ impl ClusterView for FamilyView {
 
     async fn find(store: &Store, human_id: &str) -> Result<Option<Self>, AppError> {
         Ok(store.find_family(human_id).await?)
+    }
+
+    async fn list_page(store: &Store, page: ListPage) -> Result<Vec<Self>, AppError> {
+        Ok(store.list_families_page(page).await?)
+    }
+
+    async fn by_ids(store: &Store, ids: &[String]) -> Result<Vec<Self>, AppError> {
+        Ok(store.families_by_ids(ids).await?)
     }
 
     fn not_found(human_id: &str) -> AppError {
@@ -306,6 +336,14 @@ impl ClusterView for PlaceView {
         Ok(store.find_place(human_id).await?)
     }
 
+    async fn list_page(store: &Store, page: ListPage) -> Result<Vec<Self>, AppError> {
+        Ok(store.list_places_page(page).await?)
+    }
+
+    async fn by_ids(store: &Store, ids: &[String]) -> Result<Vec<Self>, AppError> {
+        Ok(store.places_by_ids(ids).await?)
+    }
+
     fn not_found(human_id: &str) -> AppError {
         AppError::PlaceNotFound(human_id.to_owned())
     }
@@ -362,6 +400,14 @@ impl ClusterView for SourceView {
 
     async fn find(store: &Store, human_id: &str) -> Result<Option<Self>, AppError> {
         Ok(store.find_source(human_id).await?)
+    }
+
+    async fn list_page(store: &Store, page: ListPage) -> Result<Vec<Self>, AppError> {
+        Ok(store.list_sources_page(page).await?)
+    }
+
+    async fn by_ids(store: &Store, ids: &[String]) -> Result<Vec<Self>, AppError> {
+        Ok(store.sources_by_ids(ids).await?)
     }
 
     fn not_found(human_id: &str) -> AppError {
@@ -426,6 +472,14 @@ impl ClusterView for CitationView {
         Ok(store.find_citation(human_id).await?)
     }
 
+    async fn list_page(store: &Store, page: ListPage) -> Result<Vec<Self>, AppError> {
+        Ok(store.list_citations_page(page).await?)
+    }
+
+    async fn by_ids(store: &Store, ids: &[String]) -> Result<Vec<Self>, AppError> {
+        Ok(store.citations_by_ids(ids).await?)
+    }
+
     fn not_found(human_id: &str) -> AppError {
         AppError::CitationNotFound(human_id.to_owned())
     }
@@ -482,6 +536,14 @@ impl ClusterView for RepositoryView {
 
     async fn find(store: &Store, human_id: &str) -> Result<Option<Self>, AppError> {
         Ok(store.find_repository(human_id).await?)
+    }
+
+    async fn list_page(store: &Store, page: ListPage) -> Result<Vec<Self>, AppError> {
+        Ok(store.list_repositories_page(page).await?)
+    }
+
+    async fn by_ids(store: &Store, ids: &[String]) -> Result<Vec<Self>, AppError> {
+        Ok(store.repositories_by_ids(ids).await?)
     }
 
     fn not_found(human_id: &str) -> AppError {
@@ -542,6 +604,14 @@ impl ClusterView for NoteView {
         Ok(store.find_note(human_id).await?)
     }
 
+    async fn list_page(store: &Store, page: ListPage) -> Result<Vec<Self>, AppError> {
+        Ok(store.list_notes_page(page).await?)
+    }
+
+    async fn by_ids(store: &Store, ids: &[String]) -> Result<Vec<Self>, AppError> {
+        Ok(store.notes_by_ids(ids).await?)
+    }
+
     fn not_found(human_id: &str) -> AppError {
         AppError::NoteNotFound(human_id.to_owned())
     }
@@ -598,6 +668,14 @@ impl ClusterView for MediaView {
 
     async fn find(store: &Store, human_id: &str) -> Result<Option<Self>, AppError> {
         Ok(store.find_media(human_id).await?)
+    }
+
+    async fn list_page(store: &Store, page: ListPage) -> Result<Vec<Self>, AppError> {
+        Ok(store.list_media_page(page).await?)
+    }
+
+    async fn by_ids(store: &Store, ids: &[String]) -> Result<Vec<Self>, AppError> {
+        Ok(store.media_by_ids(ids).await?)
     }
 
     fn not_found(human_id: &str) -> AppError {
@@ -803,6 +881,30 @@ pub(crate) fn group_clusters<'a, V: ClusterView>(views: &'a [V], clusters: &Clus
         groups.push(group);
     }
     groups
+}
+
+/// One page of the records of `V`'s kind a list shows, followed by the members of their clusters, so
+/// [`group_clusters`] folds each root on the page with every record merged into it.
+///
+/// # Errors
+///
+/// A store error.
+pub(crate) async fn listed_page<V: ClusterView>(
+    store: &Store,
+    clusters: &Clusters<V::Id>,
+    page: ListPage,
+) -> Result<Vec<V>, AppError> {
+    let mut views = V::list_page(store, page).await?;
+    let mut members = Vec::new();
+    for view in &views {
+        if let Some(id) = view.record_id() {
+            members.extend(clusters.members(id).iter().map(ToString::to_string));
+        }
+    }
+    if !members.is_empty() {
+        views.extend(V::by_ids(store, &members).await?);
+    }
+    Ok(views)
 }
 
 /// The projections of every record in `ids`, skipping any not found.

@@ -24,7 +24,7 @@ use vitni_core::ids::{AssertionId, CitationId, EventId, HumanId, MediaId, NoteId
 use vitni_core::place::PlaceView;
 use vitni_core::provenance::{Confidence, EvidenceRef};
 use vitni_core::text::{Attribute, MediaRef};
-use vitni_db::Store;
+use vitni_db::{ListPage, Store};
 
 use crate::citation::TagRef;
 use crate::dto::{AggRef, AttachedRef, CitationRef, MediaLookup, MediaRefSummary, citation_refs, tag_refs};
@@ -751,9 +751,18 @@ pub async fn show_event(workspace: &Workspace, human_id: &str) -> Result<Option<
 ///
 /// A store/read-model error.
 pub async fn list_events(workspace: &Workspace) -> Result<Vec<EventSummary>, AppError> {
+    list_events_page(workspace, ListPage::ALL).await
+}
+
+/// One `page` of [`list_events`]: a window over the records it lists, a merged record taking no slot.
+///
+/// # Errors
+///
+/// A store/read-model error.
+pub async fn list_events_page(workspace: &Workspace, page: ListPage) -> Result<Vec<EventSummary>, AppError> {
     let store = workspace.store();
-    let views = store.list_events().await?;
     let clusters = EventClusters::load(store).await?;
+    let views: Vec<EventView> = crate::identity::listed_page(store, &clusters, page).await?;
     let by_id: HashMap<EventId, &EventView> = views.iter().filter_map(|view| Some((view.event_id()?, view))).collect();
     let lookups = EventLookups::load(workspace).await?;
     let mut summaries = Vec::with_capacity(views.len());

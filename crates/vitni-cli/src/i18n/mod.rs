@@ -26,9 +26,9 @@ use vitni_app::config;
 use vitni_app::{
     AbandonReason, AppError, BackupError, CitationError, CitationSummary, Confidence, DbError, DnaMatchError,
     DnaMatchSummary, DnaProvider, DnaTestError, DnaTestSummary, DnaTestType, EventError, EventSummary, EventType,
-    FamilyError, FamilySummary, MatchStatus, MediaError, MediaSummary, NoteError, NoteSummary, NoteType, PersonError,
-    PersonSummary, PlaceError, PlaceSummary, PlaceType, RepositoryError, RepositorySummary, RepositoryType,
-    ResearchNoteError, ResearchNoteSummary, Restriction, Sex, SourceError, SourceSummary, SubjectRef,
+    FamilyError, FamilySummary, ListPage, MatchStatus, MediaError, MediaSummary, NoteError, NoteSummary, NoteType,
+    PersonError, PersonSummary, PlaceError, PlaceSummary, PlaceType, RepositoryError, RepositorySummary,
+    RepositoryType, ResearchNoteError, ResearchNoteSummary, Restriction, Sex, SourceError, SourceSummary, SubjectRef,
     SuretyLabelOverrides, TagError, TagSummary,
 };
 use vitni_app::{
@@ -133,6 +133,16 @@ impl Localizer {
     #[must_use]
     pub fn updated(&self, id: &str) -> String {
         fl!(self.loader, "updated", id = id)
+    }
+
+    /// What an empty `list` page prints: `whole`, the list's own empty message, unless the page starts
+    /// past the first record, where the list is not empty but the window is.
+    #[must_use]
+    pub fn empty_page(&self, page: ListPage, whole: String) -> String {
+        if page.offset == 0 {
+            return whole;
+        }
+        fl!(self.loader, "list-page-empty", offset = page.offset)
     }
 
     /// Renders a record's privacy restrictions as ` [label, …]`, or empty when unrestricted.

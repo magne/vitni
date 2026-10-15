@@ -2,13 +2,13 @@
 
 use clap::Subcommand;
 use vitni_app::{
-    AppError, DateParts, EvidenceAnalysis, MatchableKind, MediaRefInput, MutationMeta, NewCitation, Provenance,
-    Session, Workspace, add_citation_attribute, assert_citation_date, attach_citation_media, attach_citation_note,
-    create_citation, list_citations, set_citation_confidence, set_citation_evidence_analysis,
-    set_citation_restrictions, set_page, show_citation, tag_citation,
+    AppError, DateParts, EvidenceAnalysis, ListPage, MatchableKind, MediaRefInput, MutationMeta, NewCitation,
+    Provenance, Session, Workspace, add_citation_attribute, assert_citation_date, attach_citation_media,
+    attach_citation_note, create_citation, list_citations_page, set_citation_confidence,
+    set_citation_evidence_analysis, set_citation_restrictions, set_page, show_citation, tag_citation,
 };
 
-use crate::args::{ConfidenceArg, EvidenceKindArg, InformationKindArg, RestrictionsArgs, SourceQualityArg};
+use crate::args::{ConfidenceArg, EvidenceKindArg, InformationKindArg, ListArgs, RestrictionsArgs, SourceQualityArg};
 use crate::commands::similar::hint_similar;
 use crate::i18n::Localizer;
 
@@ -126,8 +126,8 @@ pub enum CitationCmd {
         /// The citation's human id (e.g. `C0001`).
         human_id: String,
     },
-    /// List all citations.
-    List,
+    /// List the citations by human id, all of them or one window.
+    List(ListArgs),
 }
 
 /// Runs a citation subcommand against the open workspace.
@@ -229,7 +229,7 @@ pub async fn run(
             restrict(workspace, session, &human_id, restrictions, localizer).await
         }
         CitationCmd::Show { human_id } => show(workspace, &human_id, localizer).await,
-        CitationCmd::List => list(workspace, localizer).await,
+        CitationCmd::List(window) => list(workspace, window.page(), localizer).await,
     }
 }
 
@@ -264,11 +264,11 @@ async fn show(workspace: &Workspace, human_id: &str, localizer: &Localizer) -> R
     }
 }
 
-/// Renders every citation, ordered by human id.
-async fn list(workspace: &Workspace, localizer: &Localizer) -> Result<(), AppError> {
-    let citations = list_citations(workspace).await?;
+/// Renders the `page` of citation records, ordered by human id.
+async fn list(workspace: &Workspace, page: ListPage, localizer: &Localizer) -> Result<(), AppError> {
+    let citations = list_citations_page(workspace, page).await?;
     if citations.is_empty() {
-        println!("{}", localizer.citation_list_empty());
+        println!("{}", localizer.empty_page(page, localizer.citation_list_empty()));
         return Ok(());
     }
     for summary in &citations {

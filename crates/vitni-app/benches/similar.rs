@@ -1,8 +1,9 @@
 //! Record-matching benchmarks at scale (ADR 0038 §7, *Consequences*; ADR 0048): the `match_keys`
 //! index build, one `find_similar` over a fresh index, one edit followed by the lookup that rekeys it,
 //! the `match_pairs` build that scores every pair, the Dashboard's two loads — its stats and activity,
-//! and its data-quality checks over built pairs — one edit followed by those checks, and the plan of
-//! one record an assisted import submits (ADR 0040 §2).
+//! and its data-quality checks over built pairs — one edit followed by those checks, the plan of
+//! one record an assisted import submits (ADR 0040 §2), and the person list read whole against its first
+//! and last page (#607).
 //!
 //! Each size is seeded, measured and dropped before the next, so only one workspace is in memory. The
 //! pairs build is measured only up to [`PAIRS_SAMPLED_UP_TO`]: at 100k persons one build takes minutes,
@@ -27,10 +28,11 @@ use tempfile::TempDir;
 use time::macros::datetime;
 use uuid::Uuid;
 use vitni_app::{
-    AppDefaults, CheckFinding, DatasetId, DateParts, EntityFields, EntityRef, ImportReview, LinkKind, MatchBand,
-    MatchableKind, MutationMeta, NewImportRun, OperatorConfig, PendingRun, PersonNameParts, RecordGraph, Session,
-    StagedEntity, StagedEvent, StagedLink, StagedPerson, StagedPlace, Workspace, WorkspaceDefaults, assert_event_date,
-    evidence_health, find_similar, gregorian_date, person_names, recent_activity, run_checks, workspace_counts,
+    AppDefaults, CheckFinding, DatasetId, DateParts, EntityFields, EntityRef, ImportReview, LinkKind, ListPage,
+    MatchBand, MatchableKind, MutationMeta, NewImportRun, OperatorConfig, PendingRun, PersonNameParts, RecordGraph,
+    Session, StagedEntity, StagedEvent, StagedLink, StagedPerson, StagedPlace, Workspace, WorkspaceDefaults,
+    assert_event_date, evidence_health, find_similar, gregorian_date, list_persons_page, person_names, recent_activity,
+    run_checks, workspace_counts,
 };
 use vitni_core::date::{Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody};
 use vitni_core::enums::{EventType, EvidenceLevel, ParticipantRole, PlaceType, Sex};
@@ -57,6 +59,9 @@ const SHOWN: usize = 5;
 
 /// How many activity rows the Dashboard lists.
 const ACTIVITY: u32 = 12;
+
+/// How many records one list page holds.
+const PAGE: u32 = 50;
 
 /// Persons whose rows are built and inserted together while seeding, bounding the rows held at once.
 const SEED_CHUNK: usize = 10_000;
@@ -668,10 +673,48 @@ fn bench_plan_record(c: &mut Criterion, rt: &tokio::runtime::Runtime, dataset: &
     group.finish();
 }
 
+/// The person list: the whole projection, its first and last page, and the first page as the CLI's
+/// `person list --limit` reads it, summaries joined.
+fn bench_person_list(c: &mut Criterion, rt: &tokio::runtime::Runtime, dataset: &Dataset) {
+    let store = dataset.workspace.store();
+    let first = ListPage {
+        offset: 0,
+        limit: Some(PAGE),
+    };
+    let last = ListPage {
+        offset: u32::try_from(dataset.persons).expect("persons fit u32") - PAGE,
+        limit: Some(PAGE),
+    };
+    let mut group = c.benchmark_group("person_list");
+    group.sample_size(10);
+    group.bench_with_input(BenchmarkId::new("whole", dataset.persons), dataset, |b, _| {
+        b.iter(|| rt.block_on(store.list_persons()).expect("list").len());
+    });
+    group.bench_with_input(BenchmarkId::new("first_page", dataset.persons), dataset, |b, _| {
+        b.iter(|| rt.block_on(store.list_persons_page(first)).expect("page").len());
+    });
+    group.bench_with_input(BenchmarkId::new("last_page", dataset.persons), dataset, |b, _| {
+        b.iter(|| rt.block_on(store.list_persons_page(last)).expect("page").len());
+    });
+    group.bench_with_input(
+        BenchmarkId::new("first_page_summaries", dataset.persons),
+        dataset,
+        |b, dataset| {
+            b.iter(|| {
+                rt.block_on(list_persons_page(&dataset.workspace, first))
+                    .expect("summaries")
+                    .len()
+            });
+        },
+    );
+    group.finish();
+}
+
 fn benches(c: &mut Criterion) {
     let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
     for persons in SIZES {
         let dataset = rt.block_on(seed(persons));
+        bench_person_list(c, &rt, &dataset);
         bench_index_build(c, &rt, &dataset);
         bench_find_similar(c, &rt, &dataset);
         bench_edit_then_lookup(c, &rt, &dataset);

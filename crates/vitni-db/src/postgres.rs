@@ -18,11 +18,11 @@ use crate::place_succession_index;
 use crate::postgres_query;
 use crate::registry::{
     for_each_db_aggregate, for_each_db_by_ids_aggregate, for_each_db_external_id_aggregate,
-    for_each_db_human_id_aggregate,
+    for_each_db_human_id_aggregate, for_each_db_listed_aggregate,
 };
 use crate::resolver::PostgresRefStore;
 use crate::schema;
-use crate::store::{CommandError, DbError, map_aggregate_error};
+use crate::store::{CommandError, DbError, ListPage, map_aggregate_error};
 use crate::tables::{
     ALL_VIEW_TABLES, CITATION_VIEW_TABLE, DNA_MATCH_VIEW_TABLE, DNA_TEST_VIEW_TABLE, EVENT_VIEW_TABLE,
     FAMILY_VIEW_TABLE, HUMAN_ID_VIEW_TABLES, IMPORT_RUN_VIEW_TABLE, MEDIA_VIEW_TABLE, NOTE_VIEW_TABLE,
@@ -516,6 +516,21 @@ macro_rules! postgres_by_ids_methods {
 }
 
 for_each_db_by_ids_aggregate!(postgres_by_ids_methods);
+
+macro_rules! postgres_list_page_methods {
+    ($(($snake:ident, $list_page:ident, $table_const:ident, $View:ty, $kind:expr)),+ $(,)?) => {
+        impl PostgresStore {
+            $(
+                pub(crate) async fn $list_page(&self, page: ListPage) -> Result<Vec<$View>, DbError> {
+                    let kind: Option<vitni_core::matching::MatchableKind> = $kind;
+                    postgres_query::list_views_page(&self.pool, $table_const, kind.map(|kind| kind.as_str()), page).await
+                }
+            )+
+        }
+    };
+}
+
+for_each_db_listed_aggregate!(postgres_list_page_methods);
 
 /// The change-log / count read path (Phase 5 PR 5): the Postgres twin of the SQLite backend's
 /// hand-written raw-event and aggregate-count reads.

@@ -2,11 +2,12 @@
 
 use clap::Subcommand;
 use vitni_app::{
-    AppError, ChildParentRelationship, MatchableKind, MutationMeta, Provenance, Session, Workspace, add_child,
-    add_partner, create_family, list_families, remove_child, remove_partner, set_family_restrictions, show_family,
+    AppError, ChildParentRelationship, ListPage, MatchableKind, MutationMeta, Provenance, Session, Workspace,
+    add_child, add_partner, create_family, list_families_page, remove_child, remove_partner, set_family_restrictions,
+    show_family,
 };
 
-use crate::args::{RelationshipArg, RestrictionsArgs};
+use crate::args::{ListArgs, RelationshipArg, RestrictionsArgs};
 use crate::commands::similar::hint_similar;
 use crate::i18n::Localizer;
 
@@ -58,8 +59,8 @@ pub enum FamilyCmd {
         /// The family's human id (e.g. `F0001`).
         human_id: String,
     },
-    /// List all families.
-    List,
+    /// List the families by human id, all of them or one window.
+    List(ListArgs),
 }
 
 /// Runs a family subcommand against the open workspace.
@@ -123,7 +124,7 @@ pub async fn run(
             restrict(workspace, session, &human_id, restrictions, localizer).await
         }
         FamilyCmd::Show { human_id } => show(workspace, &human_id, localizer).await,
-        FamilyCmd::List => list(workspace, localizer).await,
+        FamilyCmd::List(window) => list(workspace, window.page(), localizer).await,
     }
 }
 
@@ -158,11 +159,11 @@ async fn show(workspace: &Workspace, human_id: &str, localizer: &Localizer) -> R
     }
 }
 
-/// Renders every family, ordered by human id.
-async fn list(workspace: &Workspace, localizer: &Localizer) -> Result<(), AppError> {
-    let families = list_families(workspace).await?;
+/// Renders the `page` of family records, ordered by human id.
+async fn list(workspace: &Workspace, page: ListPage, localizer: &Localizer) -> Result<(), AppError> {
+    let families = list_families_page(workspace, page).await?;
     if families.is_empty() {
-        println!("{}", localizer.family_list_empty());
+        println!("{}", localizer.empty_page(page, localizer.family_list_empty()));
         return Ok(());
     }
     for summary in &families {

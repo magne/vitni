@@ -2,12 +2,12 @@
 
 use clap::Subcommand;
 use vitni_app::{
-    Age, AppError, Attribute, DateParts, MatchableKind, MutationMeta, NewParticipation, NewPerson, PersonNameParts,
-    Provenance, Session, Workspace, add_name, assert_participation, create_person, list_persons, record_birth,
-    set_restrictions, show_person,
+    Age, AppError, Attribute, DateParts, ListPage, MatchableKind, MutationMeta, NewParticipation, NewPerson,
+    PersonNameParts, Provenance, Session, Workspace, add_name, assert_participation, create_person, list_persons_page,
+    record_birth, set_restrictions, show_person,
 };
 
-use crate::args::{ConfidenceArg, EvidenceArg, ParticipantRoleArg, RestrictionsArgs};
+use crate::args::{ConfidenceArg, EvidenceArg, ListArgs, ParticipantRoleArg, RestrictionsArgs};
 use crate::commands::similar::hint_similar;
 use crate::i18n::Localizer;
 
@@ -149,8 +149,8 @@ pub enum PersonCmd {
         /// The person's human id (e.g. `I0001`).
         human_id: String,
     },
-    /// List all persons.
-    List,
+    /// List the persons by human id, all of them or one window.
+    List(ListArgs),
 }
 
 /// Runs a person subcommand against the open workspace.
@@ -250,7 +250,7 @@ pub async fn run(
             restrict(workspace, session, &human_id, restrictions, localizer).await
         }
         PersonCmd::Show { human_id } => show(workspace, &human_id, localizer).await,
-        PersonCmd::List => list(workspace, localizer).await,
+        PersonCmd::List(window) => list(workspace, window.page(), localizer).await,
     }
 }
 
@@ -285,11 +285,11 @@ async fn show(workspace: &Workspace, human_id: &str, localizer: &Localizer) -> R
     }
 }
 
-/// Renders every person, ordered by human id.
-async fn list(workspace: &Workspace, localizer: &Localizer) -> Result<(), AppError> {
-    let people = list_persons(workspace).await?;
+/// Renders the `page` of person records, ordered by human id.
+async fn list(workspace: &Workspace, page: ListPage, localizer: &Localizer) -> Result<(), AppError> {
+    let people = list_persons_page(workspace, page).await?;
     if people.is_empty() {
-        println!("{}", localizer.list_empty());
+        println!("{}", localizer.empty_page(page, localizer.list_empty()));
         return Ok(());
     }
     for summary in &people {

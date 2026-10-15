@@ -11,7 +11,7 @@
 use crate::raw::{ProjectionRow, RawEvent, RawEventKey, UnreadableEvent};
 use crate::registry::{
     for_each_db_aggregate, for_each_db_by_ids_aggregate, for_each_db_external_id_aggregate,
-    for_each_db_human_id_aggregate,
+    for_each_db_human_id_aggregate, for_each_db_listed_aggregate,
 };
 
 /// One stored event, read raw from the log for the audit/change-log path (Phase 5 PR 5).
@@ -46,6 +46,21 @@ pub struct PlaceSuccessionRecord {
     pub date_json: Option<String>,
     /// The `AssertionId` (a UUID string) a correction targets.
     pub assertion_id: String,
+}
+
+/// A window over a list of records: skip `offset` of them, then take at most `limit` (every remaining
+/// one when `None`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ListPage {
+    /// How many records to skip.
+    pub offset: u32,
+    /// How many records to take at most; `None` takes every remaining one.
+    pub limit: Option<u32>,
+}
+
+impl ListPage {
+    /// The whole list.
+    pub const ALL: Self = Self { offset: 0, limit: None };
 }
 
 /// One merged record and the root of the cluster it belongs to (ADR 0039 §4). Engine-neutral (string
@@ -1412,6 +1427,42 @@ macro_rules! store_by_ids_methods {
 }
 
 for_each_db_by_ids_aggregate!(store_by_ids_methods);
+
+/// Generates the per-aggregate `list_*_page` reads (every aggregate with a `HumanId`).
+macro_rules! store_list_page_methods {
+    ($(($snake:ident, $list_page:ident, $table_const:ident, $View:ty, $kind:expr)),+ $(,)?) => {
+        impl Store {
+            $(
+                #[doc = concat!("Loads one page of the listed ", stringify!($snake), " projections, ordered by `human_id`.")]
+                ///
+                /// A record merged into another is not listed (ADR 0039 §5), so the window counts only
+                /// the records a list shows.
+                ///
+                /// # Errors
+                ///
+                /// [`DbError`] on a read-model failure.
+                pub async fn $list_page(&self, page: ListPage) -> Result<Vec<$View>, DbError> {
+                    #[cfg(any(feature = "sqlite", feature = "postgres"))]
+                    {
+                        match &self.backend {
+                            #[cfg(feature = "sqlite")]
+                            Backend::Sqlite(s) => s.$list_page(page).await,
+                            #[cfg(feature = "postgres")]
+                            Backend::Postgres(p) => p.$list_page(page).await,
+                        }
+                    }
+                    #[cfg(not(any(feature = "sqlite", feature = "postgres")))]
+                    {
+                        let _ = page;
+                        Err(DbError::Unsupported("no backend compiled in".to_owned()))
+                    }
+                }
+            )+
+        }
+    };
+}
+
+for_each_db_listed_aggregate!(store_list_page_methods);
 
 /// Generates the per-aggregate `next_*_human_id` allocators (every aggregate but Tag).
 macro_rules! store_next_methods {

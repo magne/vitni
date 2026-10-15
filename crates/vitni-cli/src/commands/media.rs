@@ -3,12 +3,12 @@
 use clap::Subcommand;
 use uuid::Uuid;
 use vitni_app::{
-    AppError, DateParts, MatchableKind, MutationMeta, NewMedia, Provenance, Session, Workspace, add_media_attribute,
-    add_media_citation, assert_media_date, attach_media_note, create_media, list_media, set_media_checksum,
-    set_media_file_path, set_media_restrictions, set_media_web_path, show_media, tag_media,
+    AppError, DateParts, ListPage, MatchableKind, MutationMeta, NewMedia, Provenance, Session, Workspace,
+    add_media_attribute, add_media_citation, assert_media_date, attach_media_note, create_media, list_media_page,
+    set_media_checksum, set_media_file_path, set_media_restrictions, set_media_web_path, show_media, tag_media,
 };
 
-use crate::args::RestrictionsArgs;
+use crate::args::{ListArgs, RestrictionsArgs};
 use crate::commands::similar::hint_similar;
 use crate::i18n::Localizer;
 
@@ -112,8 +112,8 @@ pub enum MediaCmd {
         /// The media's human id (e.g. `O0001`).
         human_id: String,
     },
-    /// List all media objects.
-    List,
+    /// List the media objects by human id, all of them or one window.
+    List(ListArgs),
 }
 
 /// Runs a media subcommand against the open workspace.
@@ -196,7 +196,7 @@ pub async fn run(
             restrict(workspace, session, &human_id, restrictions, localizer).await
         }
         MediaCmd::Show { human_id } => show(workspace, &human_id, localizer).await,
-        MediaCmd::List => list(workspace, localizer).await,
+        MediaCmd::List(window) => list(workspace, window.page(), localizer).await,
     }
 }
 
@@ -231,11 +231,11 @@ async fn show(workspace: &Workspace, human_id: &str, localizer: &Localizer) -> R
     }
 }
 
-/// Renders every media object, ordered by human id.
-async fn list(workspace: &Workspace, localizer: &Localizer) -> Result<(), AppError> {
-    let media = list_media(workspace).await?;
+/// Renders the `page` of media object records, ordered by human id.
+async fn list(workspace: &Workspace, page: ListPage, localizer: &Localizer) -> Result<(), AppError> {
+    let media = list_media_page(workspace, page).await?;
     if media.is_empty() {
-        println!("{}", localizer.media_list_empty());
+        println!("{}", localizer.empty_page(page, localizer.media_list_empty()));
         return Ok(());
     }
     for summary in &media {

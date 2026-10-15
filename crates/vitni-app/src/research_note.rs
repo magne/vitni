@@ -11,7 +11,7 @@ use vitni_core::research_note::ResearchNoteView;
 use vitni_core::research_note::command::{ResearchNoteCommand, ResearchNoteCommandEnvelope};
 use vitni_core::research_note::subject::SubjectRef;
 use vitni_core::text::{MediaType, RichText};
-use vitni_db::Store;
+use vitni_db::{ListPage, Store};
 
 use crate::citation::TagRef;
 use crate::dto::tag_refs;
@@ -418,7 +418,19 @@ pub async fn show_research_note(
 ///
 /// A store/read-model error.
 pub async fn list_research_notes(workspace: &Workspace) -> Result<Vec<ResearchNoteSummary>, AppError> {
-    let views = workspace.store().list_research_notes().await?;
+    list_research_notes_page(workspace, ListPage::ALL).await
+}
+
+/// One `page` of [`list_research_notes`].
+///
+/// # Errors
+///
+/// A store/read-model error.
+pub async fn list_research_notes_page(
+    workspace: &Workspace,
+    page: ListPage,
+) -> Result<Vec<ResearchNoteSummary>, AppError> {
+    let views = workspace.store().list_research_notes_page(page).await?;
     let tags = tag_refs(workspace.store()).await?;
     let subjects = subject_index(workspace.store()).await?;
     Ok(views.iter().map(|view| summarize(view, &tags, &subjects)).collect())

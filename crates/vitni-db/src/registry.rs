@@ -99,3 +99,28 @@ macro_rules! for_each_db_by_ids_aggregate {
 }
 
 pub(crate) use for_each_db_by_ids_aggregate;
+
+/// Invokes `$callback!` with one row per aggregate whose list pages by `human_id` — every aggregate with
+/// a `HumanId`. Columns, in order: `(snake, list_page_fn, table_const, View, kind)`, `kind` the
+/// `Option<MatchableKind>` whose merged records the list hides (ADR 0039 §5), `None` for a kind no
+/// merge applies to.
+macro_rules! for_each_db_listed_aggregate {
+    ($callback:ident) => {
+        $callback! {
+            (person, list_persons_page, PERSON_VIEW_TABLE, vitni_core::person::PersonView, Some(vitni_core::matching::MatchableKind::Person)),
+            (family, list_families_page, FAMILY_VIEW_TABLE, vitni_core::family::FamilyView, Some(vitni_core::matching::MatchableKind::Family)),
+            (place, list_places_page, PLACE_VIEW_TABLE, vitni_core::place::PlaceView, Some(vitni_core::matching::MatchableKind::Place)),
+            (source, list_sources_page, SOURCE_VIEW_TABLE, vitni_core::source::SourceView, Some(vitni_core::matching::MatchableKind::Source)),
+            (citation, list_citations_page, CITATION_VIEW_TABLE, vitni_core::citation::CitationView, Some(vitni_core::matching::MatchableKind::Citation)),
+            (event, list_events_page, EVENT_VIEW_TABLE, vitni_core::event::EventView, Some(vitni_core::matching::MatchableKind::Event)),
+            (dna_test, list_dna_tests_page, DNA_TEST_VIEW_TABLE, vitni_core::dna_test::DnaTestView, None),
+            (dna_match, list_dna_matches_page, DNA_MATCH_VIEW_TABLE, vitni_core::dna_match::DnaMatchView, None),
+            (repository, list_repositories_page, REPOSITORY_VIEW_TABLE, vitni_core::repository::RepositoryView, Some(vitni_core::matching::MatchableKind::Repository)),
+            (note, list_notes_page, NOTE_VIEW_TABLE, vitni_core::note::NoteView, Some(vitni_core::matching::MatchableKind::Note)),
+            (media, list_media_page, MEDIA_VIEW_TABLE, vitni_core::media::MediaView, Some(vitni_core::matching::MatchableKind::Media)),
+            (research_note, list_research_notes_page, RESEARCH_NOTE_VIEW_TABLE, vitni_core::research_note::ResearchNoteView, None),
+        }
+    };
+}
+
+pub(crate) use for_each_db_listed_aggregate;

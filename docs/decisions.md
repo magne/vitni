@@ -81,6 +81,10 @@ change ([`issue-tracking.md`](issue-tracking.md) §4). Check here before filing 
 - **No long-list or overflow specimen in the mockups.** Closed at triage (#589, 2026-10-13): a long or
   overflowing list is low-fidelity in a static mockup, and the real app is where it is judged — the
   list virtualization work (#590) measures it there.
+- **Tags and import runs are not paged.** #607 gave the twelve lists ordered by `human_id` a page read
+  (`Store::list_*_page`, `vitni <kind> list --limit/--offset`). A tag has no `human_id` and its list is
+  a vocabulary of tens, and the import-run list sorts by start time and needs every run to know which
+  one a dataset resumes from. Both stay whole lists.
 
 ## Shell & panes
 

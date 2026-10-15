@@ -12,7 +12,7 @@ use vitni_core::ids::{AgentId, AssertionId, HumanId, PersonId};
 use vitni_core::name::{NameType, PersonName, Surname};
 use vitni_core::person::command::{PersonCommand, PersonCommandEnvelope};
 use vitni_core::provenance::{Agent, AgentKind, AssertionMeta, Confidence, EventContext, Timestamp};
-use vitni_db::{CommandError, DbError, RawEvent, Store};
+use vitni_db::{CommandError, DbError, ListPage, RawEvent, Store};
 
 async fn store() -> (Store, tempfile::TempDir) {
     let dir = tempfile::tempdir().unwrap();
@@ -170,6 +170,60 @@ async fn find_and_list_reflect_the_projection() {
     let all = store.list_persons().await.unwrap();
     let ids: Vec<&str> = all.iter().filter_map(|v| v.human_id().map(HumanId::as_str)).collect();
     assert_eq!(ids, ["I0001", "I0002"]);
+}
+
+/// The `human_id`s of one page of listed persons.
+async fn page_ids(store: &Store, offset: u32, limit: Option<u32>) -> Vec<String> {
+    store
+        .list_persons_page(ListPage { offset, limit })
+        .await
+        .unwrap()
+        .iter()
+        .filter_map(|v| v.human_id().map(|h| h.as_str().to_owned()))
+        .collect()
+}
+
+#[tokio::test]
+async fn a_list_page_is_a_window_of_the_listed_records_in_human_id_order() {
+    let (store, _dir) = store().await;
+    for (n, human_id) in [(3, "I0003"), (1, "I0001"), (4, "I0004"), (2, "I0002")] {
+        create(&store, n, human_id).await;
+    }
+    let person_id = |n: u128| PersonId::from_uuid(Uuid::from_u128(n));
+    store
+        .execute_person(
+            &person_id(1).to_string(),
+            PersonCommandEnvelope {
+                meta: meta(100),
+                command: PersonCommand::MergePersons {
+                    surviving: person_id(1),
+                    merged: person_id(3),
+                    assessment: None,
+                },
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        page_ids(&store, 0, None).await,
+        ["I0001", "I0002", "I0004"],
+        "a merged record is not listed"
+    );
+    assert_eq!(page_ids(&store, 0, Some(2)).await, ["I0001", "I0002"]);
+    assert_eq!(
+        page_ids(&store, 2, Some(2)).await,
+        ["I0004"],
+        "the window skips the merged record"
+    );
+    assert_eq!(page_ids(&store, 1, None).await, ["I0002", "I0004"]);
+    assert!(page_ids(&store, 3, Some(2)).await.is_empty(), "past the end");
+    assert!(page_ids(&store, 0, Some(0)).await.is_empty(), "an empty window");
+    assert_eq!(
+        store.list_persons_page(ListPage::ALL).await.unwrap().len(),
+        3,
+        "ALL lists every record but the merged one"
+    );
 }
 
 #[tokio::test]

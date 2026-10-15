@@ -100,6 +100,7 @@ condition under which snapshotting would pay off.
    `limit`/`offset` on the list projections) is the fix, well before 100k-scale. This matches the
    already-noted absence of pagination infrastructure in the use-case layer. Not a blocker at the
    benched sizes; flag for the list/detail screens at large workspaces.
+   **Paged since #607** — see *Paged lists* below.
 2. **`research_notes_for_subject` is a full-table `json_each` scan, not a true index.** The
    reverse-by-subject lookup walks `$.state.subjects` with a correlated `EXISTS (SELECT … json_each)`
    over every `research_note_view` row (`sqlite_query::list_views_by_subject`), so it is O(note
@@ -177,6 +178,32 @@ on `place`, and quick mode's smaller sample count makes each number noisier than
 elsewhere in this doc. Criterion's own significance test calls all three "No change in performance
 detected" at `p > 0.05`; read the row as an upper bound on the write cost, not a precise regression
 figure.
+
+## Paged lists (#607, 2026-10-15)
+
+Each list ordered by `human_id` now reads one page: `Store::list_*_page(ListPage { offset, limit })`
+walks the `human_id` index on both engines and leaves out a record merged into another (ADR 0039 §5)
+with a `NOT EXISTS` probe of the `identity_links` primary key, so a page counts only listed records.
+The `vitni-app` use-cases take the same page (`list_*_page`) and `vitni <kind> list` takes
+`--limit`/`--offset`. Measured with `cargo bench -p vitni-app --bench similar -- person_list`, over the
+seeded workspace that bench builds (one dated birth per person), pages of 50:
+
+| read (mean)                                       | 10 000 persons | 100 000 persons |
+| ------------------------------------------------- | -------------: | --------------: |
+| `Store::list_persons` (whole)                     |        40.2 ms |          376 ms |
+| `Store::list_persons_page`, first page            |         271 µs |          226 µs |
+| `Store::list_persons_page`, last page             |        8.01 ms |         73.4 ms |
+| `vitni_app::list_persons_page`, first page        |         136 ms |          1.38 s |
+
+- **The first page is flat in workspace size** — the exit #607 asked for. It reads 50 index entries and
+  decodes 50 payloads.
+- **The last page grows with the offset.** `OFFSET` still steps over every skipped index entry, without
+  decoding it: 73 ms to reach the end of 100 000. A screen that scrolls deep pages would want a keyset
+  (`WHERE human_id > ?`) read instead.
+- **The app page is not yet interactive at 100k.** It pays for the summary joins: `Lookups::load` reads
+  whole projections (every person's `human_id`, every event, citation, media, note and tag) to resolve a
+  summary's references, whatever the page size. The page read itself is the 226 µs above. Scoping those
+  joins to the page's references is the next lever for a paged screen.
 
 ## Reproducing
 

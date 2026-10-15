@@ -13,7 +13,7 @@ use sqlx::{Pool, Row, Sqlite, SqliteConnection};
 use vitni_core::id_format::IdFormat;
 
 use crate::raw::{ProjectionRow, RawEvent, RawEventKey};
-use crate::store::{DbError, StoredEvent};
+use crate::store::{DbError, ListPage, StoredEvent};
 
 /// How many candidate ids a `next_human_id` length-group page fetches at a time; a page is
 /// re-fetched (with the last row as the new keyset cursor) only when every id in it fails to
@@ -280,8 +280,33 @@ pub(crate) async fn views_by_ids<V: DeserializeOwned>(
 
 /// Loads every view in `table`, ordered by `human_id`.
 pub(crate) async fn list_views<V: DeserializeOwned>(pool: &Pool<Sqlite>, table: &str) -> Result<Vec<V>, DbError> {
-    let sql = format!("SELECT payload FROM {table} ORDER BY human_id");
-    let rows = sqlx::query(&sql)
+    list_views_page(pool, table, None, ListPage::ALL).await
+}
+
+/// Loads one page of the views in `table` a list shows, ordered by `human_id` (ties by `view_id`, so
+/// windows never overlap). With `merged_kind`, a record the identity index lists as merged into another
+/// of that kind (ADR 0039 §5) is left out before the window is taken, so `page` counts listed records
+/// only; the lookup is the `identity_links` primary key `(kind, member)`.
+pub(crate) async fn list_views_page<V: DeserializeOwned>(
+    pool: &Pool<Sqlite>,
+    table: &str,
+    merged_kind: Option<&str>,
+    page: ListPage,
+) -> Result<Vec<V>, DbError> {
+    let filter = if merged_kind.is_some() {
+        "WHERE NOT EXISTS (SELECT 1 FROM identity_links l WHERE l.kind = ? AND l.member = t.view_id)"
+    } else {
+        ""
+    };
+    let sql = format!("SELECT t.payload FROM {table} t {filter} ORDER BY t.human_id, t.view_id LIMIT ? OFFSET ?");
+    let mut query = sqlx::query(&sql);
+    if let Some(kind) = merged_kind {
+        query = query.bind(kind);
+    }
+    // A negative LIMIT is SQLite's "no limit".
+    let rows = query
+        .bind(page.limit.map_or(-1, i64::from))
+        .bind(i64::from(page.offset))
         .fetch_all(pool)
         .await
         .map_err(|e| DbError::Backend(e.to_string()))?;
@@ -289,7 +314,7 @@ pub(crate) async fn list_views<V: DeserializeOwned>(pool: &Pool<Sqlite>, table: 
     let mut views = Vec::with_capacity(rows.len());
     for row in rows {
         let payload: String = row.get("payload");
-        views.push(crate::store::deserialize_view(table, &payload)?);
+        views.push(deserialize_view(table, &payload)?);
     }
     Ok(views)
 }
