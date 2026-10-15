@@ -19,46 +19,53 @@
         <button class="btn sm ghost" aria-label="Choose columns" title="Choose which columns this list shows">⚙ Columns</button>
         <button class="btn sm primary" title="New person">+ New</button>
       </div>
-      <div class="list-rows" role="listbox" aria-label="People">
-        <div class="row sel" role="option" aria-selected="true" tabindex="0">
-          <div class="avatar" aria-hidden="true">JS</div>
-          <div class="row-main">
-            <div class="row-title">Smith, John</div>
-            <div class="row-sub">1850 – 1920 · New York</div>
+      <!-- Windowed (#590): the listbox is as tall as the whole list (--list-row-h per row) and mounts
+           only a window of rows around the scroll offset, plus the roving tab stop — each row at its
+           own offset, announcing its place in the whole list (aria-posinset of aria-setsize). ↑/↓ to a
+           row outside the window moves the window and focuses the row as it mounts; a click moves the
+           tab stop to the clicked row, so the focused row stays mounted. -->
+      <div class="list-rows">
+        <div class="list-window" role="listbox" aria-label="People" style="height:calc(5 * var(--list-row-h))">
+          <div class="row sel" role="option" aria-selected="true" aria-posinset="1" aria-setsize="5" style="top:calc(0 * var(--list-row-h))" tabindex="0">
+            <div class="avatar" aria-hidden="true">JS</div>
+            <div class="row-main">
+              <div class="row-title">Smith, John</div>
+              <div class="row-sub">1850 – 1920 · New York</div>
+            </div>
+            <div class="row-id">I0042</div>
           </div>
-          <div class="row-id">I0042</div>
-        </div>
-        <div class="row" role="option" aria-selected="false" tabindex="-1">
-          <div class="avatar" aria-hidden="true">MD</div>
-          <div class="row-main">
-            <div class="row-title">Doe, Mary</div>
-            <div class="row-sub">1852 – 1921 · New York</div>
+          <div class="row" role="option" aria-selected="false" aria-posinset="2" aria-setsize="5" style="top:calc(1 * var(--list-row-h))" tabindex="-1">
+            <div class="avatar" aria-hidden="true">MD</div>
+            <div class="row-main">
+              <div class="row-title">Doe, Mary</div>
+              <div class="row-sub">1852 – 1921 · New York</div>
+            </div>
+            <div class="row-id">I0043</div>
           </div>
-          <div class="row-id">I0043</div>
-        </div>
-        <div class="row" role="option" aria-selected="false" tabindex="-1">
-          <div class="avatar" aria-hidden="true">JS</div>
-          <div class="row-main">
-            <div class="row-title">Smith, Jonathan</div>
-            <div class="row-sub">1878 – 1955</div>
+          <div class="row" role="option" aria-selected="false" aria-posinset="3" aria-setsize="5" style="top:calc(2 * var(--list-row-h))" tabindex="-1">
+            <div class="avatar" aria-hidden="true">JS</div>
+            <div class="row-main">
+              <div class="row-title">Smith, Jonathan</div>
+              <div class="row-sub">1878 – 1955</div>
+            </div>
+            <div class="row-id">I0061</div>
           </div>
-          <div class="row-id">I0061</div>
-        </div>
-        <div class="row" role="option" aria-selected="false" tabindex="-1">
-          <div class="avatar" aria-hidden="true">ES</div>
-          <div class="row-main">
-            <div class="row-title">Smith, Elizabeth</div>
-            <div class="row-sub">1881 – 1960</div>
+          <div class="row" role="option" aria-selected="false" aria-posinset="4" aria-setsize="5" style="top:calc(3 * var(--list-row-h))" tabindex="-1">
+            <div class="avatar" aria-hidden="true">ES</div>
+            <div class="row-main">
+              <div class="row-title">Smith, Elizabeth</div>
+              <div class="row-sub">1881 – 1960</div>
+            </div>
+            <div class="row-id">I0062</div>
           </div>
-          <div class="row-id">I0062</div>
-        </div>
-        <div class="row" role="option" aria-selected="false" tabindex="-1">
-          <div class="avatar" aria-hidden="true">?</div>
-          <div class="row-main">
-            <div class="row-title">Smith, infant</div>
-            <div class="row-sub muted">no dates</div>
+          <div class="row" role="option" aria-selected="false" aria-posinset="5" aria-setsize="5" style="top:calc(4 * var(--list-row-h))" tabindex="-1">
+            <div class="avatar" aria-hidden="true">?</div>
+            <div class="row-main">
+              <div class="row-title">Smith, infant</div>
+              <div class="row-sub muted">no dates</div>
+            </div>
+            <div class="row-id">I0070</div>
           </div>
-          <div class="row-id">I0070</div>
         </div>
       </div>
     </section>

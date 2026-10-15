@@ -1,0 +1,185 @@
+# #590: a long Explorer list mounts only a window of its rows, and roving focus still reaches rows the
+# window has left. `large.ged` (784 persons) is imported whole, so the People list runs far past one
+# window (`WINDOW_ROWS`). Scrolled away from the head, the second row is unmounted while the first —
+# the roving tab stop — stays mounted, so ↓ must move the window back and focus the second row as it
+# mounts, Tab must still enter the list at its stop, and a clicked row must stay mounted as the stop.
+# SSR proves the bound on what mounts; only the live app shows scrolling move the window and focus land
+# on a row that was not mounted.
+description = "A long list mounts a window of rows; ↓ and Tab still reach rows outside it (#590)"
+# Writing large.ged keeps the disk busy enough to starve the GUIs beside it.
+exclusive = true
+
+[[step]]
+do = "click"
+at = { role = "listitem", text = "Import" }
+label = "rail: Import"
+
+[[step]]
+do = "click"
+at = { id = "bulk-import-source" }
+label = "source file field"
+
+[[step]]
+do = "text"
+text = "large.ged"
+label = "type: large.ged"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Import" }
+label = "Import"
+
+[[step]]
+do = "wait"
+seconds = 3
+label = "let the file be read and planned"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Import" }
+label = "Plan: Import"
+
+[[step]]
+do = "wait"
+seconds = 30
+label = "let every person be written"
+
+[[step]]
+do = "shot"
+name = "imported"
+
+[[step]]
+do = "click"
+at = { role = "listitem", text = "People" }
+label = "rail: People"
+
+[[step]]
+do = "click"
+at = { role = "searchbox", within = "explorer" }
+label = "the Explorer filter"
+
+[[step]]
+do = "key"
+chord = "Tab"
+label = "Tab: the sort button"
+
+[[step]]
+do = "key"
+chord = "Tab"
+label = "Tab: the list's tab stop, its first row"
+
+[[step]]
+do = "shot"
+name = "head"
+
+[[step]]
+do = "wheel"
+at = { hook = "explorer", offset = [150, 400] }
+clicks = -60
+label = "scroll the list far from its head"
+
+[[step]]
+do = "shot"
+name = "scrolled"
+
+[[step]]
+do = "key"
+chord = "Down"
+label = "↓: to the second row, unmounted while scrolled away"
+
+[[step]]
+do = "shot"
+name = "stepped"
+
+[[step]]
+do = "wheel"
+at = { hook = "explorer", offset = [150, 400] }
+clicks = -60
+label = "scroll away again"
+
+[[step]]
+do = "shot"
+name = "scrolled-again"
+
+[[step]]
+do = "key"
+chord = "shift+Tab"
+label = "Shift+Tab: out of the list, to the sort button"
+
+[[step]]
+do = "key"
+chord = "Tab"
+label = "Tab: back into the list"
+
+[[step]]
+do = "shot"
+name = "reentered"
+
+[[step]]
+do = "click"
+at = { role = "option", text = "I0005", within = "explorer" }
+label = "click the fifth row"
+
+[[step]]
+do = "wheel"
+at = { hook = "explorer", offset = [150, 400] }
+clicks = -60
+label = "scroll away from the clicked row"
+
+[[step]]
+do = "shot"
+name = "clicked-scrolled"
+
+[[assert]]
+kind = "focus"
+shot = "head"
+element = { role = "option", text = "I0001", within = "explorer" }
+because = "Tab from the sort button must land on the list's tab stop, its first row"
+
+[[assert]]
+kind = "absent"
+shot = "scrolled"
+element = { role = "option", text = "I0002", within = "explorer" }
+because = "scrolled far from the head, the window must have unmounted the second row"
+
+[[assert]]
+kind = "present"
+shot = "scrolled"
+element = { role = "option", text = "I0120", within = "explorer" }
+because = "scrolling must move the window to the rows in view"
+
+[[assert]]
+kind = "focus"
+shot = "scrolled"
+element = { role = "option", text = "I0001", within = "explorer" }
+because = "the tab stop stays mounted, and focused, while the window is elsewhere"
+
+[[assert]]
+kind = "focus"
+shot = "stepped"
+element = { role = "option", text = "I0002", within = "explorer" }
+because = "↓ to a row the window had left must mount it and focus it"
+
+[[assert]]
+kind = "absent"
+shot = "scrolled-again"
+element = { role = "option", text = "I0003", within = "explorer" }
+because = "scrolled away again, the rows after the stop must be unmounted before Tab re-enters"
+
+[[assert]]
+kind = "focus"
+shot = "reentered"
+element = { role = "option", text = "I0002", within = "explorer" }
+because = "Tab back into a list scrolled away from its stop must still land on the stop"
+
+[[assert]]
+kind = "present"
+shot = "clicked-scrolled"
+element = { role = "option", text = "I0005", within = "explorer" }
+because = "a click moves the tab stop to the row, so it stays mounted however far the list scrolls"
+
+[[assert]]
+kind = "absent"
+shot = "clicked-scrolled"
+element = { role = "option", text = "I0006", within = "explorer" }
+because = "the row after the clicked one is outside the window"

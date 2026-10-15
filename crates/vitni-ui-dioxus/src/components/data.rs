@@ -71,6 +71,15 @@ pub fn ListRow(
     /// so a row is normally focusable when no roving group manages it.
     #[props(default = 0)]
     tabindex: i64,
+    /// An optional inline style (a windowed list positions each row at its offset).
+    #[props(default)]
+    style: Option<String>,
+    /// The row's 1-based position in the whole list, for a list that mounts only some of its rows.
+    #[props(default)]
+    aria_posinset: Option<usize>,
+    /// The whole list's length, for a list that mounts only some of its rows.
+    #[props(default)]
+    aria_setsize: Option<usize>,
     /// Fired with the row's mounted node so a roving list can pull DOM focus to it.
     #[props(default)]
     onmounted: Option<EventHandler<MountedEvent>>,
@@ -89,6 +98,9 @@ pub fn ListRow(
             id,
             tabindex: "{tabindex}",
             aria_selected: if selected { "true" } else { "false" },
+            aria_posinset,
+            aria_setsize,
+            style,
             onmounted: move |event| {
                 if let Some(onmounted) = &onmounted {
                     onmounted.call(event);

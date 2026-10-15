@@ -85,6 +85,11 @@ change ([`issue-tracking.md`](issue-tracking.md) §4). Check here before filing 
   (`Store::list_*_page`, `vitni <kind> list --limit/--offset`). A tag has no `human_id` and its list is
   a vocabulary of tens, and the import-run list sorts by start time and needs every run to know which
   one a dataset resumes from. Both stay whole lists.
+- **The Explorer windows its DOM, not its fetch.** #590 mounts only a window of rows (`ListWindow`)
+  but still loads the whole list once. The Explorer filters by text, cycles four sorts and steps `[`/`]`
+  through the filtered, sorted list, none of which #607's page read (`human_id` order, offset/limit)
+  serves, and an app-level page costs 1.38 s at 100k persons because its summaries read whole sibling
+  projections. Paging the fetch waits for filter and sort in SQL and paged summaries.
 
 ## Shell & panes
 

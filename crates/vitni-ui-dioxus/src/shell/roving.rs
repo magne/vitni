@@ -16,10 +16,8 @@ pub fn roving_vertical(
     total: usize,
 ) {
     let current = focused.peek().min(total.saturating_sub(1));
-    let next = match event.key() {
-        Key::ArrowDown => (current + 1).min(total.saturating_sub(1)),
-        Key::ArrowUp => current.saturating_sub(1),
-        _ => return,
+    let Some(next) = next_vertical(&event.key(), current, total) else {
+        return;
     };
     event.prevent_default();
     focused.set(next);
@@ -27,6 +25,17 @@ pub fn roving_vertical(
         spawn(async move {
             let _ = node.set_focus(true).await;
         });
+    }
+}
+
+/// The index ↓ or ↑ moves a vertical group's stop to from `current`, clamped to its `total` items;
+/// `None` for any other key.
+#[must_use]
+pub fn next_vertical(key: &Key, current: usize, total: usize) -> Option<usize> {
+    match key {
+        Key::ArrowDown => Some((current + 1).min(total.saturating_sub(1))),
+        Key::ArrowUp => Some(current.saturating_sub(1)),
+        _ => None,
     }
 }
 

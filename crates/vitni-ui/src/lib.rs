@@ -27,6 +27,7 @@ pub mod i18n;
 pub mod import_payload;
 pub mod intent;
 pub mod list;
+pub mod list_window;
 pub mod navigation;
 pub mod palette;
 pub mod picker;
@@ -60,6 +61,7 @@ pub use intent::{
     unpin_publisher,
 };
 pub use list::{ListQuery, RowSort, RowVm, step_row, visible_rows};
+pub use list_window::{ListWindow, WINDOW_ROWS};
 pub use navigation::{
     Category, CitationChangeSetRequest, CitationEdit, CitationSourceRequest, DecideMatch, Destination,
     DnaMatchChangeSetRequest, DnaMatchEdit, DnaTestChangeSetRequest, DnaTestEdit, DraftCitationRef, DraftId,
