@@ -170,6 +170,13 @@ change ([`issue-tracking.md`](issue-tracking.md) §4). Check here before filing 
   config split: the server adds the `ConfigStore` **database** backend so the operator and
   client/presentation scopes persist per authenticated user, while the embedded build keeps the file
   backend.
+- **No PostGIS; Postgres indexes place geometry with its built-in `box` + GiST (#608).**
+  [`research/gis-norway.md`](research/gis-norway.md) recommended requiring PostGIS. It would not make
+  the engines agree: PostGIS's `&&` also compares 32-bit boxes, so a match still needs the exact `f64`
+  check both engines now share (`crates/vitni-db/src/geo_index/mod.rs`). Its GEOS predicates could also
+  answer boundary cases differently from SQLite, which has no GEOS. Requiring it would add a
+  `CREATE EXTENSION` (superuser) step to every Postgres workspace. Containment (#575) follows the same
+  pattern: the index finds candidates and one Rust predicate decides, on both engines.
 
 ## Repo tooling
 

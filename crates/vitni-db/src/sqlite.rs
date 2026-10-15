@@ -97,7 +97,9 @@ macro_rules! sqlite_side_indexes {
         >::new($pool.clone())));
     };
     (place, $pool:expr, $queries:ident) => {
-        $queries.push(Box::new(crate::geo_index::PlaceGeometryIndexQuery::new($pool.clone())));
+        $queries.push(Box::new(crate::geo_index::sqlite::PlaceGeometryIndexQuery::new(
+            $pool.clone(),
+        )));
         $queries.push(Box::new(
             crate::place_succession_index::sqlite::PlaceSuccessionIndexQuery::new($pool.clone()),
         ));
@@ -199,15 +201,14 @@ macro_rules! sqlite_store {
                 // `State`/`View` types, which this untyped helper does not have).
                 let stale_tables = migrate_sqlite_view_tables(&pool).await?;
                 // The Place geometry spatial index (ADR 0024 §3) is not one of the generic
-                // per-aggregate projections: it is derived from the Place projection, keyed by its
-                // own tables, and sqlite-only. Its DDL is created up front, and its `Query` is
-                // appended only to the Place framework below (`sqlite_wire_geometry_index!`).
-                crate::geo_index::create_tables(&pool)
+                // per-aggregate projections: it is derived from the Place projection and keyed by its
+                // own tables. Its DDL is created up front, its `Query` is appended only to the Place
+                // framework below, and a new (or reshaped) index is filled once the projections are open.
+                let geometry_is_new = crate::geo_index::sqlite::create_tables(&pool)
                     .await
                     .map_err(|e| DbError::Backend(format!("creating place geometry index: {e}")))?;
-                // The Place succession cross-reference index (ADR 0026 §4) is likewise derived,
-                // keyed by its own tables, and sqlite-only; its `Query` is appended only to the
-                // Place framework below.
+                // The Place succession cross-reference index (ADR 0026 §4) is likewise derived and
+                // keyed by its own tables; its `Query` is appended only to the Place framework below.
                 crate::place_succession_index::sqlite::create_tables(&pool)
                     .await
                     .map_err(|e| DbError::Backend(format!("creating place succession index: {e}")))?;
@@ -246,6 +247,9 @@ macro_rules! sqlite_store {
                     Self::backfill_record_origins(&pool).await?;
                 }
                 let unreadable = Self::catch_up_journal(&pool).await?;
+                if geometry_is_new {
+                    crate::geo_index::sqlite::rebuild_index(&pool).await?;
+                }
                 if identity_is_new {
                     crate::identity_links::sqlite::rebuild_index(&pool).await?;
                 }
@@ -333,7 +337,7 @@ macro_rules! sqlite_store {
                 // Place's geometry spatial index (ADR 0024 §3) and succession cross-reference
                 // index (ADR 0026 §4) are derived from the (now freshly rebuilt) Place projection
                 // above, not replayed from raw events themselves.
-                crate::geo_index::rebuild_index(pool).await?;
+                crate::geo_index::sqlite::rebuild_index(pool).await?;
                 crate::place_succession_index::sqlite::rebuild_index(pool).await?;
                 // The identity clusters (ADR 0039 §4) are derived from the rebuilt projections of every
                 // matchable kind.
@@ -576,7 +580,7 @@ impl SqliteStore {
         max_lat: f64,
         max_lon: f64,
     ) -> Result<Vec<String>, DbError> {
-        crate::geo_index::places_in_bbox(&self.pool, min_lat, min_lon, max_lat, max_lon).await
+        crate::geo_index::sqlite::places_in_bbox(&self.pool, min_lat, min_lon, max_lat, max_lon).await
     }
 
     /// Every live `kind` distinction as `(record, other)` (ADR 0039 §4).

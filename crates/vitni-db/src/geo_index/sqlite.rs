@@ -1,26 +1,19 @@
-//! WKB + SQLite R\*Tree spatial index over Place geometry (ADR 0024 §3), sqlite backend only.
+//! The SQLite half of the Place geometry spatial index (ADR 0024 §3) — see the
+//! [module header](super) for what the table holds and why each match is checked exactly.
 //!
-//! Derived and rebuildable from the event log (ADR 0010): every row here is recomputed from the
-//! already-updated Place projection, never asserted directly. `place_geometry` stores each live
-//! geometry as a GeoPackage-encoded WKB blob (`geozero`); `place_geometry_rtree` is the R\*Tree
-//! virtual table SQLite ships with (no extension needed), indexing each blob's bounding box, so
-//! [`places_in_bbox`] answers a viewport query without scanning every place. The Postgres mirror
-//! (native geometry + `GiST`) is a follow-up (ADR 0024 §3) — this module is sqlite-only.
+//! `place_geometry_rtree` is the R\*Tree virtual table SQLite ships with, joined to `place_geometry`
+//! by `id`; its 32-bit, outward-rounded boxes only narrow the candidates.
 
 use async_trait::async_trait;
 use cqrs_es::{EventEnvelope, Query};
-use geo_types::{Coord, Geometry, LineString, Point, Polygon};
-use geozero::{CoordDimensions, ToWkb};
 use sqlx::{Pool, Row, Sqlite};
-use vitni_core::geo::{GeoCoordinates, PlaceGeometry};
 use vitni_core::place::{PlaceState, PlaceView};
 
+use super::{IndexRow, PLACE_GEOMETRY_TABLE, index_rows};
 use crate::sqlite_query;
 use crate::store::DbError;
 use crate::tables::PLACE_VIEW_TABLE;
 
-/// The place-geometry blob table: one row per live geometry, keyed by its own `id` (ADR 0024 §3).
-const PLACE_GEOMETRY_TABLE: &str = "place_geometry";
 /// The SQLite R\*Tree virtual table indexing each row's bounding box, joined to
 /// [`PLACE_GEOMETRY_TABLE`] by `id`.
 const PLACE_GEOMETRY_RTREE_TABLE: &str = "place_geometry_rtree";
@@ -29,7 +22,11 @@ const CREATE_PLACE_GEOMETRY_TABLE: &str = "
 CREATE TABLE IF NOT EXISTS place_geometry (
     id       INTEGER PRIMARY KEY,
     place_id TEXT    NOT NULL,
-    wkb      BLOB    NOT NULL
+    wkb      BLOB    NOT NULL,
+    min_lon  REAL    NOT NULL,
+    max_lon  REAL    NOT NULL,
+    min_lat  REAL    NOT NULL,
+    max_lat  REAL    NOT NULL
 )";
 
 const CREATE_PLACE_GEOMETRY_RTREE: &str = "
@@ -39,15 +36,29 @@ CREATE VIRTUAL TABLE IF NOT EXISTS place_geometry_rtree USING rtree(
     min_lat, max_lat
 )";
 
-/// Creates the geometry-index tables on a fresh (or existing) workspace database. Idempotent.
+/// Creates the geometry-index tables on a fresh (or existing) workspace database, returning whether
+/// they are new and so must be filled from the Place projection once it is open. A table from before
+/// the exact bounding-box columns is dropped and recreated (it is derived, so nothing is lost).
 ///
 /// # Errors
 ///
-/// Returns the `sqlx` error if a `CREATE TABLE` statement fails.
-pub(crate) async fn create_tables(pool: &Pool<Sqlite>) -> Result<(), sqlx::Error> {
+/// Returns the `sqlx` error if a schema query fails.
+pub(crate) async fn create_tables(pool: &Pool<Sqlite>) -> Result<bool, sqlx::Error> {
+    let columns = sqlx::query(&format!("PRAGMA table_xinfo({PLACE_GEOMETRY_TABLE})"))
+        .fetch_all(pool)
+        .await?;
+    let current = columns.iter().any(|row| row.get::<String, _>("name") == "min_lat");
+    if !columns.is_empty() && !current {
+        sqlx::query(&format!("DROP TABLE IF EXISTS {PLACE_GEOMETRY_RTREE_TABLE}"))
+            .execute(pool)
+            .await?;
+        sqlx::query(&format!("DROP TABLE {PLACE_GEOMETRY_TABLE}"))
+            .execute(pool)
+            .await?;
+    }
     sqlx::query(CREATE_PLACE_GEOMETRY_TABLE).execute(pool).await?;
     sqlx::query(CREATE_PLACE_GEOMETRY_RTREE).execute(pool).await?;
-    Ok(())
+    Ok(!current)
 }
 
 /// Deletes every row from both geometry-index tables — the rebuild's clearing step (ADR 0010).
@@ -86,15 +97,14 @@ impl Query<PlaceState> for PlaceGeometryIndexQuery {
 }
 
 /// Recomputes one place's geometry-index rows from its current projection: clears its prior rows,
-/// then inserts one WKB + bounding-box row per live geometry (the legacy undated `coordinates`
-/// point, plus every dated `geometries` assertion — ADR 0024).
+/// then inserts one row per live geometry.
 async fn reindex_place(pool: &Pool<Sqlite>, place_id: &str) -> Result<(), DbError> {
     delete_place_rows(pool, place_id).await?;
     let Some(view) = sqlite_query::find_view_by_id::<PlaceView>(pool, PLACE_VIEW_TABLE, place_id).await? else {
         return Ok(());
     };
-    for geometry in place_geometries(&view) {
-        insert_row(pool, place_id, &geometry).await?;
+    for row in index_rows(&view)? {
+        insert_row(pool, place_id, &row).await?;
     }
     Ok(())
 }
@@ -114,15 +124,16 @@ pub(crate) async fn rebuild_index(pool: &Pool<Sqlite>) -> Result<(), DbError> {
     for view in &views {
         let Some(place_id) = view.place_id() else { continue };
         let place_id = place_id.to_string();
-        for geometry in place_geometries(view) {
-            insert_row(pool, &place_id, &geometry).await?;
+        for row in index_rows(view)? {
+            insert_row(pool, &place_id, &row).await?;
         }
     }
     Ok(())
 }
 
-/// Answers a viewport query: every place with at least one geometry whose bounding box overlaps
-/// the given bounding box (ADR 0024 §3), without scanning every place.
+/// Answers a viewport query: every place with at least one geometry whose bounding box overlaps the
+/// given bounding box, edges included, ordered by place id. The R\*Tree narrows the candidates; the
+/// exact `f64` bounds decide (see the [module header](super)).
 ///
 /// # Errors
 ///
@@ -137,7 +148,9 @@ pub(crate) async fn places_in_bbox(
     let sql = format!(
         "SELECT DISTINCT g.place_id FROM {PLACE_GEOMETRY_RTREE_TABLE} r \
          JOIN {PLACE_GEOMETRY_TABLE} g ON g.id = r.id \
-         WHERE r.min_lon <= ? AND r.max_lon >= ? AND r.min_lat <= ? AND r.max_lat >= ?"
+         WHERE r.min_lon <= ?1 AND r.max_lon >= ?2 AND r.min_lat <= ?3 AND r.max_lat >= ?4 \
+         AND g.min_lon <= ?1 AND g.max_lon >= ?2 AND g.min_lat <= ?3 AND g.max_lat >= ?4 \
+         ORDER BY g.place_id"
     );
     let rows = sqlx::query(&sql)
         .bind(max_lon)
@@ -177,32 +190,19 @@ async fn delete_place_rows(pool: &Pool<Sqlite>, place_id: &str) -> Result<(), Db
     Ok(())
 }
 
-/// Encodes `geometry` as `GeoPackage` WKB and inserts one row into each geometry-index table.
-async fn insert_row(pool: &Pool<Sqlite>, place_id: &str, geometry: &PlaceGeometry) -> Result<(), DbError> {
-    let Some((min_lat, min_lon, max_lat, max_lon)) = geometry.bounding_box() else {
-        // An empty polygon; `decide` already rejects this before an event exists, so a live
-        // projection never reaches here. Defensive, not reachable in practice.
-        return Ok(());
-    };
-    let (min_lon, max_lon, min_lat, max_lat) = (
-        min_lon.to_degrees(),
-        max_lon.to_degrees(),
-        min_lat.to_degrees(),
-        max_lat.to_degrees(),
+/// Inserts one geometry's row into each geometry-index table.
+async fn insert_row(pool: &Pool<Sqlite>, place_id: &str, row: &IndexRow) -> Result<(), DbError> {
+    let sql = format!(
+        "INSERT INTO {PLACE_GEOMETRY_TABLE} (place_id, wkb, min_lon, max_lon, min_lat, max_lat) \
+         VALUES (?, ?, ?, ?, ?, ?)"
     );
-
-    let wkb = to_geo_types(geometry)
-        .to_gpkg_wkb(
-            CoordDimensions::xy(),
-            Some(4326),
-            vec![min_lon, max_lon, min_lat, max_lat],
-        )
-        .map_err(|e| DbError::Backend(format!("encoding place geometry WKB: {e}")))?;
-
-    let sql = format!("INSERT INTO {PLACE_GEOMETRY_TABLE} (place_id, wkb) VALUES (?, ?)");
     let inserted = sqlx::query(&sql)
         .bind(place_id)
-        .bind(&wkb)
+        .bind(&row.wkb)
+        .bind(row.min_lon)
+        .bind(row.max_lon)
+        .bind(row.min_lat)
+        .bind(row.max_lat)
         .execute(pool)
         .await
         .map_err(|e| DbError::Backend(e.to_string()))?;
@@ -213,53 +213,12 @@ async fn insert_row(pool: &Pool<Sqlite>, place_id: &str, geometry: &PlaceGeometr
     );
     sqlx::query(&sql)
         .bind(row_id)
-        .bind(min_lon)
-        .bind(max_lon)
-        .bind(min_lat)
-        .bind(max_lat)
+        .bind(row.min_lon)
+        .bind(row.max_lon)
+        .bind(row.min_lat)
+        .bind(row.max_lat)
         .execute(pool)
         .await
         .map_err(|e| DbError::Backend(e.to_string()))?;
     Ok(())
-}
-
-/// Every geometry a place currently carries: the legacy undated `coordinates` point (ADR 0024's
-/// "`CoordinatesAsserted` is the undated `Point` case"), plus every dated `geometries` assertion.
-fn place_geometries(view: &PlaceView) -> Vec<PlaceGeometry> {
-    let mut geometries = Vec::new();
-    if let Some(coordinates) = view.coordinates() {
-        geometries.push(PlaceGeometry::Point(*coordinates));
-    }
-    geometries.extend(
-        view.geometries()
-            .into_iter()
-            .map(|assertion| assertion.geometry.clone()),
-    );
-    geometries
-}
-
-/// Converts the pure, integer-`Microdegrees` [`PlaceGeometry`] to a floating-point `geo-types`
-/// geometry, the boundary conversion `geozero`'s WKB writer needs.
-fn to_geo_types(geometry: &PlaceGeometry) -> Geometry<f64> {
-    match geometry {
-        PlaceGeometry::Point(point) => {
-            Geometry::Point(Point::new(point.longitude.to_degrees(), point.latitude.to_degrees()))
-        }
-        PlaceGeometry::Polygon { exterior, holes } => {
-            let exterior = ring(exterior);
-            let holes = holes.iter().map(|hole| ring(hole)).collect();
-            Geometry::Polygon(Polygon::new(exterior, holes))
-        }
-    }
-}
-
-/// Converts one ring of [`GeoCoordinates`] to a `geo-types` `LineString`.
-fn ring(points: &[GeoCoordinates]) -> LineString<f64> {
-    points
-        .iter()
-        .map(|point| Coord {
-            x: point.longitude.to_degrees(),
-            y: point.latitude.to_degrees(),
-        })
-        .collect()
 }

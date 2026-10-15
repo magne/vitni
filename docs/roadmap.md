@@ -380,11 +380,11 @@ Plan: [`docs/archive/plans/places-geography-temporal.md`](archive/plans/places-g
 - **Geometry & spatial storage (ADR 0024).** A typed `PlaceGeometry` (`Point`/`Polygon`) over integer
   `Microdegrees` in `vitni-core`, asserted **dated and accumulating** via
   `AssertGeometry`/`GeometryAsserted` (the old undated `CoordinatesAsserted` folds as the `Point` case).
-  `vitni-db` materialises geometry as **WKB behind a SQLite R\*Tree** with a `places_in_bbox` query,
+  `vitni-db` materialises geometry as **WKB behind a SQLite R\*Tree**, mirrored on Postgres by a GiST
+  index over the built-in `box` type (#608), with a `places_in_bbox` query both engines answer alike,
   rebuildable by `vitni rebuild`. GeoJSON is the interchange (permissive GeoRust crates:
   `geo-types`, `geozero` with `with-geo`/`with-gpkg`, `geojson`); GEDCOM `PLAC.MAP` / Gramps `<coord>`
-  points round-trip. `LineString`/`Multi*` variants and the Postgres GiST mirror stay additive
-  follow-ups.
+  points round-trip. `LineString`/`Multi*` variants stay an additive follow-up.
 - **Succession & temporal resolution (ADR 0026).** A pure **effective-from** resolver (latest dated
   assertion ≤ target, else the undated/primary) selects name / enclosing parent / geometry as of a
   date — one rule shared by the generated title, the **transitive, cycle-aware, date-aware

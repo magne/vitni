@@ -588,23 +588,17 @@ impl Store {
             .ok_or_else(|| DbError::Malformed(format!("unknown aggregate type: {aggregate_type}")))
     }
 
-    /// Every place with a geometry overlapping the given bounding box (ADR 0024 §3), returning each
-    /// match's aggregate id — a viewport query for a future geography view (ADR 0025), answered via
-    /// a spatial index rather than scanning every place.
-    ///
-    /// Sqlite-only for now: the Postgres mirror (native geometry + `GiST`) is a follow-up (ADR 0024
-    /// §3), so this returns [`DbError::Unsupported`] on that backend.
+    /// Every place with a geometry overlapping the given bounding box (ADR 0024 §3), edges and
+    /// corners included, returning each match's aggregate id ordered by id — a viewport query for the
+    /// geography view (ADR 0025), answered via a spatial index rather than scanning every place. Both
+    /// engines give the same answer (`tests/spatial.rs`).
     ///
     /// # Errors
     ///
-    /// [`DbError`] on a read failure, or [`DbError::Unsupported`] when the sqlite backend is not
-    /// compiled in, or the active backend is Postgres.
+    /// [`DbError`] on a read failure, or [`DbError::Unsupported`] when no backend is compiled in.
     #[cfg_attr(
-        not(feature = "sqlite"),
-        expect(
-            clippy::unused_async,
-            reason = "neutral async API; the spatial index is sqlite-only (ADR 0024 §3)"
-        )
+        not(any(feature = "sqlite", feature = "postgres")),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
     )]
     pub async fn places_in_bbox(
         &self,
@@ -613,21 +607,18 @@ impl Store {
         max_lat: f64,
         max_lon: f64,
     ) -> Result<Vec<String>, DbError> {
-        #[cfg(not(feature = "sqlite"))]
-        let _ = (min_lat, min_lon, max_lat, max_lon);
         #[cfg(any(feature = "sqlite", feature = "postgres"))]
         {
             match &self.backend {
                 #[cfg(feature = "sqlite")]
                 Backend::Sqlite(s) => s.places_in_bbox(min_lat, min_lon, max_lat, max_lon).await,
                 #[cfg(feature = "postgres")]
-                Backend::Postgres(_) => Err(DbError::Unsupported(
-                    "places_in_bbox is not yet implemented for the postgres backend (ADR 0024 follow-up)".to_owned(),
-                )),
+                Backend::Postgres(p) => p.places_in_bbox(min_lat, min_lon, max_lat, max_lon).await,
             }
         }
         #[cfg(not(any(feature = "sqlite", feature = "postgres")))]
         {
+            let _ = (min_lat, min_lon, max_lat, max_lon);
             Err(DbError::Unsupported("no backend compiled in".to_owned()))
         }
     }

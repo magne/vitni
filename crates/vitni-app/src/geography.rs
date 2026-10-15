@@ -7,8 +7,7 @@
 //! v1 loads every place with [`list_places`]/[`list_places_as_of`], mirroring the existing Places
 //! list screen. Wiring the viewport through [`vitni_db::Store::places_in_bbox`] (ADR 0024 §3) to
 //! skip summarizing places outside the current map view is a deferred follow-up once dataset scale
-//! needs it — the Postgres mirror has no spatial index yet either (ADR 0024 §3's own deferral), so a
-//! viewport-aware `show_geography` would need to degrade gracefully on that backend regardless.
+//! needs it.
 
 use vitni_core::date::GenealogicalDate;
 use vitni_core::enums::{EventType, PlaceType};

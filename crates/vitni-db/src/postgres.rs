@@ -84,11 +84,9 @@ macro_rules! postgres_queries {
 
 /// Pushes the derived side indexes onto the queries of the one aggregate each is fed by: the identity
 /// cluster index (ADR 0039 §4) for every matchable kind but `tag`, the record links index (ADR 0047)
-/// for the linking kinds, and the succession index (ADR 0026 §4) for `place`. Dispatches on the
-/// registry's literal `$snake` token — the same "wiring by tag" shape as [`postgres_open_cqrs!`].
-///
-/// The SQLite twin also pushes a geometry index; that one is `geo-types`/`geozero`-backed and
-/// sqlite-only, so the Postgres mirror is a separate follow-up (ADR 0024 §3).
+/// for the linking kinds, and the geometry (ADR 0024 §3) and succession (ADR 0026 §4) indexes for
+/// `place`. Dispatches on the registry's literal `$snake` token — the same "wiring by tag" shape as
+/// [`postgres_open_cqrs!`].
 macro_rules! postgres_side_indexes {
     (person, $pool:expr, $queries:ident) => {
         $queries.push(Box::new(crate::identity_links::postgres::IdentityLinksQuery::<
@@ -115,6 +113,9 @@ macro_rules! postgres_side_indexes {
         >::new($pool.clone())));
     };
     (place, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::geo_index::postgres::PlaceGeometryIndexQuery::new(
+            $pool.clone(),
+        )));
         $queries.push(Box::new(
             place_succession_index::postgres::PlaceSuccessionIndexQuery::new($pool.clone()),
         ));
@@ -220,6 +221,12 @@ macro_rules! postgres_store {
                 // can be replayed to repopulate them below (rebuilding needs the aggregate's
                 // `State`/`View` types, which this untyped helper does not have).
                 let stale_tables = migrate_postgres_view_tables(&pool).await?;
+                // The Place geometry spatial index (ADR 0024 §3) is derived from the Place projection and
+                // keyed by its own table; its `Query` is appended only to the Place framework below, and a
+                // new index is filled once the projections are open.
+                let geometry_is_new = crate::geo_index::postgres::create_tables(&pool)
+                    .await
+                    .map_err(|e| DbError::Backend(format!("creating place geometry index: {e}")))?;
                 // The Place succession cross-reference index (ADR 0026 §4) is not one of the generic
                 // per-aggregate projections: it is derived from the Place projection and keyed by its
                 // own tables. Its DDL is created up front, and its `Query` is appended only to the
@@ -262,6 +269,9 @@ macro_rules! postgres_store {
                     Self::backfill_record_origins(&pool).await?;
                 }
                 let unreadable = Self::catch_up_journal(&pool).await?;
+                if geometry_is_new {
+                    crate::geo_index::postgres::rebuild_index(&pool).await?;
+                }
                 if identity_is_new {
                     crate::identity_links::postgres::rebuild_index(&pool).await?;
                 }
@@ -347,7 +357,9 @@ macro_rules! postgres_store {
                     unreadable.extend(rebuild_view::<$State, $View>(pool, $table_const, || $upcasters).await?);
                 )+
                 // Place's succession cross-reference index (ADR 0026 §4) is derived from the (now
-                // freshly rebuilt) Place projection above, not replayed from raw events itself.
+                // freshly rebuilt) Place projection above, not replayed from raw events itself; so is the
+                // geometry index (ADR 0024 §3).
+                crate::geo_index::postgres::rebuild_index(pool).await?;
                 place_succession_index::postgres::rebuild_index(pool).await?;
                 // The identity clusters (ADR 0039 §4) are derived from the rebuilt projections of every
                 // matchable kind.
@@ -787,6 +799,18 @@ impl PostgresStore {
         kind: vitni_core::matching::MatchableKind,
     ) -> Result<Vec<crate::store::IdentityLink>, DbError> {
         crate::identity_links::postgres::links(&self.pool, kind).await
+    }
+
+    /// Every place with a geometry overlapping the given bounding box (ADR 0024 §3), via the GiST-backed
+    /// geometry index.
+    pub(crate) async fn places_in_bbox(
+        &self,
+        min_lat: f64,
+        min_lon: f64,
+        max_lat: f64,
+        max_lon: f64,
+    ) -> Result<Vec<String>, DbError> {
+        crate::geo_index::postgres::places_in_bbox(&self.pool, min_lat, min_lon, max_lat, max_lon).await
     }
 
     /// Every place a succession names `to`, from `place_id`'s perspective as a `from` endpoint
