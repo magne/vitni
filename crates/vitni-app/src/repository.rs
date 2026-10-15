@@ -15,7 +15,7 @@ use vitni_core::provenance::EvidenceRef;
 use vitni_core::repository::RepositoryView;
 use vitni_core::repository::command::{RepositoryCommand, RepositoryCommandEnvelope};
 use vitni_core::text::Url;
-use vitni_db::Store;
+use vitni_db::{ListPage, Store};
 
 use crate::citation::TagRef;
 use crate::dto::{AggRef, AttachedRef, SourceLinkRef, tag_refs};
@@ -484,9 +484,18 @@ pub async fn show_repository(workspace: &Workspace, human_id: &str) -> Result<Op
 ///
 /// A store/read-model error.
 pub async fn list_repositories(workspace: &Workspace) -> Result<Vec<RepositorySummary>, AppError> {
+    list_repositories_page(workspace, ListPage::ALL).await
+}
+
+/// One `page` of [`list_repositories`]: a window over the records it lists, a merged record taking no slot.
+///
+/// # Errors
+///
+/// A store/read-model error.
+pub async fn list_repositories_page(workspace: &Workspace, page: ListPage) -> Result<Vec<RepositorySummary>, AppError> {
     let store = workspace.store();
-    let views = store.list_repositories().await?;
     let clusters = RepositoryClusters::load(store).await?;
+    let views: Vec<RepositoryView> = identity::listed_page(store, &clusters, page).await?;
     let lookups = RepositoryLookups::load(workspace).await?;
     let mut summaries = Vec::with_capacity(views.len());
     for cluster in identity::group_clusters(&views, &clusters) {

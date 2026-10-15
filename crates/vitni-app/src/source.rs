@@ -17,7 +17,7 @@ use vitni_core::source::SourceView;
 use vitni_core::source::command::{SourceCommand, SourceCommandEnvelope};
 use vitni_core::source::error::SourceError;
 use vitni_core::text::{Attribute, MediaRef};
-use vitni_db::Store;
+use vitni_db::{ListPage, Store};
 
 use crate::citation::TagRef;
 use crate::citation_usage::CitationUsage;
@@ -660,9 +660,18 @@ pub async fn show_source(workspace: &Workspace, human_id: &str) -> Result<Option
 ///
 /// A store/read-model error.
 pub async fn list_sources(workspace: &Workspace) -> Result<Vec<SourceSummary>, AppError> {
+    list_sources_page(workspace, ListPage::ALL).await
+}
+
+/// One `page` of [`list_sources`]: a window over the records it lists, a merged record taking no slot.
+///
+/// # Errors
+///
+/// A store/read-model error.
+pub async fn list_sources_page(workspace: &Workspace, page: ListPage) -> Result<Vec<SourceSummary>, AppError> {
     let store = workspace.store();
-    let views = store.list_sources().await?;
     let clusters = SourceClusters::load(store).await?;
+    let views: Vec<SourceView> = identity::listed_page(store, &clusters, page).await?;
     let lookups = SourceLookups::load(workspace).await?;
     let mut summaries = Vec::with_capacity(views.len());
     for cluster in identity::group_clusters(&views, &clusters) {

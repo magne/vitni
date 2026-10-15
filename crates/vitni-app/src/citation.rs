@@ -20,7 +20,7 @@ use vitni_core::ids::{AssertionId, CitationId, HumanId, MediaId, NoteId, SourceI
 use vitni_core::provenance::{Confidence, EvidenceAnalysis, EvidenceRef};
 use vitni_core::source::SourceView;
 use vitni_core::text::{Attribute, MediaRef};
-use vitni_db::Store;
+use vitni_db::{ListPage, Store};
 
 use crate::dto::{AggRef, AttachedRef, MediaLookup, MediaRefSummary};
 use crate::error::AppError;
@@ -684,9 +684,18 @@ pub async fn show_citation(workspace: &Workspace, human_id: &str) -> Result<Opti
 ///
 /// A store/read-model error.
 pub async fn list_citations(workspace: &Workspace) -> Result<Vec<CitationSummary>, AppError> {
+    list_citations_page(workspace, ListPage::ALL).await
+}
+
+/// One `page` of [`list_citations`]: a window over the records it lists, a merged record taking no slot.
+///
+/// # Errors
+///
+/// A store/read-model error.
+pub async fn list_citations_page(workspace: &Workspace, page: ListPage) -> Result<Vec<CitationSummary>, AppError> {
     let store = workspace.store();
-    let views = store.list_citations().await?;
     let clusters = CitationClusters::load(store).await?;
+    let views: Vec<CitationView> = identity::listed_page(store, &clusters, page).await?;
     let lookups = Lookups::load(store).await?;
     let mut summaries = Vec::with_capacity(views.len());
     for cluster in identity::group_clusters(&views, &clusters) {

@@ -22,7 +22,7 @@ use vitni_core::media::command::{MediaCommand, MediaCommandEnvelope};
 use vitni_core::media_path::{MediaPath, media_root_relative};
 use vitni_core::provenance::EvidenceRef;
 use vitni_core::text::{Attribute, Url};
-use vitni_db::Store;
+use vitni_db::{ListPage, Store};
 
 use crate::citation::TagRef;
 use crate::dto::{AggRef, AttachedRef, CitationRef, UsingRecordRef, citation_refs, tag_refs};
@@ -563,9 +563,18 @@ pub async fn show_media(workspace: &Workspace, human_id: &str) -> Result<Option<
 ///
 /// A store/read-model error.
 pub async fn list_media(workspace: &Workspace) -> Result<Vec<MediaSummary>, AppError> {
+    list_media_page(workspace, ListPage::ALL).await
+}
+
+/// One `page` of [`list_media`]: a window over the records it lists, a merged record taking no slot.
+///
+/// # Errors
+///
+/// A store/read-model error.
+pub async fn list_media_page(workspace: &Workspace, page: ListPage) -> Result<Vec<MediaSummary>, AppError> {
     let store = workspace.store();
-    let views = store.list_media().await?;
     let clusters = MediaClusters::load(store).await?;
+    let views: Vec<MediaView> = identity::listed_page(store, &clusters, page).await?;
     let lookups = MediaLookups::load(workspace).await?;
     let mut summaries = Vec::with_capacity(views.len());
     for cluster in identity::group_clusters(&views, &clusters) {

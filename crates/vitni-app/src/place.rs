@@ -20,7 +20,7 @@ use vitni_core::place_ref::PlaceRef;
 use vitni_core::provenance::Confidence;
 use vitni_core::provenance::EvidenceRef;
 use vitni_core::text::MediaRef;
-use vitni_db::{PlaceSuccessionRecord, Store};
+use vitni_db::{ListPage, PlaceSuccessionRecord, Store};
 
 use crate::citation::TagRef;
 use crate::dto::{
@@ -988,7 +988,16 @@ fn succession_ref(record: &PlaceSuccessionRecord, lookups: &PlaceLookups) -> Opt
 ///
 /// A store/read-model error.
 pub async fn list_places(workspace: &Workspace) -> Result<Vec<PlaceSummary>, AppError> {
-    list_resolved(workspace, None).await
+    list_places_page(workspace, ListPage::ALL).await
+}
+
+/// One `page` of [`list_places`]: a window over the records it lists, a merged record taking no slot.
+///
+/// # Errors
+///
+/// A store/read-model error.
+pub async fn list_places_page(workspace: &Workspace, page: ListPage) -> Result<Vec<PlaceSummary>, AppError> {
+    list_resolved(workspace, None, page).await
 }
 
 /// Lists every place's summary, resolved **as of** `as_of` (ADR 0026 §1) — the geography view's feed
@@ -999,15 +1008,19 @@ pub async fn list_places(workspace: &Workspace) -> Result<Vec<PlaceSummary>, App
 ///
 /// A store/read-model error.
 pub async fn list_places_as_of(workspace: &Workspace, as_of: GenealogicalDate) -> Result<Vec<PlaceSummary>, AppError> {
-    list_resolved(workspace, Some(&as_of)).await
+    list_resolved(workspace, Some(&as_of), ListPage::ALL).await
 }
 
 /// Lists every place resolved as of `as_of` (current/primary when `None`), a merged place listed once,
-/// as its cluster's root (ADR 0039 §5).
-async fn list_resolved(workspace: &Workspace, as_of: Option<&GenealogicalDate>) -> Result<Vec<PlaceSummary>, AppError> {
+/// as its cluster's root (ADR 0039 §5), within `page`.
+async fn list_resolved(
+    workspace: &Workspace,
+    as_of: Option<&GenealogicalDate>,
+    page: ListPage,
+) -> Result<Vec<PlaceSummary>, AppError> {
     let store = workspace.store();
-    let views = store.list_places().await?;
     let clusters = PlaceClusters::load(store).await?;
+    let views: Vec<PlaceView> = identity::listed_page(store, &clusters, page).await?;
     let lookups = PlaceLookups::load(workspace).await?;
     let mut summaries = Vec::with_capacity(views.len());
     for cluster in identity::group_clusters(&views, &clusters) {

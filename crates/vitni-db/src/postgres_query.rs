@@ -13,7 +13,7 @@ use sqlx::{PgConnection, Pool, Postgres, Row};
 use vitni_core::id_format::IdFormat;
 
 use crate::raw::{ProjectionRow, RawEvent, RawEventKey};
-use crate::store::{DbError, StoredEvent, deserialize_view};
+use crate::store::{DbError, ListPage, StoredEvent, deserialize_view};
 
 /// How many candidate ids a `next_human_id` length-group page fetches at a time — the Postgres
 /// twin of [`crate::sqlite_query::NEXT_HUMAN_ID_PAGE_SIZE`].
@@ -267,6 +267,43 @@ pub(crate) async fn views_by_ids<V: DeserializeOwned>(
 pub(crate) async fn list_views<V: DeserializeOwned>(pool: &Pool<Postgres>, table: &str) -> Result<Vec<V>, DbError> {
     let sql = format!("SELECT payload::text AS payload FROM {table} ORDER BY human_id");
     let rows = sqlx::query(&sql)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| DbError::Backend(e.to_string()))?;
+
+    let mut views = Vec::with_capacity(rows.len());
+    for row in rows {
+        let payload: String = row.get("payload");
+        views.push(deserialize_view(table, &payload)?);
+    }
+    Ok(views)
+}
+
+/// Loads one page of the views in `table` a list shows — the Postgres twin of
+/// [`crate::sqlite_query::list_views_page`]. A `NULL` limit is Postgres's `LIMIT ALL`.
+pub(crate) async fn list_views_page<V: DeserializeOwned>(
+    pool: &Pool<Postgres>,
+    table: &str,
+    merged_kind: Option<&str>,
+    page: ListPage,
+) -> Result<Vec<V>, DbError> {
+    let (filter, window) = if merged_kind.is_some() {
+        (
+            "WHERE NOT EXISTS (SELECT 1 FROM identity_links l WHERE l.kind = $1 AND l.member = t.view_id)",
+            "LIMIT $2 OFFSET $3",
+        )
+    } else {
+        ("", "LIMIT $1 OFFSET $2")
+    };
+    let sql =
+        format!("SELECT t.payload::text AS payload FROM {table} t {filter} ORDER BY t.human_id, t.view_id {window}");
+    let mut query = sqlx::query(&sql);
+    if let Some(kind) = merged_kind {
+        query = query.bind(kind);
+    }
+    let rows = query
+        .bind(page.limit.map(i64::from))
+        .bind(i64::from(page.offset))
         .fetch_all(pool)
         .await
         .map_err(|e| DbError::Backend(e.to_string()))?;
