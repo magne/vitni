@@ -73,7 +73,6 @@ fn pane(open: bool) -> Element {
             open,
             close_label: "Close".to_owned(),
             onclose,
-            footer: rsx! { button { "Save" } },
             div { "panel body" }
         }
     }

@@ -1089,12 +1089,16 @@ pub fn save_year(dated: bool, slider_year: i32) -> Option<i32> {
 /// slider's year and cannot express a dating policy of its own, so both panels stamp dates the same
 /// way (#257 — the Place tab used to hardcode its slider year while Geography hardcoded undated,
 /// and a point saved from one vanished from the other).
+///
+/// `oncancel` adds a Cancel beside Save in the form's actions row, for the Map tab's inline card; the
+/// Geography panel passes none, its ✕ being the panel's Cancel.
 #[component]
 pub fn GeometrySaveForm(
     human_id: String,
     geometry: PlaceGeometry,
     slider_year: i32,
     onsaved: EventHandler<()>,
+    #[props(default)] oncancel: Option<EventHandler<()>>,
 ) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
         return rsx! {};
@@ -1107,24 +1111,29 @@ pub fn GeometrySaveForm(
         div { class: "faint", style: "font-size:var(--fs-xs)", "{loc.place_map_scope_note()}" }
         {effective_date_choice(loc, slider_year, dated(), move |picked: String| dated.set(picked == EFFECTIVE_DATED))}
         {provenance_block(loc, prov)}
-        Button {
-            label: loc.action_button(ActionLabel::Save),
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                let edit = PlaceEdit::AssertGeometry {
-                    human_id: human_id.clone(),
-                    geometry: geometry.clone(),
-                    year: save_year(dated(), slider_year),
-                };
-                let services = services.clone();
-                let prov = prov();
-                let onsaved = onsaved;
-                spawn(async move {
-                    if save_place_edit(services, edit, prov).await.is_ok() {
-                        onsaved.call(());
-                    }
-                });
-            },
+        SidePanelActions {
+            if let Some(oncancel) = oncancel {
+                Button { label: loc.action_button(ActionLabel::Cancel), variant: ButtonVariant::Ghost, onclick: move |_| oncancel.call(()) }
+            }
+            Button {
+                label: loc.action_button(ActionLabel::Save),
+                variant: ButtonVariant::Primary,
+                onclick: move |_| {
+                    let edit = PlaceEdit::AssertGeometry {
+                        human_id: human_id.clone(),
+                        geometry: geometry.clone(),
+                        year: save_year(dated(), slider_year),
+                    };
+                    let services = services.clone();
+                    let prov = prov();
+                    let onsaved = onsaved;
+                    spawn(async move {
+                        if save_place_edit(services, edit, prov).await.is_ok() {
+                            onsaved.call(());
+                        }
+                    });
+                },
+            }
         }
     }
 }

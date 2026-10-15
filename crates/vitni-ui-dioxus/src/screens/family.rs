@@ -961,11 +961,13 @@ pub fn child_removal_side_panel(
                         }
                     }
                     div { class: "muted", style: "font-size:var(--fs-sm)", "{loc.remove_child_note()}" }
-                    Button {
-                        label: loc.action_button(ActionLabel::Remove),
-                        variant: ButtonVariant::Danger,
-                        aria_label: loc.action_remove_row(&label),
-                        onclick: move |_| on_confirm.call(()),
+                    SidePanelActions {
+                        Button {
+                            label: loc.action_button(ActionLabel::Remove),
+                            variant: ButtonVariant::Danger,
+                            aria_label: loc.action_remove_row(&label),
+                            onclick: move |_| on_confirm.call(()),
+                        }
                     }
                 }
             }
@@ -1340,10 +1342,12 @@ fn FamilyAddChildForm(
             }
             {extra}
             {provenance_block_dna(loc, prov)}
-            Button {
-                label: loc.action_button(ActionLabel::Save),
-                variant: ButtonVariant::Primary,
-                onclick: move |_| onsave.call(()),
+            SidePanelActions {
+                Button {
+                    label: loc.action_button(ActionLabel::Save),
+                    variant: ButtonVariant::Primary,
+                    onclick: move |_| onsave.call(()),
+                }
             }
         }
     } else {
@@ -1512,16 +1516,18 @@ fn FamilyTagForm(human_id: String, onsubmit: EventHandler<(FamilyEdit, Provenanc
                     onchange: move |event: FormEvent| chosen.set(event.value()),
                 }
                 {provenance_block(loc, prov)}
-                Button {
-                    label: save_label,
-                    variant: ButtonVariant::Primary,
-                    onclick: move |_| {
-                        let tag_id = chosen();
-                        if tag_id.is_empty() {
-                            return;
-                        }
-                        onsubmit.call((FamilyEdit::Tag { human_id: human_id.clone(), tag_id, remove: false }, prov()));
-                    },
+                SidePanelActions {
+                    Button {
+                        label: save_label,
+                        variant: ButtonVariant::Primary,
+                        onclick: move |_| {
+                            let tag_id = chosen();
+                            if tag_id.is_empty() {
+                                return;
+                            }
+                            onsubmit.call((FamilyEdit::Tag { human_id: human_id.clone(), tag_id, remove: false }, prov()));
+                        },
+                    }
                 }
             }
         }

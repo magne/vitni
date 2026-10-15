@@ -858,8 +858,8 @@ fn PlaceMapEditor(
                             draft.set(MapDraft::Empty);
                             on_saved.call(());
                         },
+                        oncancel: move |()| pending.set(None),
                     }
-                    Button { label: loc.action_button(ActionLabel::Cancel), variant: ButtonVariant::Ghost, small: true, onclick: move |_| pending.set(None) }
                 }
             }
         }
@@ -1246,16 +1246,18 @@ fn PlaceNameForm(
             oninput: move |event: FormEvent| value.set(event.value()),
         }
         {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                let value = value();
-                if value.trim().is_empty() {
-                    return;
-                }
-                onsubmit.call((PlaceEdit::AddName { human_id: human_id.clone(), text: value }, prov()));
-            },
+        SidePanelActions {
+            Button {
+                label: save_label,
+                variant: ButtonVariant::Primary,
+                onclick: move |_| {
+                    let value = value();
+                    if value.trim().is_empty() {
+                        return;
+                    }
+                    onsubmit.call((PlaceEdit::AddName { human_id: human_id.clone(), text: value }, prov()));
+                },
+            }
         }
     }
 }
@@ -1311,10 +1313,12 @@ fn PlaceEnclosingForm(
                 RecordLink { category: Category::Places, human_id: id.clone(), label: name.clone() }
             }
             {provenance_block(loc, prov)}
-            Button {
-                label: loc.action_button(ActionLabel::Save),
-                variant: ButtonVariant::Primary,
-                onclick: move |_| onsave.call(()),
+            SidePanelActions {
+                Button {
+                    label: loc.action_button(ActionLabel::Save),
+                    variant: ButtonVariant::Primary,
+                    onclick: move |_| onsave.call(()),
+                }
             }
         }
     } else {
@@ -1486,10 +1490,12 @@ fn PlaceSuccessionForm(human_id: String, onsubmit: EventHandler<(PlaceEdit, Prov
     rsx! {
         {place_succession_form_fields(loc, &to_picker, &from_picker, form)}
         {provenance_block(loc, prov)}
-        Button {
-            label: loc.action_button(ActionLabel::Save),
-            variant: ButtonVariant::Primary,
-            onclick: move |_| onsave.call(()),
+        SidePanelActions {
+            Button {
+                label: loc.action_button(ActionLabel::Save),
+                variant: ButtonVariant::Primary,
+                onclick: move |_| onsave.call(()),
+            }
         }
     }
 }
@@ -1602,16 +1608,18 @@ fn PlaceTagForm(human_id: String, onsubmit: EventHandler<(PlaceEdit, ProvenanceD
                     onchange: move |event: FormEvent| chosen.set(event.value()),
                 }
                 {provenance_block(loc, prov)}
-                Button {
-                    label: save_label,
-                    variant: ButtonVariant::Primary,
-                    onclick: move |_| {
-                        let tag_id = chosen();
-                        if tag_id.is_empty() {
-                            return;
-                        }
-                        onsubmit.call((PlaceEdit::Tag { human_id: human_id.clone(), tag_id, remove: false }, prov()));
-                    },
+                SidePanelActions {
+                    Button {
+                        label: save_label,
+                        variant: ButtonVariant::Primary,
+                        onclick: move |_| {
+                            let tag_id = chosen();
+                            if tag_id.is_empty() {
+                                return;
+                            }
+                            onsubmit.call((PlaceEdit::Tag { human_id: human_id.clone(), tag_id, remove: false }, prov()));
+                        },
+                    }
                 }
             }
         }

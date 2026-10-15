@@ -77,11 +77,8 @@ pub fn SidePanel(
     close_label: String,
     /// Fired when the panel is closed — the ✕, the scrim, or `Esc`.
     onclose: EventHandler<()>,
-    /// The panel body.
+    /// The panel body; a form ends it with its [`SidePanelActions`] row.
     children: Element,
-    /// The footer (e.g. action buttons); empty by default — every editor's Save sits in its body.
-    #[props(default = VNode::empty())]
-    footer: Element,
     /// Escapes all the way to the viewport instead of the nearest positioned ancestor — for a panel
     /// mounted outside a record's `.detail` pane (Geography's geometry panel).
     #[props(default)]
@@ -141,10 +138,24 @@ pub fn SidePanel(
                 IconButton { icon: "✕".to_owned(), label: close_label.clone(), onclick: move |_: MouseEvent| onclose.call(()) }
             }
             div { class: "sp-body stack", {children} }
-            div { class: "sp-foot", {footer} }
             {focus_guard(FocusGuard::Trailing)}
             DialogFocus {}
         }
+    }
+}
+
+/// A side-panel form's Save/confirm row (#663): the last thing in the form, inside the panel's scrolling
+/// body, so the panel has no footer of its own. Under `.sidepanel` the row is `position: sticky;
+/// bottom: 0`, which keeps Save in view while a long form scrolls under it; each form keeps owning its
+/// Save, its `onclick` and the draft it reads. Elsewhere (a panel form reused inline, like the Place Map
+/// tab's geometry card) it is a plain right-aligned row.
+#[component]
+pub fn SidePanelActions(
+    /// The row's buttons, primary action last.
+    children: Element,
+) -> Element {
+    rsx! {
+        div { class: "sp-actions", {children} }
     }
 }
 

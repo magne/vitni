@@ -241,9 +241,14 @@ pub fn research_note_draft_subjects(loc: &Localizer, record: RecordEditState<vit
 
 /// A kind select plus that kind's existing-record picker, emitting the picked `(category, selection)`.
 /// The picker lives in a keyed child component so only the chosen kind's list is fetched — switching
-/// kinds remounts the child rather than loading all four lists up front.
+/// kinds remounts the child rather than loading all four lists up front. `children` render between the
+/// picker and Save — the side panel's provenance block, so its Save ends the form like every other.
 #[component]
-fn SubjectChooser(save_label: String, onpick: EventHandler<(Category, PickerSelection)>) -> Element {
+fn SubjectChooser(
+    save_label: String,
+    onpick: EventHandler<(Category, PickerSelection)>,
+    #[props(default)] children: Element,
+) -> Element {
     // `try_consume_context` (not `use_context`): the create pane's SSR tests render this without an
     // `AppCtx`, and a picker with no workspace behind it has nothing to offer anyway.
     let Some(AppCtx::Ready(state)) = try_consume_context::<AppCtx>() else {
@@ -279,6 +284,7 @@ fn SubjectChooser(save_label: String, onpick: EventHandler<(Category, PickerSele
                 category,
                 save_label,
                 onpick: move |selection: PickerSelection| onpick.call((category, selection)),
+                {children}
             }
         }
     }
@@ -295,7 +301,12 @@ fn SubjectChooser(save_label: String, onpick: EventHandler<(Category, PickerSele
 /// `Vec<human_id>`, so a "+ New …" draft here has nowhere to live nested — Save creates the support
 /// record immediately, adds it as a subject, and resets the field for the next pick.
 #[component]
-fn SubjectPickField(category: Category, save_label: String, onpick: EventHandler<PickerSelection>) -> Element {
+fn SubjectPickField(
+    category: Category,
+    save_label: String,
+    onpick: EventHandler<PickerSelection>,
+    #[props(default)] children: Element,
+) -> Element {
     let Some(AppCtx::Ready(state)) = try_consume_context::<AppCtx>() else {
         return rsx! {};
     };
@@ -352,11 +363,14 @@ fn SubjectPickField(category: Category, save_label: String, onpick: EventHandler
     };
     rsx! {
         {attach_link_field(loc, &attach)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Default,
-            disabled,
-            onclick,
+        {children}
+        SidePanelActions {
+            Button {
+                label: save_label,
+                variant: ButtonVariant::Default,
+                disabled,
+                onclick,
+            }
         }
     }
 }
@@ -798,8 +812,8 @@ fn ResearchNoteSubjectForm(human_id: String, onsubmit: EventHandler<(ResearchNot
                     prov(),
                 ));
             },
+            {provenance_block(loc, prov)}
         }
-        {provenance_block(loc, prov)}
     }
 }
 
@@ -845,16 +859,18 @@ fn ResearchNoteTagForm(human_id: String, onsubmit: EventHandler<(ResearchNoteEdi
                     onchange: move |event: FormEvent| chosen.set(event.value()),
                 }
                 {provenance_block(loc, prov)}
-                Button {
-                    label: save_label,
-                    variant: ButtonVariant::Primary,
-                    onclick: move |_| {
-                        let tag_id = chosen();
-                        if tag_id.is_empty() {
-                            return;
-                        }
-                        onsubmit.call((ResearchNoteEdit::Tag { human_id: human_id.clone(), tag_id, remove: false }, prov()));
-                    },
+                SidePanelActions {
+                    Button {
+                        label: save_label,
+                        variant: ButtonVariant::Primary,
+                        onclick: move |_| {
+                            let tag_id = chosen();
+                            if tag_id.is_empty() {
+                                return;
+                            }
+                            onsubmit.call((ResearchNoteEdit::Tag { human_id: human_id.clone(), tag_id, remove: false }, prov()));
+                        },
+                    }
                 }
             }
         }

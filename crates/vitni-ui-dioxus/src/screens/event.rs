@@ -1189,16 +1189,18 @@ fn EventTagForm(human_id: String, onsubmit: EventHandler<(EventEdit, ProvenanceD
                     onchange: move |event: FormEvent| chosen.set(event.value()),
                 }
                 {provenance_block(loc, prov)}
-                Button {
-                    label: save_label,
-                    variant: ButtonVariant::Primary,
-                    onclick: move |_| {
-                        let tag_id = chosen();
-                        if tag_id.is_empty() {
-                            return;
-                        }
-                        onsubmit.call((EventEdit::Tag { human_id: human_id.clone(), tag_id, remove: false }, prov()));
-                    },
+                SidePanelActions {
+                    Button {
+                        label: save_label,
+                        variant: ButtonVariant::Primary,
+                        onclick: move |_| {
+                            let tag_id = chosen();
+                            if tag_id.is_empty() {
+                                return;
+                            }
+                            onsubmit.call((EventEdit::Tag { human_id: human_id.clone(), tag_id, remove: false }, prov()));
+                        },
+                    }
                 }
             }
         }

@@ -403,6 +403,19 @@ fn the_child_removal_panel_records_a_change_and_never_says_retract() {
     );
 }
 
+/// The removal confirm sits in the shared sticky actions row (#663).
+#[test]
+fn the_child_removal_confirm_sits_in_the_sticky_actions_row() {
+    let html = render(child_removal_panel_view);
+    let actions = html.find(r#"class="sp-actions""#);
+    assert!(actions.is_some(), "the panel carries the shared actions row:\n{html}");
+    let actions = actions.unwrap_or_default();
+    assert!(
+        html[actions..].contains(r#"aria-label="Remove Jonathan Smith""#),
+        "the confirm is inside the row:\n{html}"
+    );
+}
+
 #[test]
 fn events_rows_offer_unlink_only_and_no_edit() {
     let html = render(family_view);

@@ -1765,16 +1765,18 @@ fn PersonTagForm(human_id: String, onsubmit: EventHandler<(PersonEdit, Provenanc
                     onchange: move |event: FormEvent| chosen.set(event.value()),
                 }
                 {provenance_block(loc, prov)}
-                Button {
-                    label: save_label,
-                    variant: ButtonVariant::Primary,
-                    onclick: move |_| {
-                        let tag_id = chosen();
-                        if tag_id.is_empty() {
-                            return;
-                        }
-                        onsubmit.call((PersonEdit::Tag { human_id: human_id.clone(), tag_id, remove: false }, prov()));
-                    },
+                SidePanelActions {
+                    Button {
+                        label: save_label,
+                        variant: ButtonVariant::Primary,
+                        onclick: move |_| {
+                            let tag_id = chosen();
+                            if tag_id.is_empty() {
+                                return;
+                            }
+                            onsubmit.call((PersonEdit::Tag { human_id: human_id.clone(), tag_id, remove: false }, prov()));
+                        },
+                    }
                 }
             }
         }
@@ -1815,21 +1817,23 @@ fn AddNameForm(
         Input { label: loc.field_label("prefix"), name: "prefix".to_owned(), value: Some(prefix()), oninput: move |event: FormEvent| prefix.set(event.value()) }
         Input { label: loc.field_label("suffix"), name: "suffix".to_owned(), value: Some(suffix()), oninput: move |event: FormEvent| suffix.set(event.value()) }
         {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                let name = PersonNameParts {
-                    name_type: name_type.clone(),
-                    given: non_empty(given()),
-                    surname_prefix: surname_prefix.clone(),
-                    surname: non_empty(surname()),
-                    nickname: non_empty(nickname()),
-                    prefix: non_empty(prefix()),
-                    suffix: non_empty(suffix()),
-                };
-                onsubmit.call((PersonEdit::AssertName { human_id: human_id.clone(), name }, prov()));
-            },
+        SidePanelActions {
+            Button {
+                label: save_label,
+                variant: ButtonVariant::Primary,
+                onclick: move |_| {
+                    let name = PersonNameParts {
+                        name_type: name_type.clone(),
+                        given: non_empty(given()),
+                        surname_prefix: surname_prefix.clone(),
+                        surname: non_empty(surname()),
+                        nickname: non_empty(nickname()),
+                        prefix: non_empty(prefix()),
+                        suffix: non_empty(suffix()),
+                    };
+                    onsubmit.call((PersonEdit::AssertName { human_id: human_id.clone(), name }, prov()));
+                },
+            }
         }
     }
 }
@@ -1871,12 +1875,14 @@ fn CiteNameForm(human_id: String, name: NameVm, onsubmit: EventHandler<(PersonEd
             span { class: "grow", "{name.display}" }
         }
         {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                onsubmit.call((PersonEdit::AssertName { human_id: human_id.clone(), name: parts.clone() }, prov()));
-            },
+        SidePanelActions {
+            Button {
+                label: save_label,
+                variant: ButtonVariant::Primary,
+                onclick: move |_| {
+                    onsubmit.call((PersonEdit::AssertName { human_id: human_id.clone(), name: parts.clone() }, prov()));
+                },
+            }
         }
     }
 }
@@ -1908,15 +1914,17 @@ fn CiteFactForm(human_id: String, fact: FactVm, onsubmit: EventHandler<(PersonEd
             span { class: "grow", "{display}" }
         }
         {provenance_block_dna(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                onsubmit.call((
-                    PersonEdit::AssertFact { human_id: human_id.clone(), fact_type: fact_type.clone(), value: value.clone() },
-                    prov(),
-                ));
-            },
+        SidePanelActions {
+            Button {
+                label: save_label,
+                variant: ButtonVariant::Primary,
+                onclick: move |_| {
+                    onsubmit.call((
+                        PersonEdit::AssertFact { human_id: human_id.clone(), fact_type: fact_type.clone(), value: value.clone() },
+                        prov(),
+                    ));
+                },
+            }
         }
     }
 }
@@ -1964,23 +1972,25 @@ fn AddFactForm(
         }
         Input { label: loc.field_label("value"), name: "value".to_owned(), value: Some(value()), oninput: move |event: FormEvent| value.set(event.value()) }
         {provenance_block_dna(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                let fact_type = fact_choices
-                    .get(fact_index())
-                    .map_or(vitni_app::FactType::Occupation, |(kind, _)| kind.clone());
-                onsubmit
-                    .call((
-                        PersonEdit::AssertFact {
-                            human_id: human_id.clone(),
-                            fact_type,
-                            value: non_empty(value()),
-                        },
-                        prov(),
-                    ));
-            },
+        SidePanelActions {
+            Button {
+                label: save_label,
+                variant: ButtonVariant::Primary,
+                onclick: move |_| {
+                    let fact_type = fact_choices
+                        .get(fact_index())
+                        .map_or(vitni_app::FactType::Occupation, |(kind, _)| kind.clone());
+                    onsubmit
+                        .call((
+                            PersonEdit::AssertFact {
+                                human_id: human_id.clone(),
+                                fact_type,
+                                value: non_empty(value()),
+                            },
+                            prov(),
+                        ));
+                },
+            }
         }
     }
 }
@@ -2065,11 +2075,13 @@ fn AssociationForm(
             onchange: move |event: FormEvent| role_index.set(event.value().parse().unwrap_or(0)),
         }
         {provenance_block_dna(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            disabled,
-            onclick: move |_| onsave.call(()),
+        SidePanelActions {
+            Button {
+                label: save_label,
+                variant: ButtonVariant::Primary,
+                disabled,
+                onclick: move |_| onsave.call(()),
+            }
         }
     }
 }

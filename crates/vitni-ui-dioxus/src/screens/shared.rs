@@ -990,11 +990,13 @@ pub fn retract_panel(
                 }
             }
             div { class: "muted", style: "font-size:var(--fs-sm)", "{note}" }
-            Button {
-                label: button_label,
-                variant: ButtonVariant::Danger,
-                aria_label: accessible_name,
-                onclick: move |_| onconfirm.call(()),
+            SidePanelActions {
+                Button {
+                    label: button_label,
+                    variant: ButtonVariant::Danger,
+                    aria_label: accessible_name,
+                    onclick: move |_| onconfirm.call(()),
+                }
             }
         }
     }
@@ -1097,8 +1099,8 @@ fn retract_title_id(subject: &RetractSubject) -> &'static str {
 /// The side panel every record screen opens over a collection row (`record-editing.html` §8) — its
 /// edit forms and its retract/unlink/remove confirms alike: while one is open (`editing` is `Some`),
 /// renders a [`SidePanel`] titled by `title(&form)` around `body(form)`; Cancel, the scrim and `Esc` all
-/// close it by clearing `editing`. Only the title and the body are a screen's own — the body carries its
-/// own Save or confirm, so the panel has no footer.
+/// close it by clearing `editing`. Only the title and the body are a screen's own — the body ends in
+/// its own Save or confirm, wrapped in the shared sticky [`SidePanelActions`] row.
 pub fn edit_side_panel<E: Clone + 'static>(
     loc: &Localizer,
     mut editing: Signal<Option<E>>,
@@ -1415,11 +1417,13 @@ pub fn attach_link_form(
         {attach_link_field(loc, attach)}
         {extra}
         {provenance_block(loc, prov)}
-        Button {
-            label: loc.action_button(ActionLabel::Save),
-            variant: ButtonVariant::Primary,
-            disabled,
-            onclick: move |_| onsave.call(()),
+        SidePanelActions {
+            Button {
+                label: loc.action_button(ActionLabel::Save),
+                variant: ButtonVariant::Primary,
+                disabled,
+                onclick: move |_| onsave.call(()),
+            }
         }
     }
 }

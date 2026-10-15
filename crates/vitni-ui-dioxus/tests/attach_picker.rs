@@ -140,6 +140,20 @@ fn an_unpicked_form_shows_a_search_picker_and_disables_save() {
     );
 }
 
+/// Save sits in the shared sticky actions row (#663), after the provenance block, so it stays in view
+/// while the panel body scrolls.
+#[test]
+fn the_save_sits_in_the_sticky_actions_row_after_provenance() {
+    let html = render(picked_view);
+    let actions = html.find(r#"class="sp-actions""#);
+    assert!(actions.is_some(), "the form carries the shared actions row:\n{html}");
+    let actions = actions.unwrap_or_default();
+    assert!(html[actions..].contains(">Save<"), "Save is inside the row:\n{html}");
+    assert!(!html[..actions].contains(">Save<"), "no Save outside the row:\n{html}");
+    let confidence = html.find("Confidence").unwrap_or(usize::MAX);
+    assert!(confidence < actions, "the row follows the provenance block:\n{html}");
+}
+
 #[test]
 fn a_picked_form_collapses_to_a_value_chip_and_enables_save() {
     let html = render(picked_view);

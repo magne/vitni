@@ -721,27 +721,29 @@ pub fn address_form(
         Input { label: loc.field_label("fax"), name: "fax".to_owned(), value: fax(), oninput: move |event: FormEvent| fax.set(event.value()) }
         Input { label: loc.field_label("www"), name: "www".to_owned(), value: www(), oninput: move |event: FormEvent| www.set(event.value()) }
         {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                let optional = |value: String| if value.trim().is_empty() { None } else { Some(value) };
-                let street_value = street();
-                let lines = if street_value.trim().is_empty() { Vec::new() } else { vec![street_value] };
-                let address = Address {
-                    lines,
-                    locality: optional(locality()),
-                    region: optional(region()),
-                    postal_code: optional(postal_code()),
-                    country: optional(country()),
-                    phone: optional(phone()),
-                    email: optional(email()),
-                    fax: optional(fax()),
-                    www: optional(www()),
-                    original_text: None,
-                };
-                onsubmit.call((address, prov()));
-            },
+        SidePanelActions {
+            Button {
+                label: save_label,
+                variant: ButtonVariant::Primary,
+                onclick: move |_| {
+                    let optional = |value: String| if value.trim().is_empty() { None } else { Some(value) };
+                    let street_value = street();
+                    let lines = if street_value.trim().is_empty() { Vec::new() } else { vec![street_value] };
+                    let address = Address {
+                        lines,
+                        locality: optional(locality()),
+                        region: optional(region()),
+                        postal_code: optional(postal_code()),
+                        country: optional(country()),
+                        phone: optional(phone()),
+                        email: optional(email()),
+                        fax: optional(fax()),
+                        www: optional(www()),
+                        original_text: None,
+                    };
+                    onsubmit.call((address, prov()));
+                },
+            }
         }
     }
 }
@@ -892,23 +894,25 @@ pub fn participation_form(
         Input { label: loc.field_label("value"), name: "value".to_owned(), value: attr_value(), oninput: move |event: FormEvent| attr_value.set(event.value()) }
         {record_picker(loc, note_picker)}
         {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                let role = choices.get(role_index()).map_or(ParticipantRole::Primary, |(role, _)| role.clone());
-                let age = build_participation_age(seed_bound, &years(), &months(), &days(), &phrase());
-                let mut attributes = seed_attributes.clone();
-                let new_type = attr_type();
-                if !new_type.trim().is_empty() {
-                    attributes.push(Attribute { attribute_type: new_type, value: attr_value() });
-                }
-                let mut notes = seed_notes.clone();
-                if let Some(id) = picker_selection_id(&picker_for_save) {
-                    notes.push(id);
-                }
-                onsubmit.call((NewParticipation { role, age, attributes, notes }, prov()));
-            },
+        SidePanelActions {
+            Button {
+                label: save_label,
+                variant: ButtonVariant::Primary,
+                onclick: move |_| {
+                    let role = choices.get(role_index()).map_or(ParticipantRole::Primary, |(role, _)| role.clone());
+                    let age = build_participation_age(seed_bound, &years(), &months(), &days(), &phrase());
+                    let mut attributes = seed_attributes.clone();
+                    let new_type = attr_type();
+                    if !new_type.trim().is_empty() {
+                        attributes.push(Attribute { attribute_type: new_type, value: attr_value() });
+                    }
+                    let mut notes = seed_notes.clone();
+                    if let Some(id) = picker_selection_id(&picker_for_save) {
+                        notes.push(id);
+                    }
+                    onsubmit.call((NewParticipation { role, age, attributes, notes }, prov()));
+                },
+            }
         }
     }
 }

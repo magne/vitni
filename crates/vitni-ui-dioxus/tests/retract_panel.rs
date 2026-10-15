@@ -62,6 +62,20 @@ fn retract_panel_shows_note_reason_input_and_danger_button() {
     );
 }
 
+/// The confirm sits in the shared sticky actions row (#663), so it stays reachable however long the
+/// panel body grows.
+#[test]
+fn retract_panel_confirm_sits_in_the_sticky_actions_row() {
+    let html = render();
+    let actions = html.find(r#"class="sp-actions""#);
+    assert!(actions.is_some(), "the panel carries the shared actions row:\n{html}");
+    let actions = actions.unwrap_or_default();
+    assert!(
+        html[actions..].contains(r#"aria-label="Retract Birth""#),
+        "the confirm is inside the row:\n{html}"
+    );
+}
+
 #[test]
 fn retract_panel_never_renders_an_assertion_uuid() {
     // A realistic UUID v7 that a caller might hold as the row's assertion id — it must stay off-screen.

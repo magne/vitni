@@ -8,8 +8,8 @@ use vitni_ui::{ConfidenceLevel, EvidenceAxis, RestrictionKind};
 use vitni_ui_dioxus::components::{
     Badge, Breadcrumb, Button, ButtonVariant, Card, Checkbox, Chip, ConfidenceBadge, EmptyState, EvidenceAxisChip,
     HistoryEntry, HistoryTimeline, IconButton, Input, LabeledValue, ListRow, Modal, NoSourceFlag, NumberInput,
-    ProvenancePopover, RestrictionChoice, RestrictionSet, Select, SelectChoice, SidePanel, SourceLink, StatusLine,
-    TabItem, Table, Tabs, Toast, ToastKind,
+    ProvenancePopover, RestrictionChoice, RestrictionSet, Select, SelectChoice, SidePanel, SidePanelActions,
+    SourceLink, StatusLine, TabItem, Table, Tabs, Toast, ToastKind,
 };
 
 /// A gallery instantiating each component with representative props.
@@ -88,8 +88,8 @@ fn gallery() -> Element {
             open: true,
             close_label: "Close".to_owned(),
             onclose: move |()| {},
-            footer: rsx! { Button { label: "Save".to_owned(), onclick: move |_| {} } },
             div { "panel body" }
+            SidePanelActions { Button { label: "Save".to_owned(), onclick: move |_| {} } }
         }
         Modal {
             title: "Delete tag?".to_owned(),
