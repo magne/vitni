@@ -3965,6 +3965,7 @@ mod tests {
             run: None,
             value: None,
             replaced: None,
+            merged_from: None,
         }
     }
 

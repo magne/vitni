@@ -29,6 +29,9 @@ pub struct HistoryEntryVm {
     pub value: Option<String>,
     /// On a correction, the localized value it replaced (e.g. `was 1850`).
     pub replaced: Option<String>,
+    /// On a cluster root's History, the localized record a merged-in entry came from (e.g.
+    /// `from I0002`); `None` for the record's own changes.
+    pub merged_from: Option<String>,
 }
 
 impl HistoryEntryVm {
@@ -60,6 +63,7 @@ impl HistoryEntryVm {
                 .or_else(|| date_unread_why(entry, loc)),
             value: entry.value.as_ref().map(|value| loc.change_value(value)),
             replaced: entry.replaced.as_ref().map(|value| loc.change_replaced(value)),
+            merged_from: entry.merged_from.as_deref().map(|record| loc.merged_from(record)),
             evidence,
             assertion_id: entry.assertion_id.clone(),
             can_undo: entry.can_undo,
@@ -359,6 +363,7 @@ mod tests {
             children: Vec::new(),
             value: None,
             replaced: None,
+            merged_from: None,
         }
     }
 

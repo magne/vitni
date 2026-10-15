@@ -31,6 +31,7 @@ fn timeline() -> Element {
                 changes: None,
                 value: None,
                 replaced: None,
+                merged_from: None,
             }],
             onundo: move |_| {},
         }
@@ -55,6 +56,7 @@ fn run_timeline() -> Element {
                 changes: None,
                 value: None,
                 replaced: None,
+                merged_from: None,
             }],
             onundo: move |_| {},
         }
@@ -77,6 +79,7 @@ fn run_with_changes() -> Element {
         changes: None,
         value: None,
         replaced: None,
+        merged_from: None,
     };
     rsx! {
         HistoryTimeline {
@@ -100,6 +103,7 @@ fn run_with_changes() -> Element {
                 }),
                 value: None,
                 replaced: None,
+                merged_from: None,
             }],
             onundo: move |_| {},
         }
@@ -446,6 +450,7 @@ fn decision_timeline() -> Element {
                 changes: None,
                 value: None,
                 replaced: None,
+                merged_from: None,
             }],
             onundo: move |_| {},
         }
@@ -481,6 +486,7 @@ fn corrected_timeline() -> Element {
                 changes: None,
                 value: Some("12 Apr 1850".to_owned()),
                 replaced: Some("was 1850".to_owned()),
+                merged_from: None,
             }],
             onundo: move |_| {},
         }
@@ -705,6 +711,7 @@ fn run_record_changes() -> Element {
         children: Vec::new(),
         value: None,
         replaced: None,
+        merged_from: None,
     };
     run_record_changes_list(
         &loc,
@@ -729,4 +736,47 @@ fn an_open_record_lists_what_the_run_changed_in_it_without_undo() {
         assert!(html.contains(needle), "expected {needle:?} in:\n{html}");
     }
     assert!(!html.contains("Undo"), "the Dashboard undoes nothing:\n{html}");
+}
+
+/// Renders a cluster root's audit timeline: one of its own changes, then one from a merged-in record.
+fn merged_timeline() -> Element {
+    let row = |what: &str, merged_from: Option<&str>| HistoryEntry {
+        when: "2026-06-22 14:35".to_owned(),
+        what: what.to_owned(),
+        who: "magne".to_owned(),
+        why: None,
+        assertion_id: what.to_owned(),
+        can_undo: true,
+        undo_text: "Undo".to_owned(),
+        undo_label: format!("Undo: {what}"),
+        count: None,
+        evidence: None,
+        changes: None,
+        value: None,
+        replaced: None,
+        merged_from: merged_from.map(ToOwned::to_owned),
+    };
+    rsx! {
+        HistoryTimeline {
+            entries: vec![row("Name asserted", None), row("Fact asserted", Some("from I0002"))],
+            onundo: move |_| {},
+        }
+    }
+}
+
+#[test]
+fn a_merged_records_history_row_is_marked_with_the_record_it_came_from() {
+    let mut vdom = VirtualDom::new(merged_timeline);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    assert!(
+        html.contains(r#"Fact asserted<span class="badge tl-origin">from I0002</span>"#),
+        "the member's row carries its origin:\n{html}"
+    );
+    assert_eq!(
+        html.matches("tl-origin").count(),
+        1,
+        "the root's own row has none:\n{html}"
+    );
+    assert_eq!(html.matches("Undo: ").count(), 2, "both rows stay undoable:\n{html}");
 }

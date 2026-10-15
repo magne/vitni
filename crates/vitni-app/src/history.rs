@@ -12,40 +12,32 @@ use serde::Deserialize;
 use std::collections::hash_map::Entry;
 use std::collections::{BTreeSet, HashMap};
 use uuid::Uuid;
-use vitni_core::citation::command::{CitationCommand, CitationCommandEnvelope};
 use vitni_core::citation::{CitationEventBody, CitationView};
 use vitni_core::dna_match::DnaMatchView;
 use vitni_core::dna_match::command::{DnaMatchCommand, DnaMatchCommandEnvelope};
 use vitni_core::dna_test::DnaTestView;
 use vitni_core::dna_test::command::{DnaTestCommand, DnaTestCommandEnvelope};
 use vitni_core::enums::{EventType, FactType};
-use vitni_core::event::command::{EventCommand, EventCommandEnvelope};
 use vitni_core::event::{EventEventBody, EventView};
-use vitni_core::family::command::{FamilyCommand, FamilyCommandEnvelope};
 use vitni_core::family::{FamilyEventBody, FamilyView};
 use vitni_core::ids::{
     AssertionId, CitationId, EventId, FamilyId, ImportRunId, MediaId, NoteId, PersonId, PlaceId, RepositoryId, SourceId,
 };
 use vitni_core::matching::MatchEvidence;
 use vitni_core::media::MediaEventBody;
-use vitni_core::media::command::{MediaCommand, MediaCommandEnvelope};
 use vitni_core::note::NoteEventBody;
-use vitni_core::note::command::{NoteCommand, NoteCommandEnvelope};
 use vitni_core::person::PersonView;
-use vitni_core::person::command::{PersonCommand, PersonCommandEnvelope};
 use vitni_core::person::event::PersonEventBody;
-use vitni_core::place::command::{PlaceCommand, PlaceCommandEnvelope};
 use vitni_core::place::{PlaceEventBody, PlaceView};
 use vitni_core::provenance::{AgentKind, Confidence, EventContext, EvidenceAnalysis, Timestamp};
-use vitni_core::repository::command::{RepositoryCommand, RepositoryCommandEnvelope};
 use vitni_core::repository::{RepositoryEventBody, RepositoryView};
 use vitni_core::research_note::ResearchNoteView;
 use vitni_core::research_note::command::{ResearchNoteCommand, ResearchNoteCommandEnvelope};
-use vitni_core::source::command::{SourceCommand, SourceCommandEnvelope};
 use vitni_core::source::{SourceEventBody, SourceView};
 use vitni_db::{DbError, Store, StoredEvent};
 
 use crate::error::AppError;
+use crate::identity::{ClusterId, ClusterView, Clusters};
 use crate::import_run::{self, RunResume};
 use crate::session::Session;
 use crate::use_case::{Provenance, map_command_error, resolve_media_id, resolve_note_id};
@@ -156,6 +148,9 @@ pub struct ChangeLogEntry {
     /// On a correction's replacement, the value it replaced. Only a record's own change log fills it:
     /// the Dashboard's window may not hold the replaced assertion.
     pub replaced: Option<ChangeValue>,
+    /// On a cluster root's History, the `human_id` of the merged-in record whose stream this entry was
+    /// read from (ADR 0039 §5); `None` for the record's own changes.
+    pub merged_from: Option<String>,
 }
 
 /// Per-aggregate record counts for the workspace — the Dashboard stat cards and the rail badges.
@@ -226,7 +221,7 @@ struct EnvelopeHeader {
 pub async fn change_log_for_person(workspace: &Workspace, human_id: &str) -> Result<Vec<ChangeLogEntry>, AppError> {
     let store = workspace.store();
     let person_id = resolve_person_id(store, human_id).await?;
-    record_log(workspace, "person", &person_id.to_string(), Some(human_id), true).await
+    cluster_log(workspace, person_id, human_id).await
 }
 
 /// Reads the most recent changes across the whole workspace, newest first (the Dashboard activity
@@ -286,7 +281,9 @@ async fn build_entries(store: &Store, events: &[StoredEvent]) -> Result<Vec<Chan
 ///
 /// `entries` are newest first. A run's row sits where its newest entry was, and gathers every later
 /// entry of the same run whether or not they are consecutive, so two imports that interleave stay
-/// apart. The run's own events (its start, resolutions and end) place the row but are not children.
+/// apart, and so do a run's changes to each record of a cluster (ADR 0039 §5), each row marked with the
+/// record it came from. The run's own events (its start, resolutions and end) place the row but are not
+/// children.
 /// The row is stamped from its newest child: it carries that child's `assertion_id` and `can_undo`, so
 /// `⌘Z` on a record whose newest history is an import retracts the newest imported assertion rather
 /// than skipping the run (issue #306).
@@ -296,13 +293,14 @@ async fn build_entries(store: &Store, events: &[StoredEvent]) -> Result<Vec<Chan
 #[must_use]
 pub fn group_runs(entries: &[ChangeLogEntry]) -> Vec<ChangeLogEntry> {
     let mut rows: Vec<GroupedRow> = Vec::new();
-    let mut positions: HashMap<ImportRunId, usize> = HashMap::new();
+    let mut positions: HashMap<(ImportRunId, Option<&str>), usize> = HashMap::new();
     for entry in entries {
         let Some(run) = &entry.run else {
             rows.push(GroupedRow::Entry(entry.clone()));
             continue;
         };
-        let position = *positions.entry(run.id).or_insert_with(|| {
+        let key = (run.id, entry.merged_from.as_deref());
+        let position = *positions.entry(key).or_insert_with(|| {
             rows.push(GroupedRow::Run {
                 anchor: entry.clone(),
                 children: Vec::new(),
@@ -489,17 +487,7 @@ pub async fn undo_assertion(
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let person_id = resolve_person_id(store, human_id).await?;
-    let target = AssertionId::from_uuid(
-        Uuid::parse_str(assertion_id).map_err(|e| AppError::Db(DbError::Malformed(format!("assertion id: {e}"))))?,
-    );
-    let envelope = PersonCommandEnvelope {
-        meta: session.new_meta(undo_provenance(rationale), Vec::new()),
-        command: PersonCommand::RetractAssertion { person_id, target },
-    };
-    store
-        .execute_person(&person_id.to_string(), envelope)
-        .await
-        .map_err(map_command_error)
+    undo_in_cluster(workspace, session, person_id, assertion_id, rationale).await
 }
 
 /// Reads a citation's change log (the History tab), newest first. Mirrors [`change_log_for_person`].
@@ -510,7 +498,7 @@ pub async fn undo_assertion(
 pub async fn change_log_for_citation(workspace: &Workspace, human_id: &str) -> Result<Vec<ChangeLogEntry>, AppError> {
     let store = workspace.store();
     let citation_id = resolve_citation_id(store, human_id).await?;
-    record_log(workspace, "citation", &citation_id.to_string(), Some(human_id), true).await
+    cluster_log(workspace, citation_id, human_id).await
 }
 
 /// Undoes a citation assertion by retracting it (non-destructive — the log is append-only).
@@ -528,17 +516,7 @@ pub async fn undo_citation_assertion(
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let citation_id = resolve_citation_id(store, human_id).await?;
-    let target = AssertionId::from_uuid(
-        Uuid::parse_str(assertion_id).map_err(|e| AppError::Db(DbError::Malformed(format!("assertion id: {e}"))))?,
-    );
-    let envelope = CitationCommandEnvelope {
-        meta: session.new_meta(undo_provenance(rationale), Vec::new()),
-        command: CitationCommand::RetractAssertion { citation_id, target },
-    };
-    store
-        .execute_citation(&citation_id.to_string(), envelope)
-        .await
-        .map_err(map_command_error)
+    undo_in_cluster(workspace, session, citation_id, assertion_id, rationale).await
 }
 
 /// Reads a family's change log (the History tab), newest first. Mirrors [`change_log_for_person`].
@@ -549,7 +527,7 @@ pub async fn undo_citation_assertion(
 pub async fn change_log_for_family(workspace: &Workspace, human_id: &str) -> Result<Vec<ChangeLogEntry>, AppError> {
     let store = workspace.store();
     let family_id = resolve_family_id(store, human_id).await?;
-    record_log(workspace, "family", &family_id.to_string(), Some(human_id), true).await
+    cluster_log(workspace, family_id, human_id).await
 }
 
 /// Undoes a family assertion by retracting it (non-destructive — the log is append-only).
@@ -567,17 +545,7 @@ pub async fn undo_family_assertion(
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let family_id = resolve_family_id(store, human_id).await?;
-    let target = AssertionId::from_uuid(
-        Uuid::parse_str(assertion_id).map_err(|e| AppError::Db(DbError::Malformed(format!("assertion id: {e}"))))?,
-    );
-    let envelope = FamilyCommandEnvelope {
-        meta: session.new_meta(undo_provenance(rationale), Vec::new()),
-        command: FamilyCommand::RetractAssertion { family_id, target },
-    };
-    store
-        .execute_family(&family_id.to_string(), envelope)
-        .await
-        .map_err(map_command_error)
+    undo_in_cluster(workspace, session, family_id, assertion_id, rationale).await
 }
 
 /// Reads an event's change log (the History tab), newest first. Mirrors [`change_log_for_person`].
@@ -588,7 +556,7 @@ pub async fn undo_family_assertion(
 pub async fn change_log_for_event(workspace: &Workspace, human_id: &str) -> Result<Vec<ChangeLogEntry>, AppError> {
     let store = workspace.store();
     let event_id = resolve_event_id(store, human_id).await?;
-    record_log(workspace, "event", &event_id.to_string(), Some(human_id), true).await
+    cluster_log(workspace, event_id, human_id).await
 }
 
 /// Undoes an event assertion by retracting it (non-destructive — the log is append-only).
@@ -606,17 +574,7 @@ pub async fn undo_event_assertion(
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let event_id = resolve_event_id(store, human_id).await?;
-    let target = AssertionId::from_uuid(
-        Uuid::parse_str(assertion_id).map_err(|e| AppError::Db(DbError::Malformed(format!("assertion id: {e}"))))?,
-    );
-    let envelope = EventCommandEnvelope {
-        meta: session.new_meta(undo_provenance(rationale), Vec::new()),
-        command: EventCommand::RetractAssertion { event_id, target },
-    };
-    store
-        .execute_event(&event_id.to_string(), envelope)
-        .await
-        .map_err(map_command_error)
+    undo_in_cluster(workspace, session, event_id, assertion_id, rationale).await
 }
 
 /// Reads a place's change log (the History tab), newest first. Mirrors [`change_log_for_person`].
@@ -627,7 +585,7 @@ pub async fn undo_event_assertion(
 pub async fn change_log_for_place(workspace: &Workspace, human_id: &str) -> Result<Vec<ChangeLogEntry>, AppError> {
     let store = workspace.store();
     let place_id = resolve_place_id(store, human_id).await?;
-    record_log(workspace, "place", &place_id.to_string(), Some(human_id), true).await
+    cluster_log(workspace, place_id, human_id).await
 }
 
 /// Undoes a place assertion by retracting it (non-destructive — the log is append-only).
@@ -645,17 +603,7 @@ pub async fn undo_place_assertion(
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let place_id = resolve_place_id(store, human_id).await?;
-    let target = AssertionId::from_uuid(
-        Uuid::parse_str(assertion_id).map_err(|e| AppError::Db(DbError::Malformed(format!("assertion id: {e}"))))?,
-    );
-    let envelope = PlaceCommandEnvelope {
-        meta: session.new_meta(undo_provenance(rationale), Vec::new()),
-        command: PlaceCommand::RetractAssertion { place_id, target },
-    };
-    store
-        .execute_place(&place_id.to_string(), envelope)
-        .await
-        .map_err(map_command_error)
+    undo_in_cluster(workspace, session, place_id, assertion_id, rationale).await
 }
 
 /// Reads a source's change log (the History tab), newest first. Mirrors [`change_log_for_person`].
@@ -666,7 +614,7 @@ pub async fn undo_place_assertion(
 pub async fn change_log_for_source(workspace: &Workspace, human_id: &str) -> Result<Vec<ChangeLogEntry>, AppError> {
     let store = workspace.store();
     let source_id = resolve_source_id(store, human_id).await?;
-    record_log(workspace, "source", &source_id.to_string(), Some(human_id), true).await
+    cluster_log(workspace, source_id, human_id).await
 }
 
 /// Undoes a source assertion by retracting it (non-destructive — the log is append-only).
@@ -684,17 +632,7 @@ pub async fn undo_source_assertion(
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let source_id = resolve_source_id(store, human_id).await?;
-    let target = AssertionId::from_uuid(
-        Uuid::parse_str(assertion_id).map_err(|e| AppError::Db(DbError::Malformed(format!("assertion id: {e}"))))?,
-    );
-    let envelope = SourceCommandEnvelope {
-        meta: session.new_meta(undo_provenance(rationale), Vec::new()),
-        command: SourceCommand::RetractAssertion { source_id, target },
-    };
-    store
-        .execute_source(&source_id.to_string(), envelope)
-        .await
-        .map_err(map_command_error)
+    undo_in_cluster(workspace, session, source_id, assertion_id, rationale).await
 }
 
 /// Reads a repository's change log (the History tab), newest first. Mirrors [`change_log_for_person`].
@@ -706,14 +644,7 @@ pub async fn undo_source_assertion(
 pub async fn change_log_for_repository(workspace: &Workspace, human_id: &str) -> Result<Vec<ChangeLogEntry>, AppError> {
     let store = workspace.store();
     let repository_id = resolve_repository_id(store, human_id).await?;
-    record_log(
-        workspace,
-        "repository",
-        &repository_id.to_string(),
-        Some(human_id),
-        true,
-    )
-    .await
+    cluster_log(workspace, repository_id, human_id).await
 }
 
 /// Undoes a repository assertion by retracting it (non-destructive — the log is append-only).
@@ -731,17 +662,7 @@ pub async fn undo_repository_assertion(
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let repository_id = resolve_repository_id(store, human_id).await?;
-    let target = AssertionId::from_uuid(
-        Uuid::parse_str(assertion_id).map_err(|e| AppError::Db(DbError::Malformed(format!("assertion id: {e}"))))?,
-    );
-    let envelope = RepositoryCommandEnvelope {
-        meta: session.new_meta(undo_provenance(rationale), Vec::new()),
-        command: RepositoryCommand::RetractAssertion { repository_id, target },
-    };
-    store
-        .execute_repository(&repository_id.to_string(), envelope)
-        .await
-        .map_err(map_command_error)
+    undo_in_cluster(workspace, session, repository_id, assertion_id, rationale).await
 }
 
 /// Reads a media object's change log (the History tab), newest first. Mirrors [`change_log_for_person`].
@@ -752,7 +673,7 @@ pub async fn undo_repository_assertion(
 pub async fn change_log_for_media(workspace: &Workspace, human_id: &str) -> Result<Vec<ChangeLogEntry>, AppError> {
     let store = workspace.store();
     let media_id = resolve_media_id(store, human_id).await?;
-    record_log(workspace, "media", &media_id.to_string(), Some(human_id), true).await
+    cluster_log(workspace, media_id, human_id).await
 }
 
 /// Undoes a media assertion by retracting it (non-destructive — the log is append-only).
@@ -770,17 +691,7 @@ pub async fn undo_media_assertion(
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let media_id = resolve_media_id(store, human_id).await?;
-    let target = AssertionId::from_uuid(
-        Uuid::parse_str(assertion_id).map_err(|e| AppError::Db(DbError::Malformed(format!("assertion id: {e}"))))?,
-    );
-    let envelope = MediaCommandEnvelope {
-        meta: session.new_meta(undo_provenance(rationale), Vec::new()),
-        command: MediaCommand::RetractAssertion { media_id, target },
-    };
-    store
-        .execute_media(&media_id.to_string(), envelope)
-        .await
-        .map_err(map_command_error)
+    undo_in_cluster(workspace, session, media_id, assertion_id, rationale).await
 }
 
 /// Reads a note's change log (the History tab), newest first. Mirrors [`change_log_for_person`].
@@ -791,7 +702,7 @@ pub async fn undo_media_assertion(
 pub async fn change_log_for_note(workspace: &Workspace, human_id: &str) -> Result<Vec<ChangeLogEntry>, AppError> {
     let store = workspace.store();
     let note_id = resolve_note_id(store, human_id).await?;
-    record_log(workspace, "note", &note_id.to_string(), Some(human_id), true).await
+    cluster_log(workspace, note_id, human_id).await
 }
 
 /// Undoes a note assertion by retracting it (non-destructive — the log is append-only).
@@ -809,17 +720,7 @@ pub async fn undo_note_assertion(
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let note_id = resolve_note_id(store, human_id).await?;
-    let target = AssertionId::from_uuid(
-        Uuid::parse_str(assertion_id).map_err(|e| AppError::Db(DbError::Malformed(format!("assertion id: {e}"))))?,
-    );
-    let envelope = NoteCommandEnvelope {
-        meta: session.new_meta(undo_provenance(rationale), Vec::new()),
-        command: NoteCommand::RetractAssertion { note_id, target },
-    };
-    store
-        .execute_note(&note_id.to_string(), envelope)
-        .await
-        .map_err(map_command_error)
+    undo_in_cluster(workspace, session, note_id, assertion_id, rationale).await
 }
 
 /// Reads a research note's change log (the History tab), newest first. Mirrors
@@ -860,9 +761,7 @@ pub async fn undo_research_note_assertion(
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let research_note_id = resolve_research_note_id(store, human_id).await?;
-    let target = AssertionId::from_uuid(
-        Uuid::parse_str(assertion_id).map_err(|e| AppError::Db(DbError::Malformed(format!("assertion id: {e}"))))?,
-    );
+    let target = parse_assertion_id(assertion_id)?;
     let envelope = ResearchNoteCommandEnvelope {
         meta: session.new_meta(undo_provenance(rationale), Vec::new()),
         command: ResearchNoteCommand::RetractAssertion {
@@ -902,9 +801,7 @@ pub async fn undo_dna_test_assertion(
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let dna_test_id = resolve_dna_test_id(store, human_id).await?;
-    let target = AssertionId::from_uuid(
-        Uuid::parse_str(assertion_id).map_err(|e| AppError::Db(DbError::Malformed(format!("assertion id: {e}"))))?,
-    );
+    let target = parse_assertion_id(assertion_id)?;
     let envelope = DnaTestCommandEnvelope {
         meta: session.new_meta(undo_provenance(rationale), Vec::new()),
         command: DnaTestCommand::RetractAssertion { dna_test_id, target },
@@ -941,9 +838,7 @@ pub async fn undo_dna_match_assertion(
 ) -> Result<(), AppError> {
     let store = workspace.store();
     let dna_match_id = resolve_dna_match_id(store, human_id).await?;
-    let target = AssertionId::from_uuid(
-        Uuid::parse_str(assertion_id).map_err(|e| AppError::Db(DbError::Malformed(format!("assertion id: {e}"))))?,
-    );
+    let target = parse_assertion_id(assertion_id)?;
     let envelope = DnaMatchCommandEnvelope {
         meta: session.new_meta(undo_provenance(rationale), Vec::new()),
         command: DnaMatchCommand::RetractAssertion { dna_match_id, target },
@@ -1036,20 +931,126 @@ async fn record_log(
     human_id: Option<&str>,
     undoable: bool,
 ) -> Result<Vec<ChangeLogEntry>, AppError> {
+    let entries = stream_entries(workspace.store(), kind, aggregate_id, human_id, undoable)
+        .await?
+        .into_iter()
+        .map(|(_, entry)| entry)
+        .collect();
+    label_entries(workspace, entries).await
+}
+
+/// The History of the record `id` of a mergeable kind: its own change log interleaved, newest first,
+/// with that of every record merged into it (ADR 0039 §5), each of theirs marked with
+/// [`ChangeLogEntry::merged_from`]. A record merged into another reads only its own stream.
+///
+/// # Errors
+///
+/// [`AppError`] on a store read or payload-parse failure.
+async fn cluster_log<I: ClusterId>(
+    workspace: &Workspace,
+    id: I,
+    human_id: &str,
+) -> Result<Vec<ChangeLogEntry>, AppError> {
     let store = workspace.store();
+    let kind = <I::View as ClusterView>::AGGREGATE;
+    let mut timed = stream_entries(store, kind, &id.to_string(), Some(human_id), true).await?;
+    for member in Clusters::<I>::load(store).await?.members(id) {
+        let member_id = member.to_string();
+        let merged_from = human_id_of(store, kind, &member_id).await?;
+        let mut entries = stream_entries(store, kind, &member_id, Some(human_id), true).await?;
+        for (_, entry) in &mut entries {
+            entry.merged_from.clone_from(&merged_from);
+        }
+        timed.extend(entries);
+    }
+    // Stable, so entries recorded at one instant keep their stream's order and the root's lead.
+    timed.sort_by(|(first, _), (second, _)| second.cmp(first));
+    label_entries(workspace, timed.into_iter().map(|(_, entry)| entry).collect()).await
+}
+
+/// One stream's change log, newest first, each entry with the instant it was recorded at. An entry is
+/// undoable when `undoable` holds for the record kind, its event type can be undone, and no later
+/// correction on the stream already retracted or superseded it.
+///
+/// # Errors
+///
+/// [`AppError`] on a store read or payload-parse failure.
+async fn stream_entries(
+    store: &Store,
+    kind: &str,
+    aggregate_id: &str,
+    human_id: Option<&str>,
+    undoable: bool,
+) -> Result<Vec<(Timestamp, ChangeLogEntry)>, AppError> {
     let events = store.read_aggregate_events(kind, aggregate_id).await?;
     let retracted = retracted_targets(&events)?;
     let mut entries = Vec::with_capacity(events.len());
+    let mut instants = Vec::with_capacity(events.len());
     for event in &events {
         let header = parse_header(event)?;
         let assertion_id = header.assertion_id.to_string();
         let can_undo = undoable && is_undoable(&event.event_type) && !retracted.contains(&assertion_id);
         entries.push(entry(event, &header, human_id.map(str::to_owned), can_undo));
+        instants.push(header.context.occurred_at);
     }
     values::attach_replaced(&events, &mut entries);
-    entries.reverse();
-    let entries = label_runs(store, entries).await?;
+    let mut timed: Vec<_> = instants.into_iter().zip(entries).collect();
+    timed.reverse();
+    Ok(timed)
+}
+
+/// Labels a change log's import runs and the records its values name.
+///
+/// # Errors
+///
+/// [`AppError`] on a store read failure.
+async fn label_entries(workspace: &Workspace, entries: Vec<ChangeLogEntry>) -> Result<Vec<ChangeLogEntry>, AppError> {
+    let entries = label_runs(workspace.store(), entries).await?;
     values::label_records(workspace, entries).await
+}
+
+/// Undoes `assertion_id` on the record `id` of a mergeable kind by retracting it on the stream that
+/// holds it: `id`'s own, or that of a record merged into it, whose changes its History lists.
+///
+/// # Errors
+///
+/// [`AppError::Db`] if `assertion_id` is not a UUID, a store read failure, or the domain rejection if
+/// the core refuses the retraction.
+async fn undo_in_cluster<I: ClusterId>(
+    workspace: &Workspace,
+    session: &Session,
+    id: I,
+    assertion_id: &str,
+    rationale: Option<String>,
+) -> Result<(), AppError> {
+    let store = workspace.store();
+    let target = parse_assertion_id(assertion_id)?;
+    let owner = assertion_owner(store, id, target).await?;
+    I::View::retract(store, session, owner, target, undo_provenance(rationale)).await
+}
+
+/// The record of `id`'s cluster whose stream recorded `target`: a member's, else `id` itself.
+///
+/// # Errors
+///
+/// [`AppError`] on a store read or payload-parse failure.
+async fn assertion_owner<I: ClusterId>(store: &Store, id: I, target: AssertionId) -> Result<I, AppError> {
+    let kind = <I::View as ClusterView>::AGGREGATE;
+    for member in Clusters::<I>::load(store).await?.members(id) {
+        for event in store.read_aggregate_events(kind, &member.to_string()).await? {
+            if AssertionId::from_uuid(parse_header(&event)?.assertion_id) == target {
+                return Ok(*member);
+            }
+        }
+    }
+    Ok(id)
+}
+
+/// Parses the assertion id an undo targets.
+fn parse_assertion_id(assertion_id: &str) -> Result<AssertionId, AppError> {
+    Uuid::parse_str(assertion_id)
+        .map(AssertionId::from_uuid)
+        .map_err(|e| AppError::Db(DbError::Malformed(format!("assertion id: {e}"))))
 }
 
 /// Builds a [`ChangeLogEntry`] from a stored event and its parsed provenance header.
@@ -1081,6 +1082,7 @@ fn entry(event: &StoredEvent, header: &EnvelopeHeader, human_id: Option<String>,
         }),
         value: values::extract_value(event),
         replaced: None,
+        merged_from: None,
     }
 }
 
@@ -1734,6 +1736,7 @@ mod tests {
             run: run.map(run_ref),
             value: None,
             replaced: None,
+            merged_from: None,
         }
     }
 
@@ -1818,6 +1821,25 @@ mod tests {
         assert_eq!(run_row(&rows, 0).1, 2);
         assert_eq!(run_row(&rows, 1).0.id, run_ref(1).id);
         assert_eq!(run_row(&rows, 1).1, 2);
+    }
+
+    #[test]
+    fn group_runs_folds_one_run_apart_on_each_record_of_a_cluster() {
+        let member = |entry: ChangeLogEntry| ChangeLogEntry {
+            merged_from: Some("I0002".to_owned()),
+            ..entry
+        };
+        let entries = vec![
+            member(synthetic_entry("c", Some(1), true)),
+            synthetic_entry("b", Some(1), true),
+            member(synthetic_entry("a", Some(1), true)),
+        ];
+        let rows = group_runs(&entries);
+        assert_eq!(rows.len(), 2, "{rows:#?}");
+        assert_eq!(rows[0].merged_from.as_deref(), Some("I0002"));
+        assert_eq!(run_row(&rows, 0).1, 2, "the member's changes fold together");
+        assert_eq!(rows[1].merged_from, None);
+        assert_eq!(run_row(&rows, 1).1, 1);
     }
 
     #[test]
