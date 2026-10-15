@@ -366,220 +366,93 @@ macro_rules! detail_save_wrappers {
 
 for_each_detail_aggregate!(detail_save_wrappers);
 
-/// Commits the buffered person record (a [`PersonChangeSetRequest`] + its provenance block) through
-/// the app's change-set, returning the person's `human_id` (or a localized error). One operator
-/// action: the whole graph — person + name + gender + tags + any new source/citation — commits
-/// together (or, on edit, only the diff). Opens a fresh workspace and mints a [`Session`].
-pub async fn commit_person_change_set(
-    services: Services,
-    request: PersonChangeSetRequest,
-    prov: ProvenanceDraft,
-) -> Result<String, String> {
-    let loc = services.localizer();
-    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
-    let session = Session::new(services.config.operator_agent());
-    vitni_ui::dispatch_person_change_set(&workspace, &session, &request, &prov)
-        .await
-        .map_err(|error| loc.error(&error))
+/// Generates each change-set commit wrapper from its row: open a fresh workspace, mint a [`Session`]
+/// for the operator (the app layer is the sole source of the clock + assertion id), dispatch the
+/// request with its provenance block, and localize the failure. Each row's doc comment is the
+/// wrapper's own.
+macro_rules! change_set_wrappers {
+    ($($(#[$meta:meta])* fn $commit:ident($Request:ty) => $dispatch:path;)+) => {
+        $(
+            $(#[$meta])*
+            pub async fn $commit(
+                services: Services,
+                request: $Request,
+                prov: ProvenanceDraft,
+            ) -> Result<String, String> {
+                let loc = services.localizer();
+                let workspace = services.open().await.map_err(|error| loc.error(&error))?;
+                let session = Session::new(services.config.operator_agent());
+                $dispatch(&workspace, &session, &request, &prov)
+                    .await
+                    .map_err(|error| loc.error(&error))
+            }
+        )+
+    };
 }
 
-/// Commits a [`NewRecordRequest`] — an attach picker's "+ New …" draft, once it validates — through
-/// [`vitni_ui::dispatch_new_record`], returning the new record's `human_id` (or a localized error).
-/// Nothing else is written: attaching the created record to the panel's own root is a separate command
-/// the caller dispatches afterwards, once this returns `Ok`.
-pub async fn commit_new_record(
-    services: Services,
-    request: NewRecordRequest,
-    prov: ProvenanceDraft,
-) -> Result<String, String> {
-    let loc = services.localizer();
-    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
-    let session = Session::new(services.config.operator_agent());
-    vitni_ui::dispatch_new_record(&workspace, &session, &request, &prov)
-        .await
-        .map_err(|error| loc.error(&error))
-}
+change_set_wrappers! {
+    /// Commits the buffered person record (a [`PersonChangeSetRequest`] + its provenance block) through
+    /// the app's change-set, returning the person's `human_id` (or a localized error). One operator
+    /// action: the whole graph — person + name + gender + tags + any new source/citation — commits
+    /// together (or, on edit, only the diff). Opens a fresh workspace and mints a [`Session`].
+    fn commit_person_change_set(PersonChangeSetRequest) => vitni_ui::dispatch_person_change_set;
 
-/// Creates a citation against a source (by its `human_id`), returning the new citation's `human_id`
-/// (or a localized error).
-pub async fn commit_citation_change_set(
-    services: Services,
-    request: CitationChangeSetRequest,
-    prov: ProvenanceDraft,
-) -> Result<String, String> {
-    let loc = services.localizer();
-    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
-    let session = Session::new(services.config.operator_agent());
-    vitni_ui::dispatch_citation_change_set(&workspace, &session, &request, &prov)
-        .await
-        .map_err(|error| loc.error(&error))
-}
+    /// Commits a [`NewRecordRequest`] — an attach picker's "+ New …" draft, once it validates — through
+    /// [`vitni_ui::dispatch_new_record`], returning the new record's `human_id` (or a localized error).
+    /// Nothing else is written: attaching the created record to the panel's own root is a separate command
+    /// the caller dispatches afterwards, once this returns `Ok`.
+    fn commit_new_record(NewRecordRequest) => vitni_ui::dispatch_new_record;
 
-/// Commits the buffered family create form through the app's change-set, returning the new family's
-/// `human_id`. Partners are resolved before any write; nothing is written until Save.
-pub async fn commit_family_change_set(
-    services: Services,
-    request: FamilyChangeSetRequest,
-    prov: ProvenanceDraft,
-) -> Result<String, String> {
-    let loc = services.localizer();
-    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
-    let session = Session::new(services.config.operator_agent());
-    vitni_ui::dispatch_family_change_set(&workspace, &session, &request, &prov)
-        .await
-        .map_err(|error| loc.error(&error))
-}
+    /// Creates a citation against a source (by its `human_id`), returning the new citation's `human_id`
+    /// (or a localized error).
+    fn commit_citation_change_set(CitationChangeSetRequest) => vitni_ui::dispatch_citation_change_set;
 
-/// Commits the buffered event create form through the app change-set, returning the new event's `human_id` (or a localized error).
-pub async fn commit_event_change_set(
-    services: Services,
-    request: EventChangeSetRequest,
-    prov: ProvenanceDraft,
-) -> Result<String, String> {
-    let loc = services.localizer();
-    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
-    let session = Session::new(services.config.operator_agent());
-    vitni_ui::dispatch_event_change_set(&workspace, &session, &request, &prov)
-        .await
-        .map_err(|error| loc.error(&error))
-}
+    /// Commits the buffered family create form through the app's change-set, returning the new family's
+    /// `human_id`. Partners are resolved before any write; nothing is written until Save.
+    fn commit_family_change_set(FamilyChangeSetRequest) => vitni_ui::dispatch_family_change_set;
 
-/// Commits the buffered place create form through the app's change-set, returning the new place's
-/// `human_id`. One operator action; nothing is written until Save.
-pub async fn commit_place_change_set(
-    services: Services,
-    request: PlaceChangeSetRequest,
-    prov: ProvenanceDraft,
-) -> Result<String, String> {
-    let loc = services.localizer();
-    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
-    let session = Session::new(services.config.operator_agent());
-    vitni_ui::dispatch_place_change_set(&workspace, &session, &request, &prov)
-        .await
-        .map_err(|error| loc.error(&error))
-}
+    /// Commits the buffered event create form through the app change-set, returning the new event's
+    /// `human_id` (or a localized error).
+    fn commit_event_change_set(EventChangeSetRequest) => vitni_ui::dispatch_event_change_set;
 
-/// Commits the buffered source create form (a [`SourceChangeSetRequest`] + its provenance block)
-/// through the app's change-set, returning the new source's `human_id` (or a localized error). One
-/// operator action: `CreateSource` plus a setter for each filled field. Nothing is written until Save.
-pub async fn commit_source_change_set(
-    services: Services,
-    request: SourceChangeSetRequest,
-    prov: ProvenanceDraft,
-) -> Result<String, String> {
-    let loc = services.localizer();
-    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
-    let session = Session::new(services.config.operator_agent());
-    vitni_ui::dispatch_source_change_set(&workspace, &session, &request, &prov)
-        .await
-        .map_err(|error| loc.error(&error))
-}
+    /// Commits the buffered place create form through the app's change-set, returning the new place's
+    /// `human_id`. One operator action; nothing is written until Save.
+    fn commit_place_change_set(PlaceChangeSetRequest) => vitni_ui::dispatch_place_change_set;
 
-/// Commits the buffered repository create form through the app's change-set, returning the new
-/// repository's `human_id`. One operator action; nothing is written until Save.
-pub async fn commit_repository_change_set(
-    services: Services,
-    request: RepositoryChangeSetRequest,
-    prov: ProvenanceDraft,
-) -> Result<String, String> {
-    let loc = services.localizer();
-    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
-    let session = Session::new(services.config.operator_agent());
-    vitni_ui::dispatch_repository_change_set(&workspace, &session, &request, &prov)
-        .await
-        .map_err(|error| loc.error(&error))
-}
+    /// Commits the buffered source create form (a [`SourceChangeSetRequest`] + its provenance block)
+    /// through the app's change-set, returning the new source's `human_id` (or a localized error). One
+    /// operator action: `CreateSource` plus a setter for each filled field. Nothing is written until Save.
+    fn commit_source_change_set(SourceChangeSetRequest) => vitni_ui::dispatch_source_change_set;
 
-/// Commits the buffered media create form through the app's change-set, returning the new media
-/// object's `human_id`. One operator action; nothing is written until Save.
-pub async fn commit_media_change_set(
-    services: Services,
-    request: MediaChangeSetRequest,
-    prov: ProvenanceDraft,
-) -> Result<String, String> {
-    let loc = services.localizer();
-    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
-    let session = Session::new(services.config.operator_agent());
-    vitni_ui::dispatch_media_change_set(&workspace, &session, &request, &prov)
-        .await
-        .map_err(|error| loc.error(&error))
-}
+    /// Commits the buffered repository create form through the app's change-set, returning the new
+    /// repository's `human_id`. One operator action; nothing is written until Save.
+    fn commit_repository_change_set(RepositoryChangeSetRequest) => vitni_ui::dispatch_repository_change_set;
 
-/// Commits the buffered note create form through the app's change-set, returning the new note's
-/// `human_id`. One operator action; nothing is written until Save.
-pub async fn commit_note_change_set(
-    services: Services,
-    request: NoteChangeSetRequest,
-    prov: ProvenanceDraft,
-) -> Result<String, String> {
-    let loc = services.localizer();
-    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
-    let session = Session::new(services.config.operator_agent());
-    vitni_ui::dispatch_note_change_set(&workspace, &session, &request, &prov)
-        .await
-        .map_err(|error| loc.error(&error))
-}
+    /// Commits the buffered media create form through the app's change-set, returning the new media
+    /// object's `human_id`. One operator action; nothing is written until Save.
+    fn commit_media_change_set(MediaChangeSetRequest) => vitni_ui::dispatch_media_change_set;
 
-/// Commits the buffered research-note create form, returning the new note's `human_id`. One operator
-/// action; nothing is written until Save.
-pub async fn commit_research_note_change_set(
-    services: Services,
-    request: ResearchNoteChangeSetRequest,
-    prov: ProvenanceDraft,
-) -> Result<String, String> {
-    let loc = services.localizer();
-    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
-    let session = Session::new(services.config.operator_agent());
-    vitni_ui::dispatch_research_note_change_set(&workspace, &session, &request, &prov)
-        .await
-        .map_err(|error| loc.error(&error))
-}
+    /// Commits the buffered note create form through the app's change-set, returning the new note's
+    /// `human_id`. One operator action; nothing is written until Save.
+    fn commit_note_change_set(NoteChangeSetRequest) => vitni_ui::dispatch_note_change_set;
 
-/// Commits the buffered tag record (a [`TagChangeSetRequest`]) through the app's change-set, returning
-/// the tag's aggregate id (the minted one on create) or a localized error. One operator action: the
-/// name, priority, and colour commit together (or, on edit, only the changed fields).
-pub async fn commit_tag_change_set(
-    services: Services,
-    request: TagChangeSetRequest,
-    prov: ProvenanceDraft,
-) -> Result<String, String> {
-    let loc = services.localizer();
-    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
-    let session = Session::new(services.config.operator_agent());
-    vitni_ui::dispatch_tag_change_set(&workspace, &session, &request, &prov)
-        .await
-        .map_err(|error| loc.error(&error))
-}
+    /// Commits the buffered research-note create form, returning the new note's `human_id`. One operator
+    /// action; nothing is written until Save.
+    fn commit_research_note_change_set(ResearchNoteChangeSetRequest) => vitni_ui::dispatch_research_note_change_set;
 
-/// Creates a DNA test anchored to a person (by their `human_id`), returning the new test's `human_id`
-/// (or a localized error). Provider/kit/type/build are added afterwards through the detail.
-pub async fn commit_dna_test_change_set(
-    services: Services,
-    request: DnaTestChangeSetRequest,
-    prov: ProvenanceDraft,
-) -> Result<String, String> {
-    let loc = services.localizer();
-    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
-    let session = Session::new(services.config.operator_agent());
-    vitni_ui::dispatch_dna_test_change_set(&workspace, &session, &request, &prov)
-        .await
-        .map_err(|error| loc.error(&error))
-}
+    /// Commits the buffered tag record (a [`TagChangeSetRequest`]) through the app's change-set, returning
+    /// the tag's aggregate id (the minted one on create) or a localized error. One operator action: the
+    /// name, priority, and colour commit together (or, on edit, only the changed fields).
+    fn commit_tag_change_set(TagChangeSetRequest) => vitni_ui::dispatch_tag_change_set;
 
-/// Commits the buffered DNA-match create form through `observe_dna_match`, returning the new
-/// match's `human_id`. The numeric fields are parsed at the UI boundary — an unparseable value never
-/// reaches here (§7); nothing is written until Save.
-pub async fn commit_dna_match_change_set(
-    services: Services,
-    request: DnaMatchChangeSetRequest,
-    prov: ProvenanceDraft,
-) -> Result<String, String> {
-    let loc = services.localizer();
-    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
-    let session = Session::new(services.config.operator_agent());
-    vitni_ui::dispatch_dna_match_change_set(&workspace, &session, &request, &prov)
-        .await
-        .map_err(|error| loc.error(&error))
+    /// Creates a DNA test anchored to a person (by their `human_id`), returning the new test's `human_id`
+    /// (or a localized error). Provider/kit/type/build are added afterwards through the detail.
+    fn commit_dna_test_change_set(DnaTestChangeSetRequest) => vitni_ui::dispatch_dna_test_change_set;
+
+    /// Commits the buffered DNA-match create form through `observe_dna_match`, returning the new
+    /// match's `human_id`. The numeric fields are parsed at the UI boundary — an unparseable value never
+    /// reaches here (§7); nothing is written until Save.
+    fn commit_dna_match_change_set(DnaMatchChangeSetRequest) => vitni_ui::dispatch_dna_match_change_set;
 }
 
 /// Loads a record picker's options: every row of `category`'s list, through the same `list_*`
@@ -1999,6 +1872,72 @@ mod tests {
         let reply = presenter.confirm_plan(summary).await.expect("the wizard answers");
         assert_eq!(reply, vitni_app::PlanReply::Skip);
         wizard.await.expect("wizard task");
+    }
+
+    /// [`Services`](super::Services) over a freshly initialised workspace in `dir`.
+    fn services_in(dir: &tempfile::TempDir) -> super::Services {
+        let config: vitni_app::Config = serde_json::from_value(serde_json::json!({
+            "operator": { "id": "00000000-0000-0000-0000-000000000001", "display": "Ada", "email": null }
+        }))
+        .expect("config");
+        let ws = dir.path().join("ws");
+        vitni_app::Workspace::init(&ws, &config.operator, &config.defaults, None).expect("init");
+        super::Services {
+            data_quality: super::DataQualityCache::default(),
+            config,
+            dir: ws,
+            open_workspace: "ws".to_owned(),
+            host: std::rc::Rc::new(vitni_plugin_host::PluginHost::new().expect("host")),
+            plugins_dir: vitni_app::embedded_plugins_dir(),
+        }
+    }
+
+    fn note(human_id: &str) -> vitni_ui::NoteChangeSetRequest {
+        vitni_ui::NoteChangeSetRequest {
+            human_id: Some(human_id.to_owned()),
+            text: Some("An estate inventory".to_owned()),
+            ..vitni_ui::NoteChangeSetRequest::default()
+        }
+    }
+
+    /// A change-set commit writes the record and returns its `human_id`; committing the same
+    /// `human_id` again is refused with a localized error, proving the first commit reached the log.
+    #[tokio::test]
+    async fn a_change_set_commit_writes_the_record_and_returns_its_human_id() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let services = services_in(&dir);
+        let prov = vitni_ui::ProvenanceDraft::default();
+
+        let human_id = super::commit_note_change_set(services.clone(), note("N0042"), prov.clone()).await;
+        assert_eq!(human_id.as_deref(), Ok("N0042"));
+
+        let clash = super::commit_note_change_set(services, note("N0042"), prov).await;
+        assert!(
+            clash.is_err_and(|message| !message.is_empty()),
+            "a taken human_id is a localized error"
+        );
+    }
+
+    /// The attach picker's "+ New …" commit takes the same path as the change-set wrappers.
+    #[tokio::test]
+    async fn a_new_record_commit_returns_the_new_human_id() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let services = services_in(&dir);
+        let request = vitni_ui::NewRecordRequest::Note(note("N0007"));
+
+        let human_id = super::commit_new_record(services, request, vitni_ui::ProvenanceDraft::default()).await;
+        assert_eq!(human_id.as_deref(), Ok("N0007"));
+    }
+
+    /// A workspace that cannot be opened fails the commit with a localized error before any dispatch.
+    #[tokio::test]
+    async fn a_commit_against_a_missing_workspace_is_a_localized_error() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let mut services = services_in(&dir);
+        services.dir = dir.path().join("missing");
+
+        let result = super::commit_note_change_set(services, note("N0001"), vitni_ui::ProvenanceDraft::default()).await;
+        assert!(result.is_err_and(|message| !message.is_empty()));
     }
 
     /// A closed request channel (the wizard was never started, or is gone) is likewise a `backend`
