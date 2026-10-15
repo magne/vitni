@@ -495,6 +495,9 @@ app. Gated by **ADR 0014** (the last deferred plugin-system decision).
   verdict: measured, not warranted** — rebuild is a maintenance op (projections update incrementally on
   the live path) and per-aggregate streams stay tiny, so cqrs-es snapshotting would not help; ADR 0004's
   deferral stands, no follow-up ADR. Findings: [`research/performance-profiling.md`](research/performance-profiling.md).
+  The twelve lists ordered by `human_id` read one page (`list_*_page`, #607) on both engines, a merged
+  record taking no slot, and `vitni <kind> list` takes `--limit`/`--offset`; the first page of 100 000
+  persons reads in ~0.2 ms.
 - **Packaging & distribution (Linux-first).** A `cargo xtask package` assembles a release tarball (CLI +
   GUI binaries + the signed first-party fleet as the embedded layer, re-verifying every signature);
   cargo-deb metadata for a `.deb`; and a tag-triggered, zizmor-clean `release.yml` that signs the fleet
