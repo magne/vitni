@@ -16,9 +16,12 @@
 # target below is resolved there. The succession form above the provenance block is taller than a
 # 1200px window once the new-citation card opens — the panel is too narrow for a date's four controls
 # to share one line, so they wrap — and before the scroll the card's Add button was off screen.
-# Scrolling once and never again is what keeps the two picker shots comparable — the `differ` below is
-# over a region, and a second scroll between them would move the floating list for the scroll rather than
-# for the row it is asserting on, the same trap the chip detach below avoids.
+# The open card then grows the body past that scroll, leaving its Add button under the panel's sticky
+# Save row (#663), so the body is scrolled to the bottom once more before Add. That second scroll does
+# not move the picker between its two shots: Add closes the card and the detach removes the chip, so the
+# body shrinks back to the height the first scroll saw and its bottom clamps to the same offset — the
+# `differ` below is over a region, and a scroll that left the body elsewhere would move the floating list
+# for the scroll rather than for the row it is asserting on, the same trap the chip detach avoids.
 description = "An open picker sees a record created beside it, and the create updates the rail count (#266)"
 
 [[step]]
@@ -75,6 +78,12 @@ label = "type: s"
 do = "click"
 at = { id = "prov-new-source-opt-0" }
 label = "source picker: + New source \"s\""
+
+[[step]]
+do = "wheel"
+at = { id = "prov-new-page" }
+clicks = -15
+label = "panel: scroll the grown body to the bottom again, Add citation out from under the Save row"
 
 [[step]]
 do = "shot"

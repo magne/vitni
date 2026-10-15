@@ -1,0 +1,112 @@
+# The research-note subject chooser's Save moved into the shared actions row (#663), and in the Add
+# subject side panel the provenance block now renders above it, through a children slot on the chooser.
+# SSR mounts no `AppCtx::Ready`, so it renders neither the create form's chooser nor the panel's.
+#
+# The create form's Subjects card uses the same chooser, so the scenario first names a subject there —
+# a place drafted through "+ New place", which commits it as P0002 on Add — to prove its Add still
+# creates and names one and clears the search, then saves the note and opens its Add subject panel,
+# which must carry both the provenance block and its Save.
+description = "Add subject still creates and names a subject, and its panel carries provenance and Save (#663)"
+
+[[step]]
+do = "click"
+at = { role = "listitem", text = "Research notes" }
+label = "rail: Research notes"
+
+[[step]]
+do = "key"
+chord = "ctrl+n"
+label = "⌘N: a new Research note draft"
+
+[[step]]
+do = "click"
+at = { id = "subject-kind" }
+label = "Subjects: open the kind select"
+
+[[step]]
+do = "key"
+chord = "Down"
+label = "kind: Families"
+
+[[step]]
+do = "key"
+chord = "Down"
+label = "kind: Events"
+
+[[step]]
+do = "key"
+chord = "Down"
+label = "kind: Places"
+
+[[step]]
+do = "key"
+chord = "Return"
+label = "kind: confirm Places"
+
+[[step]]
+do = "click"
+at = { id = "subject" }
+label = "Subjects: the place picker"
+
+[[step]]
+do = "key"
+chord = "k"
+label = "type: k"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "New place" }
+label = "place picker: + New place \"k\""
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Add subject" }
+label = "Subjects: Add subject"
+
+[[step]]
+do = "shot"
+name = "subject-added"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Save" }
+label = "New research note: Save"
+
+[[step]]
+do = "click"
+at = { id = "tab-subjects" }
+label = "detail tab: Subjects"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Add subject" }
+label = "Subjects: Add subject panel"
+
+[[step]]
+do = "shot"
+name = "panel-open"
+
+[[assert]]
+kind = "present"
+shot = "subject-added"
+element = { role = "button", text = "Remove P0002" }
+because = "Add subject must create the drafted place and name it as a subject chip"
+
+[[assert]]
+kind = "value"
+shot = "subject-added"
+element = { id = "subject" }
+equals = ""
+because = "Add subject must clear the picker's search for the next pick"
+
+[[assert]]
+kind = "present"
+shot = "panel-open"
+element = { id = "prov-reason", within = "dialog" }
+because = "the Add subject panel carries the provenance block"
+
+[[assert]]
+kind = "present"
+shot = "panel-open"
+element = { role = "button", text = "Save", within = "dialog" }
+because = "the panel's Save sits in its actions row"
