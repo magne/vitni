@@ -894,25 +894,45 @@ impl Store {
         }
     }
 
-    /// The aggregates the import run `run` wrote to, each once, the one it wrote to last first:
-    /// `limit` of them after skipping `offset`. A resolution onto a record the run then left alone is
-    /// not a write, so that record is not listed.
+    /// The aggregates the import run `run` wrote to, grouped by the source record they came from: each
+    /// aggregate once, under the record that first wrote it, the group that gained one last first,
+    /// `limit` groups after skipping `offset`. The record's own entity leads its group. A resolution onto
+    /// a record the run then left alone is not a write, so that record is not listed.
     ///
     /// # Errors
     ///
     /// [`DbError`] on a read failure.
     #[cfg(any(feature = "sqlite", feature = "postgres"))]
-    pub async fn run_records(
+    pub async fn run_groups(
         &self,
         run: vitni_core::ids::ImportRunId,
         offset: u32,
         limit: u32,
-    ) -> Result<Vec<crate::record_origins::RunRecordRow>, DbError> {
+    ) -> Result<Vec<crate::record_origins::RunGroupRow>, DbError> {
         match &self.backend {
             #[cfg(feature = "sqlite")]
-            Backend::Sqlite(s) => s.run_records(run, offset, limit).await,
+            Backend::Sqlite(s) => s.run_groups(run, offset, limit).await,
             #[cfg(feature = "postgres")]
-            Backend::Postgres(p) => p.run_records(run, offset, limit).await,
+            Backend::Postgres(p) => p.run_groups(run, offset, limit).await,
+        }
+    }
+
+    /// How many aggregates of each kind the import run `run` wrote to, each counted once and events
+    /// per type, in the order the run first wrote each.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read failure.
+    #[cfg(any(feature = "sqlite", feature = "postgres"))]
+    pub async fn run_kind_counts(
+        &self,
+        run: vitni_core::ids::ImportRunId,
+    ) -> Result<Vec<crate::record_origins::RunKindCount>, DbError> {
+        match &self.backend {
+            #[cfg(feature = "sqlite")]
+            Backend::Sqlite(s) => s.run_kind_counts(run).await,
+            #[cfg(feature = "postgres")]
+            Backend::Postgres(p) => p.run_kind_counts(run).await,
         }
     }
 

@@ -7,7 +7,7 @@ use dioxus::prelude::*;
 use vitni_app::{DatasetId, DecidableKind, ImportRunId, RecentItem, RunResume};
 use vitni_ui::{
     ActivityVm, Category, DashboardStats, DashboardVm, DataQualityVm, HistoryEntryVm, JumpVm, Localizer, QueuedMatchVm,
-    RecordRef, ResumeVm, RunDisclosureVm, RunRecordVm, RunRecordsVm,
+    RecordRef, ResumeVm, RunDisclosureVm, RunGroupVm, RunRecordVm, RunRecordsVm,
 };
 use vitni_ui_dioxus::components::{HistoryEntry, HistoryTimeline, RunChanges};
 use vitni_ui_dioxus::screens::{dashboard_view, run_record_changes_list, run_records_list};
@@ -538,26 +538,46 @@ fn an_import_run_row_on_the_dashboard_offers_its_records_behind_a_closed_disclos
 fn run_record(kind: &str, record: Option<RecordRef>, label: &str) -> RunRecordVm {
     RunRecordVm {
         kind: kind.to_owned(),
-        aggregate_id: format!("{kind}-id"),
+        aggregate_id: format!("{kind}-{label}"),
         record,
         label: label.to_owned(),
         toggle_label: format!("What it changed in {label}"),
     }
 }
 
-/// A page of a run's records: a linked person and a tag with no user-facing id, with more to load.
+fn linked(category: Category, human_id: &str, label: &str) -> RecordRef {
+    RecordRef {
+        category,
+        human_id: human_id.to_owned(),
+        label: label.to_owned(),
+    }
+}
+
+fn group(lead: RunRecordVm, members: Vec<RunRecordVm>, summary: Option<&str>) -> RunGroupVm {
+    RunGroupVm {
+        lead,
+        members,
+        summary: summary.map(ToOwned::to_owned),
+    }
+}
+
+/// A page of a run's records under its count line: a person with the birth and citation its source
+/// item wrote, and a tag with no user-facing id alone, with more to load.
 fn run_records() -> Element {
     use_context_provider(NavState::new);
     let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
-    let person = RecordRef {
-        category: Category::People,
-        human_id: "I0001".to_owned(),
-        label: "John Smith".to_owned(),
-    };
+    let person = run_record(
+        "person",
+        Some(linked(Category::People, "I0001", "John Smith")),
+        "John Smith",
+    );
+    let birth = run_record("event", Some(linked(Category::Events, "E0001", "E0001")), "E0001");
+    let citation = run_record("citation", Some(linked(Category::Citations, "C0001", "C0001")), "C0001");
     let page = RunRecordsVm {
-        records: vec![
-            run_record("person", Some(person), "John Smith"),
-            run_record("tag", None, "tag"),
+        counts: "1 person · 1 birth · 1 citation · 1 tag".to_owned(),
+        groups: vec![
+            group(person, vec![birth, citation], Some("person · birth · citation")),
+            group(run_record("tag", None, "tag"), Vec::new(), None),
         ],
         more: true,
     };
@@ -583,7 +603,12 @@ fn an_open_run_lists_its_records_each_behind_its_own_disclosure() {
         "a person links by name:\n{html}"
     );
     assert!(html.contains(">tag<"), "a record with no id reads as its kind:\n{html}");
-    for name in ["What it changed in John Smith", "What it changed in tag"] {
+    for name in [
+        "What it changed in John Smith",
+        "What it changed in E0001",
+        "What it changed in C0001",
+        "What it changed in tag",
+    ] {
         assert!(
             html.contains(&format!(r#"aria-expanded="false" aria-label="{name}""#))
                 || html.contains(&format!(r#"aria-label="{name}" aria-expanded="false""#)),
@@ -597,12 +622,54 @@ fn an_open_run_lists_its_records_each_behind_its_own_disclosure() {
     assert!(html.contains(">Show more<"), "more records load on demand:\n{html}");
 }
 
+#[test]
+fn an_open_run_counts_its_records_above_them() {
+    let mut vdom = VirtualDom::new(run_records);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    let counts = html
+        .find(r#"data-hook="run-counts""#)
+        .unwrap_or_else(|| panic!("a count line:\n{html}"));
+    let records = html.find(r#"data-hook="run-records""#).unwrap_or(0);
+    assert!(counts < records, "the count line heads the records:\n{html}");
+    assert!(html.contains("1 person · 1 birth · 1 citation · 1 tag"), "{html}");
+}
+
+#[test]
+fn a_source_items_records_nest_under_its_own_entity() {
+    let mut vdom = VirtualDom::new(run_records);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+    assert_eq!(
+        html.matches(r#"data-hook="run-group""#).count(),
+        1,
+        "only a group of several records nests; a lone record reads flat:\n{html}"
+    );
+    let group = html.find(r#"data-hook="run-group""#).unwrap_or(0);
+    let lead = html.find("John Smith").unwrap_or(0);
+    let summary = html
+        .find("person · birth · citation")
+        .unwrap_or_else(|| panic!("the group names its records' kinds:\n{html}"));
+    let birth = html.find("E0001").unwrap_or(0);
+    let tag = html.find(">tag<").unwrap_or(0);
+    assert!(
+        group < lead && lead < summary && summary < birth && birth < tag,
+        "the group reads John Smith — its kinds, then its items' records inside it, before the next group:\n{html}"
+    );
+    assert_eq!(
+        html.matches(r#"class="muted tl-count""#).count(),
+        1,
+        "only the lead names the group's kinds; each item's record reads by its link:\n{html}"
+    );
+}
+
 /// A run's page with no records and nothing more.
 fn no_run_records() -> Element {
     use_context_provider(NavState::new);
     let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
     let page = RunRecordsVm {
-        records: Vec::new(),
+        counts: String::new(),
+        groups: Vec::new(),
         more: false,
     };
     run_records_list(
@@ -620,6 +687,7 @@ fn a_run_that_changed_no_records_says_so() {
     let html = dioxus_ssr::render(&vdom);
     assert!(html.contains("It changed no records."), "{html}");
     assert!(!html.contains("Show more"), "{html}");
+    assert!(!html.contains("run-counts"), "no count line over nothing:\n{html}");
 }
 
 /// What a run changed in one record: a supersession and its replacement, display-only.

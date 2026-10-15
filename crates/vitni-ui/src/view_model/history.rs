@@ -1,4 +1,4 @@
-use vitni_app::{ActivityDetail, ImportRunId, RunRecords, RunRef, RunResume};
+use vitni_app::{ActivityDetail, ImportRunId, RunGroups, RunKindCount, RunRecord, RunRef, RunResume};
 
 use super::{Category, ChangeLogEntry, HashMap, Localizer, RecordRef};
 
@@ -231,21 +231,38 @@ pub struct RunRecordVm {
     pub toggle_label: String,
 }
 
-/// A page of the records an import run changed.
+/// The records an import run wrote from one source item, led by the item's own entity.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunGroupVm {
+    /// The record the group reads as: the item's own entity, else the first record written.
+    pub lead: RunRecordVm,
+    /// The group's other records, in the order written; empty for a one-record group.
+    pub members: Vec<RunRecordVm>,
+    /// Every record's kind in one line (`person · birth · citation`); `None` for a one-record group,
+    /// which reads as that record alone.
+    pub summary: Option<String>,
+}
+
+/// A page of the records an import run changed, grouped by source item, under its count line.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RunRecordsVm {
-    /// The page's records, the one the run changed last first.
-    pub records: Vec<RunRecordVm>,
-    /// Whether records remain after this page.
+    /// What the whole run wrote, by kind and events by type (`1 census · 6 persons · 6 births`).
+    pub counts: String,
+    /// The page's groups, the one the run changed last first.
+    pub groups: Vec<RunGroupVm>,
+    /// Whether groups remain after this page.
     pub more: bool,
 }
+
+/// What separates the entries of a run's count line and of a group's kinds.
+const RUN_SEPARATOR: &str = " · ";
 
 impl RunRecordsVm {
     /// The persons `page` lists: those whose display names [`build`](Self::build) labels them with.
     #[must_use]
-    pub fn persons_named(page: &RunRecords) -> Vec<String> {
+    pub fn persons_named(page: &RunGroups) -> Vec<String> {
         let mut persons = Vec::new();
-        for record in &page.records {
+        for record in page.groups.iter().flat_map(|group| &group.records) {
             if record.kind == "person"
                 && let Some(human_id) = &record.human_id
             {
@@ -255,37 +272,60 @@ impl RunRecordsVm {
         persons
     }
 
-    /// Builds the page, labelling each person by its display name in `names` (by `human_id`).
+    /// Builds the page under the run's `counts`, labelling each person by its display name in `names`
+    /// (by `human_id`).
     #[must_use]
-    pub fn build(page: &RunRecords, names: &HashMap<String, String>, loc: &Localizer) -> Self {
-        let mut records = Vec::with_capacity(page.records.len());
-        for record in &page.records {
-            let category = Category::from_aggregate_kind(&record.kind);
-            let link = match (category, &record.human_id) {
-                (Some(category), Some(human_id)) => Some(RecordRef {
-                    category,
-                    label: names.get(human_id).cloned().unwrap_or_else(|| human_id.clone()),
-                    human_id: human_id.clone(),
-                }),
-                (None, _) | (_, None) => None,
+    pub fn build(page: &RunGroups, counts: &[RunKindCount], names: &HashMap<String, String>, loc: &Localizer) -> Self {
+        let mut line = Vec::with_capacity(counts.len());
+        for count in counts {
+            line.push(loc.run_kind_count(&count.kind, count.event_type.as_ref(), count.count));
+        }
+        let mut groups = Vec::with_capacity(page.groups.len());
+        for group in &page.groups {
+            let mut records = group.records.iter().map(|record| run_record_vm(record, names, loc));
+            let Some(lead) = records.next() else {
+                continue;
             };
-            let label = match (&link, category) {
-                (Some(link), _) => link.label.clone(),
-                (None, Some(category)) => loc.picker_entity(category),
-                (None, None) => record.kind.clone(),
-            };
-            records.push(RunRecordVm {
-                kind: record.kind.clone(),
-                aggregate_id: record.aggregate_id.clone(),
-                toggle_label: loc.run_record_changes_toggle(&label),
-                record: link,
-                label,
+            let members: Vec<RunRecordVm> = records.collect();
+            let summary = (!members.is_empty()).then(|| {
+                let mut kinds = Vec::with_capacity(group.records.len());
+                for record in &group.records {
+                    kinds.push(loc.run_kind_noun(&record.kind, record.event_type.as_ref(), 1));
+                }
+                kinds.join(RUN_SEPARATOR)
             });
+            groups.push(RunGroupVm { lead, members, summary });
         }
         Self {
-            records,
+            counts: line.join(RUN_SEPARATOR),
+            groups,
             more: page.more,
         }
+    }
+}
+
+/// One record a run changed, linked and labelled.
+fn run_record_vm(record: &RunRecord, names: &HashMap<String, String>, loc: &Localizer) -> RunRecordVm {
+    let category = Category::from_aggregate_kind(&record.kind);
+    let link = match (category, &record.human_id) {
+        (Some(category), Some(human_id)) => Some(RecordRef {
+            category,
+            label: names.get(human_id).cloned().unwrap_or_else(|| human_id.clone()),
+            human_id: human_id.clone(),
+        }),
+        (None, _) | (_, None) => None,
+    };
+    let label = match (&link, category) {
+        (Some(link), _) => link.label.clone(),
+        (None, Some(category)) => loc.picker_entity(category),
+        (None, None) => record.kind.clone(),
+    };
+    RunRecordVm {
+        kind: record.kind.clone(),
+        aggregate_id: record.aggregate_id.clone(),
+        toggle_label: loc.run_record_changes_toggle(&label),
+        record: link,
+        label,
     }
 }
 

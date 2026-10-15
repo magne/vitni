@@ -216,26 +216,31 @@ fn RunRecordsPanel(run: ImportRunId) -> Element {
     }
 }
 
-/// The records an open import-run row lists, each behind its own disclosure of what the run changed
-/// in it, then *Show more* when the run changed more than are loaded.
+/// The records an open import-run row lists under its count line, grouped by the source item they came
+/// from, each behind its own disclosure of what the run changed in it, then *Show more* when the run
+/// changed more than are loaded (#660).
 pub fn run_records_list(
     loc: &Localizer,
     run: ImportRunId,
     page: &RunRecordsVm,
     on_more: impl FnMut(()) + 'static,
 ) -> Element {
-    if page.records.is_empty() {
+    if page.groups.is_empty() {
         return rsx! { p { class: "muted", "{loc.run_records_empty()}" } };
     }
     let on_more = EventHandler::new(on_more);
+    let label = loc.history_run_changes_toggle();
     rsx! {
+        p { class: "muted", style: "margin-top:4px", "data-hook": "run-counts", "{page.counts}" }
         div { class: "timeline tl-children", "data-hook": "run-records",
-            for record in page.records.iter().cloned() {
+            for group in page.groups.iter().cloned() {
                 RunRecordItem {
-                    key: "{record.kind}-{record.aggregate_id}",
+                    key: "{group.lead.kind}-{group.lead.aggregate_id}",
                     run,
-                    record,
-                    label: loc.history_run_changes_toggle(),
+                    record: group.lead,
+                    label: label.clone(),
+                    note: group.summary,
+                    members: group.members,
                 }
             }
         }
@@ -251,13 +256,21 @@ pub fn run_records_list(
     }
 }
 
-/// One record an open import-run row lists: a link to it, and a disclosure of what the run changed in
-/// it, named after the record.
+/// One record an open import-run row lists: a link to it, a muted `note` after it, and a disclosure of
+/// what the run changed in it, named after the record. A source item's own entity carries the kinds of
+/// its records as its note, and those records (`members`) nested under it.
 #[component]
-fn RunRecordItem(run: ImportRunId, record: RunRecordVm, label: String) -> Element {
+fn RunRecordItem(
+    run: ImportRunId,
+    record: RunRecordVm,
+    label: String,
+    note: Option<String>,
+    members: Vec<RunRecordVm>,
+) -> Element {
     let mut open = use_signal(|| false);
+    let hook = (!members.is_empty()).then_some("run-group");
     rsx! {
-        div { class: "tl-item",
+        div { class: "tl-item", "data-hook": hook,
             div { class: "tl-what",
                 if let Some(link) = &record.record {
                     RecordLink {
@@ -268,6 +281,9 @@ fn RunRecordItem(run: ImportRunId, record: RunRecordVm, label: String) -> Elemen
                     }
                 } else {
                     "{record.label}"
+                }
+                if let Some(note) = &note {
+                    span { class: "muted tl-count", "{note}" }
                 }
             }
             div { class: "row-actions", style: "margin-top:4px",
@@ -282,6 +298,20 @@ fn RunRecordItem(run: ImportRunId, record: RunRecordVm, label: String) -> Elemen
             }
             if open() {
                 RunRecordChanges { run, record: record.clone() }
+            }
+            if !members.is_empty() {
+                div { class: "timeline tl-children",
+                    for member in members.iter().cloned() {
+                        RunRecordItem {
+                            key: "{member.kind}-{member.aggregate_id}",
+                            run,
+                            note: None,
+                            record: member,
+                            label: label.clone(),
+                            members: Vec::new(),
+                        }
+                    }
+                }
             }
         }
     }

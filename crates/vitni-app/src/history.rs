@@ -18,7 +18,7 @@ use vitni_core::dna_match::DnaMatchView;
 use vitni_core::dna_match::command::{DnaMatchCommand, DnaMatchCommandEnvelope};
 use vitni_core::dna_test::DnaTestView;
 use vitni_core::dna_test::command::{DnaTestCommand, DnaTestCommandEnvelope};
-use vitni_core::enums::FactType;
+use vitni_core::enums::{EventType, FactType};
 use vitni_core::event::command::{EventCommand, EventCommandEnvelope};
 use vitni_core::event::{EventEventBody, EventView};
 use vitni_core::family::command::{FamilyCommand, FamilyCommandEnvelope};
@@ -368,43 +368,89 @@ pub struct RunRecord {
     pub aggregate_id: String,
     /// The record's user-facing id, when it has one (a Tag has none).
     pub human_id: Option<String>,
+    /// An event's type; `None` for any other kind.
+    pub event_type: Option<EventType>,
 }
 
-/// A page of the records an import run wrote to.
+/// The records an import run first wrote from one source item (a GEDCOM `INDI`, a Digitalarkivet
+/// person page): the item's own entity first, when the run wrote it, then the records its parts wrote.
+/// A record a later item also wrote to (a spouse a `FAM` links) stays under the item that wrote it first.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RunRecords {
-    /// The page's records, the one the run wrote to last first.
+pub struct RunGroup {
+    /// The group's records, never empty.
     pub records: Vec<RunRecord>,
-    /// Whether records remain after this page.
+}
+
+/// A page of the records an import run wrote to, grouped by the source item they came from.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunGroups {
+    /// The page's groups, the one the run wrote to last first.
+    pub groups: Vec<RunGroup>,
+    /// Whether groups remain after this page.
     pub more: bool,
 }
 
-/// Reads a page of the records the import run `run` wrote to, from the `record_origins` index rather
-/// than the activity feed's window, so a run of any size discloses all of them: `limit` records after
-/// skipping `offset`, the one it wrote to last first.
+/// How many records of one kind an import run wrote to; events are counted per type.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunKindCount {
+    /// The records' aggregate kind (the stored `Aggregate::TYPE`).
+    pub kind: String,
+    /// For events, their type; `None` for any other kind.
+    pub event_type: Option<EventType>,
+    /// How many.
+    pub count: u64,
+}
+
+/// Reads a page of the records the import run `run` wrote to, grouped by the source item they came
+/// from, from the `record_origins` index rather than the activity feed's window, so a run of any size
+/// discloses all of them: `limit` groups after skipping `offset`, the one written to last first.
 ///
 /// # Errors
 ///
 /// [`AppError`] on a store read failure.
-pub async fn run_records(
+pub async fn run_groups(
     workspace: &Workspace,
     run: ImportRunId,
     offset: u32,
     limit: u32,
-) -> Result<RunRecords, AppError> {
+) -> Result<RunGroups, AppError> {
     let store = workspace.store();
-    let mut rows = store.run_records(run, offset, limit.saturating_add(1)).await?;
+    let mut rows = store.run_groups(run, offset, limit.saturating_add(1)).await?;
     let more = rows.len() > limit as usize;
     rows.truncate(limit as usize);
-    let mut records = Vec::with_capacity(rows.len());
+    let mut groups = Vec::with_capacity(rows.len());
     for row in rows {
-        records.push(RunRecord {
-            human_id: human_id_of(store, &row.aggregate_kind, &row.aggregate_id).await?,
+        let mut records = Vec::with_capacity(row.members.len());
+        for member in row.members {
+            records.push(RunRecord {
+                human_id: human_id_of(store, &member.aggregate_kind, &member.aggregate_id).await?,
+                kind: member.aggregate_kind,
+                aggregate_id: member.aggregate_id,
+                event_type: member.event_type,
+            });
+        }
+        groups.push(RunGroup { records });
+    }
+    Ok(RunGroups { groups, more })
+}
+
+/// Counts the records the import run `run` wrote to by kind, events per type, in the order the run
+/// first wrote each — the count line above its groups.
+///
+/// # Errors
+///
+/// [`AppError`] on a store read failure.
+pub async fn run_counts(workspace: &Workspace, run: ImportRunId) -> Result<Vec<RunKindCount>, AppError> {
+    let rows = workspace.store().run_kind_counts(run).await?;
+    let mut counts = Vec::with_capacity(rows.len());
+    for row in rows {
+        counts.push(RunKindCount {
             kind: row.aggregate_kind,
-            aggregate_id: row.aggregate_id,
+            event_type: row.event_type,
+            count: row.count,
         });
     }
-    Ok(RunRecords { records, more })
+    Ok(counts)
 }
 
 /// Reads the changes the import run `run` made to one record — the record's change log narrowed to
@@ -1545,11 +1591,12 @@ async fn resolve_dna_match_id(store: &Store, human_id: &str) -> Result<vitni_cor
 #[cfg(test)]
 mod tests {
     use super::{
-        ActivityDetail, ChangeLogEntry, ChangeValue, OperatorKind, RunRef, change_log_for_person, group_runs,
-        recent_activity, run_record_changes, run_records, undo_assertion, workspace_counts,
+        ActivityDetail, ChangeLogEntry, ChangeValue, OperatorKind, RunGroups, RunRef, change_log_for_person,
+        group_runs, recent_activity, run_counts, run_groups, run_record_changes, undo_assertion, workspace_counts,
     };
     use super::{change_log_for_research_note, undo_research_note_assertion};
     use crate::config::{AppDefaults, IdFormats, OperatorConfig, WorkspaceDefaults};
+    use crate::event::NewEvent;
     use crate::import_run::{RunResume, abandon_import_run, finish_import_run, start_import_run};
     use crate::person::{NewFact, NewPerson, assert_fact, assert_sex, create_person, set_restrictions, show_person};
     use crate::research_note::{
@@ -1562,7 +1609,7 @@ mod tests {
     use std::path::PathBuf;
     use tempfile::TempDir;
     use uuid::Uuid;
-    use vitni_core::enums::{EvidenceLevel, FactType, Restriction, Sex};
+    use vitni_core::enums::{EventType, EvidenceLevel, FactType, Restriction, Sex};
     use vitni_core::ids::AgentId;
     use vitni_core::ids::ImportRunId;
     use vitni_core::import_run::{AbandonReason, ImportCounts, NewImportRun};
@@ -2151,34 +2198,84 @@ mod tests {
         );
     }
 
+    /// Adds a birth to the run's record `I0`, as an item of it, the way an importer writes an INDI's
+    /// events; returns the event's user-facing id.
+    async fn birth_of_the_first_record(workspace: &Workspace, run: ImportRunId, dataset: &DatasetId) -> String {
+        let provenance = Provenance {
+            origin: Some(RecordOrigin {
+                dataset: dataset.clone(),
+                record: "I0".to_owned(),
+                item: Some("event:BIRT:0".to_owned()),
+                digest: None,
+                run,
+            }),
+            ..Provenance::default()
+        };
+        let new = NewEvent {
+            human_id: None,
+            event_type: EventType::Birth,
+        };
+        crate::create_event(workspace, &software_session(), new, provenance, &[])
+            .await
+            .expect("birth")
+    }
+
     #[tokio::test]
-    async fn run_records_names_each_record_a_run_wrote_newest_first_a_page_at_a_time() {
+    async fn run_groups_lists_a_runs_records_by_source_record_newest_first_a_page_at_a_time() {
         let (workspace, human, _dir) = setup().await;
         let keyboard = create_bare(&workspace, &human).await;
         let dataset = DatasetId::lineage("gedcom", Uuid::from_u128(5));
         let run = run_importing(&workspace, &human, (&dataset, None), 3).await;
+        let birth = birth_of_the_first_record(&workspace, run, &dataset).await;
 
-        let first = run_records(&workspace, run, 0, 2).await.expect("first page");
-        let human_ids: Vec<_> = first.records.iter().map(|record| record.human_id.clone()).collect();
+        let human_ids = |groups: &RunGroups| -> Vec<Vec<Option<String>>> {
+            let mut out = Vec::new();
+            for group in &groups.groups {
+                out.push(group.records.iter().map(|record| record.human_id.clone()).collect());
+            }
+            out
+        };
+        let first = run_groups(&workspace, run, 0, 2).await.expect("first page");
         assert_eq!(
-            human_ids,
-            [Some("I0004".to_owned()), Some("I0003".to_owned())],
-            "newest first"
+            human_ids(&first),
+            [
+                vec![Some("I0002".to_owned()), Some(birth.clone())],
+                vec![Some("I0004".to_owned())]
+            ],
+            "the record written to last first, its own entity leading its items"
         );
-        assert!(first.records.iter().all(|record| record.kind == "person"));
+        let birth_record = &first.groups[0].records[1];
+        assert_eq!(
+            (birth_record.kind.as_str(), birth_record.event_type.as_ref()),
+            ("event", Some(&EventType::Birth))
+        );
         assert!(first.more, "a third record is left");
-        let rest = run_records(&workspace, run, 2, 2).await.expect("second page");
-        assert_eq!(rest.records.len(), 1);
-        assert_eq!(rest.records[0].human_id.as_deref(), Some("I0002"));
+        let rest = run_groups(&workspace, run, 2, 2).await.expect("second page");
+        assert_eq!(human_ids(&rest), [vec![Some("I0003".to_owned())]]);
         assert!(!rest.more);
         assert!(
-            !first
-                .records
+            !human_ids(&first)
                 .iter()
-                .chain(&rest.records)
-                .any(|r| r.human_id.as_deref() == Some(keyboard.as_str())),
+                .chain(&human_ids(&rest))
+                .flatten()
+                .any(|id| id.as_deref() == Some(keyboard.as_str())),
             "a record made at the keyboard is not the run's"
         );
+    }
+
+    #[tokio::test]
+    async fn run_counts_counts_a_runs_records_by_kind_and_event_type() {
+        let (workspace, human, _dir) = setup().await;
+        let dataset = DatasetId::lineage("gedcom", Uuid::from_u128(5));
+        let run = run_importing(&workspace, &human, (&dataset, None), 2).await;
+        birth_of_the_first_record(&workspace, run, &dataset).await;
+
+        let counts = run_counts(&workspace, run).await.expect("counts");
+        let read: Vec<_> = counts
+            .iter()
+            .map(|count| (count.kind.as_str(), count.event_type.clone(), count.count))
+            .collect();
+        assert_eq!(read, [("person", None, 2), ("event", Some(EventType::Birth), 1)]);
     }
 
     #[tokio::test]
@@ -2186,9 +2283,11 @@ mod tests {
         let (workspace, human, _dir) = setup().await;
         let dataset = DatasetId::lineage("gedcom", Uuid::from_u128(5));
         let run = run_importing(&workspace, &human, (&dataset, None), 1).await;
-        let record = run_records(&workspace, run, 0, 1)
+        let record = run_groups(&workspace, run, 0, 1)
             .await
             .expect("records")
+            .groups
+            .remove(0)
             .records
             .remove(0);
         let human_id = record.human_id.clone().expect("human id");

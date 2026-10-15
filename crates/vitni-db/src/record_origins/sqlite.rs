@@ -12,10 +12,11 @@ use vitni_core::origin::{ContentDigest, DatasetId, RecordOrigin};
 
 use super::{
     IndexRow, OriginResolution, OriginRow, PendingWrite, RECORD_ORIGINS_PENDING_TABLE, RECORD_ORIGINS_STATE_TABLE,
-    RECORD_ORIGINS_TABLE, RunRecordRow, created_key, decode_assertion_id, decode_run, decode_timestamp, index_rows,
-    resolved_key,
+    RECORD_ORIGINS_TABLE, RunGroupRow, RunKindCount, created_key, decode_assertion_id, decode_count, decode_event_type,
+    decode_run, decode_timestamp, fold_groups, index_rows, resolved_key,
 };
 use crate::store::DbError;
+use crate::tables::EVENT_VIEW_TABLE;
 
 const CREATE_RECORD_ORIGINS_TABLE: &str = "
 CREATE TABLE IF NOT EXISTS record_origins (
@@ -608,23 +609,43 @@ pub(crate) async fn assertion_origins(
     Ok(out)
 }
 
-/// The aggregates the run `run` wrote to, each once, the one it wrote to last first, skipping
-/// `offset` and returning at most `limit`. A recorded resolution wrote nothing to its aggregate and is
-/// left out.
+/// An event's type, as JSON text, from the event view joined as `v`; `NULL` for any other kind.
+const EVENT_TYPE: &str = "json_extract(v.payload, '$.state.event_type.value.value')";
+
+/// The rows the run bound to `?1` wrote, a recorded resolution left out: it wrote nothing to its
+/// aggregate.
+fn run_writes() -> String {
+    format!(
+        "SELECT id, dataset, record, item, aggregate_kind, aggregate_id FROM {RECORD_ORIGINS_TABLE} \
+         WHERE run = ?1 AND field_key <> aggregate_kind || '.resolved'"
+    )
+}
+
+/// The aggregates the run `run` wrote to, each once, grouped under the source record that first wrote
+/// it: the group that gained an aggregate last first, skipping `offset` groups and returning at most
+/// `limit`. Within a group the record's own entity (first written with no item) leads, then the rest in
+/// the order first written.
 ///
 /// # Errors
 ///
-/// A [`DbError`] if the query fails.
-pub(crate) async fn run_records(
+/// A [`DbError`] if the query fails or an event type does not decode.
+pub(crate) async fn run_groups(
     pool: &Pool<Sqlite>,
     run: ImportRunId,
     offset: u32,
     limit: u32,
-) -> Result<Vec<RunRecordRow>, DbError> {
+) -> Result<Vec<RunGroupRow>, DbError> {
     let rows = sqlx::query(&format!(
-        "SELECT aggregate_kind, aggregate_id FROM {RECORD_ORIGINS_TABLE} \
-         WHERE run = ? AND field_key <> aggregate_kind || '.resolved' \
-         GROUP BY aggregate_kind, aggregate_id ORDER BY MAX(id) DESC LIMIT ? OFFSET ?"
+        "WITH written AS ({writes}), \
+         firsts AS (SELECT MIN(id) AS first FROM written GROUP BY aggregate_kind, aggregate_id), \
+         owned AS (SELECT w.* FROM written w JOIN firsts f ON w.id = f.first), \
+         page AS (SELECT dataset, record, MAX(id) AS last FROM owned GROUP BY dataset, record \
+                  ORDER BY last DESC LIMIT ?2 OFFSET ?3) \
+         SELECT o.dataset, o.record, o.aggregate_kind, o.aggregate_id, {EVENT_TYPE} AS event_type \
+         FROM owned o JOIN page p ON o.dataset = p.dataset AND o.record = p.record \
+         LEFT JOIN {EVENT_VIEW_TABLE} v ON o.aggregate_kind = 'event' AND v.view_id = o.aggregate_id \
+         ORDER BY p.last DESC, o.item IS NULL DESC, o.id",
+        writes = run_writes(),
     ))
     .bind(run.to_string())
     .bind(i64::from(limit))
@@ -632,11 +653,46 @@ pub(crate) async fn run_records(
     .fetch_all(pool)
     .await
     .map_err(|e| DbError::Backend(format!("reading the records of import run {run}: {e}")))?;
+    let mut lines = Vec::with_capacity(rows.len());
+    for row in rows {
+        lines.push((
+            row.get("dataset"),
+            row.get("record"),
+            row.get("aggregate_kind"),
+            row.get("aggregate_id"),
+            row.get("event_type"),
+        ));
+    }
+    fold_groups(lines)
+}
+
+/// How many aggregates of each kind the run `run` wrote to, each once and events per type, in the
+/// order the run first wrote each.
+///
+/// # Errors
+///
+/// A [`DbError`] if the query fails or an event type does not decode.
+pub(crate) async fn run_kind_counts(pool: &Pool<Sqlite>, run: ImportRunId) -> Result<Vec<RunKindCount>, DbError> {
+    let rows = sqlx::query(&format!(
+        "WITH written AS ({writes}), \
+         records AS (SELECT aggregate_kind, aggregate_id, MIN(id) AS first FROM written \
+                     GROUP BY aggregate_kind, aggregate_id) \
+         SELECT r.aggregate_kind, {EVENT_TYPE} AS event_type, COUNT(*) AS count, MIN(r.first) AS first \
+         FROM records r \
+         LEFT JOIN {EVENT_VIEW_TABLE} v ON r.aggregate_kind = 'event' AND v.view_id = r.aggregate_id \
+         GROUP BY 1, 2 ORDER BY first",
+        writes = run_writes(),
+    ))
+    .bind(run.to_string())
+    .fetch_all(pool)
+    .await
+    .map_err(|e| DbError::Backend(format!("counting the records of import run {run}: {e}")))?;
     let mut out = Vec::with_capacity(rows.len());
     for row in rows {
-        out.push(RunRecordRow {
+        out.push(RunKindCount {
             aggregate_kind: row.get("aggregate_kind"),
-            aggregate_id: row.get("aggregate_id"),
+            event_type: decode_event_type(row.get::<Option<String>, _>("event_type").as_deref())?,
+            count: decode_count(row.get("count"))?,
         });
     }
     Ok(out)

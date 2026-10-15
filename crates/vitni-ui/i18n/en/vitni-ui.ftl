@@ -224,6 +224,182 @@ run-changes-toggle-aria = What the import from { $source } changed
 run-record-changes-toggle = What it changed in { $record }
 run-records-more = Show more
 run-records-empty = It changed no records.
+# An open run's count line and grouped records (#660): what it wrote, counted by kind, events by type
+# (e.g. 1 census · 6 persons · 6 births), and each group's records named by kind in one line. The nouns
+# take $count for their plural; a group's line names each record in the singular.
+run-kind-count = { $count } { $noun }
+run-kind-person = { $count ->
+    [one] person
+   *[other] persons
+}
+run-kind-family = { $count ->
+    [one] family
+   *[other] families
+}
+run-kind-event = { $count ->
+    [one] event
+   *[other] events
+}
+run-kind-place = { $count ->
+    [one] place
+   *[other] places
+}
+run-kind-source = { $count ->
+    [one] source
+   *[other] sources
+}
+run-kind-citation = { $count ->
+    [one] citation
+   *[other] citations
+}
+run-kind-repository = { $count ->
+    [one] repository
+   *[other] repositories
+}
+run-kind-media = { $count ->
+    [one] media object
+   *[other] media objects
+}
+run-kind-note = { $count ->
+    [one] note
+   *[other] notes
+}
+run-kind-research-note = { $count ->
+    [one] research note
+   *[other] research notes
+}
+run-kind-tag = { $count ->
+    [one] tag
+   *[other] tags
+}
+run-kind-dna-test = { $count ->
+    [one] DNA test
+   *[other] DNA tests
+}
+run-kind-dna-match = { $count ->
+    [one] DNA match
+   *[other] DNA matches
+}
+run-event-birth = { $count ->
+    [one] birth
+   *[other] births
+}
+run-event-death = { $count ->
+    [one] death
+   *[other] deaths
+}
+run-event-marriage = { $count ->
+    [one] marriage
+   *[other] marriages
+}
+run-event-baptism = { $count ->
+    [one] baptism
+   *[other] baptisms
+}
+run-event-christening = { $count ->
+    [one] christening
+   *[other] christenings
+}
+run-event-burial = { $count ->
+    [one] burial
+   *[other] burials
+}
+run-event-cremation = { $count ->
+    [one] cremation
+   *[other] cremations
+}
+run-event-census = { $count ->
+    [one] census
+   *[other] censuses
+}
+run-event-residence = { $count ->
+    [one] residence
+   *[other] residences
+}
+run-event-immigration = { $count ->
+    [one] immigration
+   *[other] immigrations
+}
+run-event-emigration = { $count ->
+    [one] emigration
+   *[other] emigrations
+}
+run-event-adoption = { $count ->
+    [one] adoption
+   *[other] adoptions
+}
+run-event-confirmation = { $count ->
+    [one] confirmation
+   *[other] confirmations
+}
+run-event-bar-mitzvah = { $count ->
+    [one] bar mitzvah
+   *[other] bar mitzvahs
+}
+run-event-bas-mitzvah = { $count ->
+    [one] bas mitzvah
+   *[other] bas mitzvahs
+}
+run-event-first-communion = { $count ->
+    [one] first communion
+   *[other] first communions
+}
+run-event-graduation = { $count ->
+    [one] graduation
+   *[other] graduations
+}
+run-event-naturalization = { $count ->
+    [one] naturalization
+   *[other] naturalizations
+}
+run-event-ordination = { $count ->
+    [one] ordination
+   *[other] ordinations
+}
+run-event-probate = { $count ->
+    [one] probate
+   *[other] probates
+}
+run-event-retirement = { $count ->
+    [one] retirement
+   *[other] retirements
+}
+run-event-will = { $count ->
+    [one] will
+   *[other] wills
+}
+run-event-engagement = { $count ->
+    [one] engagement
+   *[other] engagements
+}
+run-event-annulment = { $count ->
+    [one] annulment
+   *[other] annulments
+}
+run-event-divorce = { $count ->
+    [one] divorce
+   *[other] divorces
+}
+run-event-divorce-filed = { $count ->
+    [one] divorce filed
+   *[other] divorces filed
+}
+run-event-marriage-banns = { $count ->
+    [one] marriage banns
+   *[other] marriage banns
+}
+run-event-marriage-contract = { $count ->
+    [one] marriage contract
+   *[other] marriage contracts
+}
+run-event-marriage-license = { $count ->
+    [one] marriage license
+   *[other] marriage licenses
+}
+run-event-marriage-settlement = { $count ->
+    [one] marriage settlement
+   *[other] marriage settlements
+}
 
 # Edit field labels
 field-nickname = Nickname

@@ -63,6 +63,7 @@ pub use raw::{ProjectionRow, RawEvent, RawEventKey, UnreadableEvent, decode_raw_
 pub use record_links::RecordLink;
 #[cfg(any(feature = "sqlite", feature = "postgres"))]
 pub use record_origins::{
-    IndexedField, OriginRow, RunRecordRow, created_key, digest, field_key, indexed_field, resolved_key, single_valued,
+    IndexedField, OriginRow, RunGroupRow, RunKindCount, RunMemberRow, created_key, digest, field_key, indexed_field,
+    resolved_key, single_valued,
 };
 pub use store::{CommandError, DbError, IdentityLink, PlaceSuccessionRecord, Store, StoredEvent};

@@ -222,6 +222,181 @@ run-changes-toggle-aria = Hva importen fra { $source } endret
 run-record-changes-toggle = Hva den endret i { $record }
 run-records-more = Vis flere
 run-records-empty = Den endret ingen poster.
+# Den åpne kjøringens tellelinje og grupperte poster (#660): hva den skrev, talt etter type og
+# hendelser etter hendelsestype, og hver gruppes poster navngitt etter type på én linje.
+run-kind-count = { $count } { $noun }
+run-kind-person = { $count ->
+    [one] person
+   *[other] personer
+}
+run-kind-family = { $count ->
+    [one] familie
+   *[other] familier
+}
+run-kind-event = { $count ->
+    [one] hendelse
+   *[other] hendelser
+}
+run-kind-place = { $count ->
+    [one] sted
+   *[other] steder
+}
+run-kind-source = { $count ->
+    [one] kilde
+   *[other] kilder
+}
+run-kind-citation = { $count ->
+    [one] kildehenvisning
+   *[other] kildehenvisninger
+}
+run-kind-repository = { $count ->
+    [one] arkiv
+   *[other] arkiver
+}
+run-kind-media = { $count ->
+    [one] medieobjekt
+   *[other] medieobjekter
+}
+run-kind-note = { $count ->
+    [one] notat
+   *[other] notater
+}
+run-kind-research-note = { $count ->
+    [one] forskningsnotat
+   *[other] forskningsnotater
+}
+run-kind-tag = { $count ->
+    [one] etikett
+   *[other] etiketter
+}
+run-kind-dna-test = { $count ->
+    [one] DNA-test
+   *[other] DNA-tester
+}
+run-kind-dna-match = { $count ->
+    [one] DNA-treff
+   *[other] DNA-treff
+}
+run-event-birth = { $count ->
+    [one] fødsel
+   *[other] fødsler
+}
+run-event-death = { $count ->
+    [one] dødsfall
+   *[other] dødsfall
+}
+run-event-marriage = { $count ->
+    [one] ekteskap
+   *[other] ekteskap
+}
+run-event-baptism = { $count ->
+    [one] dåp
+   *[other] dåp
+}
+run-event-christening = { $count ->
+    [one] navngiving
+   *[other] navngivinger
+}
+run-event-burial = { $count ->
+    [one] begravelse
+   *[other] begravelser
+}
+run-event-cremation = { $count ->
+    [one] kremasjon
+   *[other] kremasjoner
+}
+run-event-census = { $count ->
+    [one] folketelling
+   *[other] folketellinger
+}
+run-event-residence = { $count ->
+    [one] bosted
+   *[other] bosteder
+}
+run-event-immigration = { $count ->
+    [one] innvandring
+   *[other] innvandringer
+}
+run-event-emigration = { $count ->
+    [one] utvandring
+   *[other] utvandringer
+}
+run-event-adoption = { $count ->
+    [one] adopsjon
+   *[other] adopsjoner
+}
+run-event-confirmation = { $count ->
+    [one] konfirmasjon
+   *[other] konfirmasjoner
+}
+run-event-bar-mitzvah = { $count ->
+    [one] bar mitsva
+   *[other] bar mitsvaer
+}
+run-event-bas-mitzvah = { $count ->
+    [one] bat mitsva
+   *[other] bat mitsvaer
+}
+run-event-first-communion = { $count ->
+    [one] første kommunion
+   *[other] første kommunioner
+}
+run-event-graduation = { $count ->
+    [one] eksamen
+   *[other] eksamener
+}
+run-event-naturalization = { $count ->
+    [one] naturalisering
+   *[other] naturaliseringer
+}
+run-event-ordination = { $count ->
+    [one] ordinasjon
+   *[other] ordinasjoner
+}
+run-event-probate = { $count ->
+    [one] skifte
+   *[other] skifter
+}
+run-event-retirement = { $count ->
+    [one] pensjonering
+   *[other] pensjoneringer
+}
+run-event-will = { $count ->
+    [one] testamente
+   *[other] testamenter
+}
+run-event-engagement = { $count ->
+    [one] forlovelse
+   *[other] forlovelser
+}
+run-event-annulment = { $count ->
+    [one] annullering
+   *[other] annulleringer
+}
+run-event-divorce = { $count ->
+    [one] skilsmisse
+   *[other] skilsmisser
+}
+run-event-divorce-filed = { $count ->
+    [one] skilsmisse begjært
+   *[other] skilsmisser begjært
+}
+run-event-marriage-banns = { $count ->
+    [one] lysing
+   *[other] lysinger
+}
+run-event-marriage-contract = { $count ->
+    [one] ektepakt
+   *[other] ektepakter
+}
+run-event-marriage-license = { $count ->
+    [one] vigselslisens
+   *[other] vigselslisenser
+}
+run-event-marriage-settlement = { $count ->
+    [one] ekteskapsavtale
+   *[other] ekteskapsavtaler
+}
 
 # Redigeringsetiketter
 field-nickname = Kallenavn

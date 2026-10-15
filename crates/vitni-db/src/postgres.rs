@@ -647,14 +647,22 @@ impl PostgresStore {
         crate::record_origins::postgres::assertion_origins(&self.pool, kind, aggregate_id).await
     }
 
-    /// The aggregates one import run wrote to, the last first.
-    pub(crate) async fn run_records(
+    /// The aggregates one import run wrote to, grouped by source record, the last first.
+    pub(crate) async fn run_groups(
         &self,
         run: vitni_core::ids::ImportRunId,
         offset: u32,
         limit: u32,
-    ) -> Result<Vec<crate::record_origins::RunRecordRow>, DbError> {
-        crate::record_origins::postgres::run_records(&self.pool, run, offset, limit).await
+    ) -> Result<Vec<crate::record_origins::RunGroupRow>, DbError> {
+        crate::record_origins::postgres::run_groups(&self.pool, run, offset, limit).await
+    }
+
+    /// How many aggregates of each kind one import run wrote to, events per type.
+    pub(crate) async fn run_kind_counts(
+        &self,
+        run: vitni_core::ids::ImportRunId,
+    ) -> Result<Vec<crate::record_origins::RunKindCount>, DbError> {
+        crate::record_origins::postgres::run_kind_counts(&self.pool, run).await
     }
 
     /// How many of `records` each dataset holds as an aggregate of `kind` (ADR 0037 §3).
