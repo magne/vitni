@@ -557,3 +557,70 @@ async fn a_members_pedigree_is_its_roots() {
     let chart = ancestors(&ws, &b, 2).await.expect("a member's pedigree");
     assert_eq!(chart.focus.human_id, a);
 }
+
+/// Where the `event_type` entry read from `merged_from`'s stream stands in `log`, newest first.
+fn position(log: &[vitni_app::ChangeLogEntry], event_type: &str, merged_from: Option<&str>) -> usize {
+    let found = log
+        .iter()
+        .position(|entry| entry.event_type == event_type && entry.merged_from.as_deref() == merged_from);
+    assert!(found.is_some(), "no {event_type} from {merged_from:?} in {log:#?}");
+    found.unwrap_or_default()
+}
+
+#[tokio::test]
+async fn a_roots_history_lists_each_merged_records_changes_marked_with_their_origin() {
+    let (ws, _dir) = workspace().await;
+    let a = person(&ws, "Ole", "Hansen").await;
+    let b = person(&ws, "Ole", "Hanssen").await;
+    occupation(&ws, &b, "Fisherman").await;
+    occupation(&ws, &a, "Farmer").await;
+    merge(&ws, &a, &b).await;
+
+    let log = change_log_for_person(&ws, &a).await.expect("log");
+    let merged = position(&log, "PersonsMerged", None);
+    let own_fact = position(&log, "FactAsserted", None);
+    let member_fact = position(&log, "FactAsserted", Some(&b));
+    let member_created = position(&log, "PersonCreated", Some(&b));
+    let own_created = position(&log, "PersonCreated", None);
+    assert!(
+        merged < own_fact && own_fact < member_fact && member_fact < member_created && member_created < own_created,
+        "both streams interleave newest first: {log:#?}"
+    );
+    assert!(
+        log.iter()
+            .all(|entry| entry.aggregate_human_id.as_deref() == Some(a.as_str()))
+    );
+
+    let member_log = change_log_for_person(&ws, &b).await.expect("member log");
+    assert!(
+        member_log.iter().all(|entry| entry.merged_from.is_none()),
+        "a member's own History stays its own: {member_log:#?}"
+    );
+    assert!(!member_log.iter().any(|entry| entry.event_type == "PersonsMerged"));
+}
+
+#[tokio::test]
+async fn undoing_a_merged_records_change_retracts_it_on_that_records_stream() {
+    let (ws, _dir) = workspace().await;
+    let a = person(&ws, "Ole", "Hansen").await;
+    let b = person(&ws, "Ole", "Hanssen").await;
+    occupation(&ws, &b, "Fisherman").await;
+    merge(&ws, &a, &b).await;
+
+    let log = change_log_for_person(&ws, &a).await.expect("log");
+    let fact = &log[position(&log, "FactAsserted", Some(&b))];
+    assert!(
+        fact.can_undo,
+        "a merged record's change is undoable from the root: {fact:#?}"
+    );
+    undo_assertion(&ws, &session(), &a, &fact.assertion_id, None)
+        .await
+        .expect("undo routed to the member");
+
+    let member_log = change_log_for_person(&ws, &b).await.expect("member log");
+    assert!(member_log.iter().any(|entry| entry.event_type == "AssertionRetracted"));
+    let root = show_person(&ws, &a).await.expect("show").expect("root");
+    assert!(root.facts.is_empty(), "the retracted fact leaves the cluster");
+    let log = change_log_for_person(&ws, &a).await.expect("log");
+    assert!(!log[position(&log, "FactAsserted", Some(&b))].can_undo);
+}

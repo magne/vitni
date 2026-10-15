@@ -347,3 +347,30 @@ async fn a_decided_event_pair_is_not_proposed_as_a_duplicate() {
         proposed().await
     );
 }
+
+#[tokio::test]
+async fn an_events_history_lists_its_merged_events_changes_and_undoes_them_on_their_stream() {
+    let (ws, _dir) = workspace().await;
+    let (a, b) = (marriage(&ws).await, marriage(&ws).await);
+    merge_e(&ws, &a, &b).await;
+
+    let log = change_log_for_event(&ws, &a).await.expect("log");
+    let from_b = |entry: &&vitni_app::ChangeLogEntry| entry.merged_from.as_deref() == Some(b.as_str());
+    let member: Vec<_> = log
+        .iter()
+        .filter(from_b)
+        .map(|entry| entry.event_type.as_str())
+        .collect();
+    assert_eq!(member, ["DateAsserted", "EventCreated"], "{log:#?}");
+    assert_eq!(log.first().map(|entry| entry.event_type.as_str()), Some("EventsMerged"));
+
+    let date = log
+        .iter()
+        .find(|entry| from_b(entry) && entry.event_type == "DateAsserted")
+        .expect("member date");
+    undo_event_assertion(&ws, &session(), &a, &date.assertion_id, None)
+        .await
+        .expect("undo routed to the member");
+    let member_log = change_log_for_event(&ws, &b).await.expect("member log");
+    assert!(member_log.iter().any(|entry| entry.event_type == "AssertionRetracted"));
+}

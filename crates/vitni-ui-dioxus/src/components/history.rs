@@ -33,6 +33,9 @@ pub struct HistoryEntry {
     pub value: Option<String>,
     /// On a correction, the already-localized value it replaced (e.g. `was 1850`), after the value.
     pub replaced: Option<String>,
+    /// On a cluster root's History, the already-localized record a merged-in entry came from (e.g.
+    /// `from I0002`), shown as a badge after `what` (ADR 0039 §5).
+    pub merged_from: Option<String>,
 }
 
 /// The entries an import-run row folds, and the label of the disclosure that shows them.
@@ -85,6 +88,9 @@ fn HistoryItem(entry: HistoryEntry, onundo: EventHandler<String>) -> Element {
                     }
                 } else {
                     "{entry.what}"
+                }
+                if let Some(merged_from) = &entry.merged_from {
+                    span { class: "badge tl-origin", "{merged_from}" }
                 }
                 if let Some(count) = &entry.count {
                     span { class: "muted tl-count", "{count}" }

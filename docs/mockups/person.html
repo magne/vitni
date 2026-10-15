@@ -511,7 +511,7 @@
 
         <!-- HISTORY (audit trail — free from the event log) -->
         <div class="tab-pane" data-pane="history">
-          <div class="section-note">Every change is an immutable event recording <b>who</b>, <b>when</b>, and <b>why</b> — an audit trail that comes free from the event-sourced core. Any entry can be undone. An identity decision — merged, or marked as a different person — also shows the matching engine's assessment it was made on. Every change one import run made to this record folds into one row, named by what the run imported, with the number of changes it made here muted beside it — not the number of records the run imported. <b>What it changed</b> opens the row to those changes; a value a re-import replaced says why (see <a href="import.html">Import</a>).</div>
+          <div class="section-note">Every change is an immutable event recording <b>who</b>, <b>when</b>, and <b>why</b> — an audit trail that comes free from the event-sourced core. Any entry can be undone. An identity decision — merged, or marked as a different person — also shows the matching engine's assessment it was made on. Every change one import run made to this record folds into one row, named by what the run imported, with the number of changes it made here muted beside it — not the number of records the run imported. <b>What it changed</b> opens the row to those changes; a value a re-import replaced says why (see <a href="import.html">Import</a>). The changes of every record merged into this person are listed too, newest first among this person's own, each marked with the record it came from — an import run's changes to that record fold into a row of their own. Undo on such a row retracts the change on the record that holds it.</div>
           <div class="timeline">
             <div class="tl-item">
               <div class="tl-when">2026-06-22 14:35</div>
@@ -534,12 +534,24 @@
               <div class="row-actions" style="margin-top:4px"><button class="btn sm ghost">↩ Undo</button></div>
             </div>
             <div class="tl-item">
+              <div class="tl-when">2026-06-18 08:55</div>
+              <div class="tl-what">Occupation asserted: <b>Carpenter</b><span class="badge tl-origin">from I0007</span></div>
+              <div class="tl-who">magne · confidence Low</div>
+              <div class="row-actions" style="margin-top:4px"><button class="btn sm ghost" aria-label="Undo: Occupation asserted">↩ Undo</button></div>
+            </div>
+            <div class="tl-item">
               <div class="tl-when">2026-06-17 16:44</div>
               <div class="tl-what">Marked as a different person</div>
               <div class="tl-who">magne · confidence Very high</div>
               <div class="tl-why">"Different fathers in the baptism registers"</div>
               <div class="tl-evidence muted">Matched at 81% · possible match · engine 4</div>
               <div class="row-actions" style="margin-top:4px"><button class="btn sm ghost">↩ Undo</button></div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-when">2026-06-12 09:30</div>
+              <div class="tl-what">Imported from 1910 census<span class="badge tl-origin">from I0007</span><span class="muted tl-count">2 changes</span></div>
+              <div class="tl-who">digitalarkivet-import (software agent)</div>
+              <div class="row-actions" style="margin-top:4px"><button class="btn sm ghost" type="button" aria-expanded="false">▸ What it changed</button><button class="btn sm ghost">↩ Undo</button></div>
             </div>
             <div class="tl-item">
               <div class="tl-when">2026-06-10 11:02</div>

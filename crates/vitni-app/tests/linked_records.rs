@@ -297,3 +297,25 @@ fn only_a_dataset_with_a_url_form_links_out() {
     assert_eq!(record_url(&gedcom), None);
     assert_eq!(record_url(&origin("", run)), None, "no record id, no page");
 }
+
+#[tokio::test]
+async fn a_merged_records_import_run_folds_into_its_own_row_on_the_roots_history() {
+    let (ws, _dir) = workspace().await;
+    let run = run(&ws).await;
+    let a = person(&ws, "Ole").await;
+    let b = persona(&ws, "Ola", origin("pf01", run)).await;
+    merge(&ws, &a, &b).await;
+
+    let log = vitni_app::change_log_for_person(&ws, &a).await.expect("log");
+    let rows = vitni_app::group_runs(&log);
+    let run_rows: Vec<_> = rows
+        .iter()
+        .filter(|row| matches!(row.detail, Some(vitni_app::ActivityDetail::ImportRun { .. })))
+        .collect();
+    assert_eq!(run_rows.len(), 1, "{rows:#?}");
+    assert_eq!(run_rows[0].merged_from.as_deref(), Some(b.as_str()));
+    let Some(vitni_app::ActivityDetail::ImportRun { run: row_run, .. }) = &run_rows[0].detail else {
+        unreachable!("filtered on the run detail");
+    };
+    assert_eq!(row_run.source_label, "1910 census");
+}

@@ -208,6 +208,7 @@ fn render_history(populated: bool, undoable: bool) -> String {
                 children: Vec::new(),
                 value: None,
                 replaced: None,
+                merged_from: None,
             }]
         } else {
             Vec::new()

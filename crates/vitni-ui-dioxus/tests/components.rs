@@ -120,6 +120,7 @@ fn timeline_specimen() -> Element {
                     changes: None,
                     value: None,
                     replaced: None,
+                    merged_from: None,
                 }],
                 onundo: move |_| {},
             }

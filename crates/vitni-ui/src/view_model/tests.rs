@@ -48,6 +48,7 @@ fn log_entry(kind: &str, human_id: Option<&str>, operator: OperatorKind, who: &s
         run: None,
         value: None,
         replaced: None,
+        merged_from: None,
     }
 }
 
@@ -2024,4 +2025,21 @@ fn the_count_line_reads_in_norwegian() {
     let vm = RunRecordsVm::build(&page, &counts, &ada(), &loc);
 
     assert_eq!(vm.counts, "1 person · 2 fødsler");
+}
+
+#[test]
+fn history_marks_a_merged_records_rows_with_the_record_they_came_from() {
+    let loc = Localizer::for_test("en");
+    let mut member = log_entry("person", Some("I0001"), OperatorKind::Human, "magne");
+    member.merged_from = Some("I0002".to_owned());
+    let mut member_run = imported("I0001", "imported", true);
+    member_run.merged_from = Some("I0002".to_owned());
+    let entries = vec![
+        log_entry("person", Some("I0001"), OperatorKind::Human, "magne"),
+        member,
+        member_run,
+    ];
+    let rows = collapse_history(&entries, &loc);
+    let origins: Vec<_> = rows.iter().map(|row| row.merged_from.as_deref()).collect();
+    assert_eq!(origins, [None, Some("from I0002"), Some("from I0002")]);
 }

@@ -382,7 +382,7 @@
 
         <!-- HISTORY (audit trail — free from the event log) -->
         <div class="tab-pane" data-pane="history">
-          <div class="section-note">Every change is an immutable event recording <b>who</b>, <b>when</b>, and <b>why</b> — an audit trail that comes free from the event-sourced core. Any entry can be undone. An identity decision — merged, or marked as a different event — also shows the matching engine's assessment it was made on.</div>
+          <div class="section-note">Every change is an immutable event recording <b>who</b>, <b>when</b>, and <b>why</b> — an audit trail that comes free from the event-sourced core. Any entry can be undone. An identity decision — merged, or marked as a different event — also shows the matching engine's assessment it was made on. The changes of a copy merged into this event are listed too, each marked with the record it came from; their Undo retracts the change on that record.</div>
           <div class="timeline">
             <div class="tl-item">
               <div class="tl-when">2026-06-22 10:15</div>
@@ -409,6 +409,17 @@
               <div class="tl-what">Date asserted: <b>1876-06-14</b> (was about 1876)</div>
               <div class="tl-who">magne · confidence High</div>
               <div class="tl-why">"Exact date from the marriage register"</div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-when">2026-06-19 13:40</div>
+              <div class="tl-what">Participation asserted: <b>Anna Berg (witness)</b><span class="badge tl-origin">from E0031</span></div>
+              <div class="tl-who">magne · confidence Low</div>
+              <div class="row-actions" style="margin-top:4px"><button class="btn sm ghost" aria-label="Undo: Participation asserted">↩ Undo</button></div>
+            </div>
+            <div class="tl-item">
+              <div class="tl-when">2026-06-19 13:38</div>
+              <div class="tl-what">Event created: <b>Marriage</b><span class="badge tl-origin">from E0031</span></div>
+              <div class="tl-who">magne</div>
             </div>
             <div class="tl-item">
               <div class="tl-when">2026-06-10 11:02</div>
