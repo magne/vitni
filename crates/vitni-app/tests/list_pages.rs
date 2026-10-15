@@ -99,9 +99,11 @@ async fn a_person_page_skips_merged_records_and_keeps_their_data_on_the_root() {
         list_persons_page(&ws, page(3, 2)).await.expect("past the end"),
         Vec::<PersonSummary>::new()
     );
+    let tiled: Vec<PersonSummary> = first.into_iter().chain(second).collect();
     assert_eq!(
-        list_persons_page(&ws, ListPage::ALL).await.expect("all"),
+        tiled,
         list_persons(&ws).await.expect("whole list"),
+        "the pages tile the whole list"
     );
 }
 
@@ -124,8 +126,10 @@ async fn a_place_page_skips_merged_records_and_keeps_their_data_on_the_root() {
     let second = list_places_page(&ws, page(1, 5)).await.expect("second page");
     let ids: Vec<&str> = second.iter().map(|p| p.human_id.as_str()).collect();
     assert_eq!(ids, [bakken.as_str()]);
+    let tiled: Vec<_> = first.into_iter().chain(second).collect();
     assert_eq!(
-        list_places_page(&ws, ListPage::ALL).await.expect("all"),
+        tiled,
         list_places(&ws).await.expect("whole list"),
+        "the pages tile the whole list"
     );
 }

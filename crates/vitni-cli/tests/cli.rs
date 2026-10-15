@@ -1398,6 +1398,10 @@ fn list_prints_the_window_offset_and_limit_name_on_every_paged_aggregate() {
         let (shown, out) = listed(&["--offset", "3"]);
         assert!(shown.is_empty(), "{aggregate}: {out}");
         assert!(out.contains("Nothing to list past the first 3."), "{aggregate}: {out}");
+        vitni(dir.path())
+            .args([aggregate, "list", "--limit", "0"])
+            .assert()
+            .failure();
     }
 }
 

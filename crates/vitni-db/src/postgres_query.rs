@@ -265,18 +265,7 @@ pub(crate) async fn views_by_ids<V: DeserializeOwned>(
 
 /// Loads every view in `table`, ordered by `human_id`.
 pub(crate) async fn list_views<V: DeserializeOwned>(pool: &Pool<Postgres>, table: &str) -> Result<Vec<V>, DbError> {
-    let sql = format!("SELECT payload::text AS payload FROM {table} ORDER BY human_id");
-    let rows = sqlx::query(&sql)
-        .fetch_all(pool)
-        .await
-        .map_err(|e| DbError::Backend(e.to_string()))?;
-
-    let mut views = Vec::with_capacity(rows.len());
-    for row in rows {
-        let payload: String = row.get("payload");
-        views.push(deserialize_view(table, &payload)?);
-    }
-    Ok(views)
+    list_views_page(pool, table, None, ListPage::ALL).await
 }
 
 /// Loads one page of the views in `table` a list shows — the Postgres twin of

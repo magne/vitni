@@ -568,8 +568,8 @@ impl RestrictionsArgs {
 /// The window of a `list` verb: skip `--offset` records, then print at most `--limit` of them.
 #[derive(Args)]
 pub struct ListArgs {
-    /// Print at most this many records.
-    #[arg(long)]
+    /// Print at most this many records (at least one).
+    #[arg(long, value_parser = clap::value_parser!(u32).range(1..))]
     limit: Option<u32>,
     /// Skip this many records first.
     #[arg(long, default_value_t = 0)]
