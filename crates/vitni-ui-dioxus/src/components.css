@@ -665,7 +665,7 @@ table.tbl .no-source, table.tbl .src-link { white-space: nowrap; }
    prop switches a panel mounted with no `.detail` ancestor (Geography's own geometry panel, the one
    caller outside a record's detail pane) to `.sidepanel-viewport` below, so it still escapes all the
    way to the true viewport instead of landing on `.workarea` by accident. Only `.sp-body` scrolls, so
-   the head/foot (incl. Cancel/Save) stay reachable. */
+   the head (incl. the ✕ Cancel) stays reachable, and so does Save in its sticky `.sp-actions` row. */
 .sidepanel {
   position: absolute; top: 0; right: 0; bottom: 0; z-index: var(--z-modal);
   display: flex; flex-direction: column;
@@ -676,7 +676,17 @@ table.tbl .no-source, table.tbl .src-link { white-space: nowrap; }
 .sidepanel .sp-head { flex: none; display: flex; align-items: center; padding: var(--sp-4); border-bottom: 1px solid var(--line); }
 .sidepanel .sp-head h3 { font-size: var(--fs-lg); }
 .sidepanel .sp-body { flex: 1; overflow-y: auto; padding: var(--sp-4); }
-.sidepanel .sp-foot { flex: none; display: flex; justify-content: flex-end; gap: var(--sp-2); padding: var(--sp-4); border-top: 1px solid var(--line); }
+/* A form's Save/confirm row (`SidePanelActions`, #663): the last thing in the scrolling body, sticky
+   to its bottom edge so Save stays in view while a long form scrolls under it. The panel has no
+   footer: the ✕ in `.sp-head` is its Cancel. The body drops its bottom padding under a row so
+   `bottom: 0` is the panel's edge, and the row bleeds into the side padding to span the panel. Its
+   scroll padding keeps a field that takes focus near the bottom clear of the row, not under it. */
+.sidepanel .sp-body:has(.sp-actions) { padding-bottom: 0; scroll-padding-bottom: calc(4 * var(--sp-4)); }
+.sp-actions { display: flex; justify-content: flex-end; gap: var(--sp-2); }
+.sidepanel .sp-actions {
+  position: sticky; bottom: 0; margin-inline: calc(-1 * var(--sp-4)); padding: var(--sp-3) var(--sp-4);
+  background: var(--panel); border-top: 1px solid var(--line);
+}
 /* The click-away dismiss layer behind the side panel (mirrors .picker-scrim/.menu-scrim). Same
    `.sidepanel-scrim-viewport` escape hatch as `.sidepanel-viewport` above, for the same reason. */
 .sidepanel-scrim {

@@ -789,16 +789,18 @@ fn DnaTestHaplogroupForm(
             oninput: move |event: FormEvent| value.set(event.value()),
         }
         {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                let value = value();
-                if value.trim().is_empty() {
-                    return;
-                }
-                onsubmit.call((DnaTestEdit::AddHaplogroup { human_id: human_id.clone(), haplogroup: value }, prov()));
-            },
+        SidePanelActions {
+            Button {
+                label: save_label,
+                variant: ButtonVariant::Primary,
+                onclick: move |_| {
+                    let value = value();
+                    if value.trim().is_empty() {
+                        return;
+                    }
+                    onsubmit.call((DnaTestEdit::AddHaplogroup { human_id: human_id.clone(), haplogroup: value }, prov()));
+                },
+            }
         }
     }
 }
@@ -875,16 +877,18 @@ fn DnaTestTagForm(human_id: String, onsubmit: EventHandler<(DnaTestEdit, Provena
                     onchange: move |event: FormEvent| chosen.set(event.value()),
                 }
                 {provenance_block(loc, prov)}
-                Button {
-                    label: save_label,
-                    variant: ButtonVariant::Primary,
-                    onclick: move |_| {
-                        let tag_id = chosen();
-                        if tag_id.is_empty() {
-                            return;
-                        }
-                        onsubmit.call((DnaTestEdit::Tag { human_id: human_id.clone(), tag_id, remove: false }, prov()));
-                    },
+                SidePanelActions {
+                    Button {
+                        label: save_label,
+                        variant: ButtonVariant::Primary,
+                        onclick: move |_| {
+                            let tag_id = chosen();
+                            if tag_id.is_empty() {
+                                return;
+                            }
+                            onsubmit.call((DnaTestEdit::Tag { human_id: human_id.clone(), tag_id, remove: false }, prov()));
+                        },
+                    }
                 }
             }
         }

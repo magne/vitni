@@ -1,0 +1,68 @@
+# A side panel's Save stays in view while its form scrolls (#663). Every panel form ends in the shared
+# `SidePanelActions` row, `position: sticky; bottom: 0` inside the scrolling `.sp-body` — SSR proves the
+# row wraps the Save (`side_panel.rs`, `attach_picker.rs`), but sticky positioning is layout, so only a
+# live webview shows that Save is on screen before the body scrolls and still in the same place after.
+#
+# The surface: Kristiansand's Attach note panel — the shared `attach_link_form`, a picker plus the whole
+# provenance block — in a window short enough that the form is taller than the panel. Save is disabled
+# with nothing picked, so the clicks on it write nothing; they are here because a click target must be
+# the element on top at its centre (the probe's `elementFromPoint`), which fails for a Save scrolled out
+# of the body or covered by the fields.
+description = "A side panel's Save is visible before and after its form scrolls (#663)"
+window = [1280, 560]
+
+[[step]]
+do = "click"
+at = { role = "listitem", text = "Places" }
+label = "rail: Places"
+
+[[step]]
+do = "click"
+at = { role = "option", text = "Kristiansand Municipality P0001" }
+label = "explorer: Kristiansand"
+
+[[step]]
+do = "click"
+at = { id = "tab-notes" }
+label = "detail tab: Notes"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Attach note" }
+label = "Attach note"
+
+[[step]]
+do = "shot"
+name = "panel-open"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Save", within = "dialog" }
+label = "Save is on top before scrolling (disabled: writes nothing)"
+
+[[step]]
+do = "wheel"
+at = { role = "dialog", offset = [190, 260] }
+clicks = -10
+label = "scroll the panel body down"
+
+[[step]]
+do = "shot"
+name = "panel-scrolled"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Save", within = "dialog" }
+label = "Save is on top after scrolling (disabled: writes nothing)"
+
+[[assert]]
+kind = "differ"
+shots = ["panel-open", "panel-scrolled"]
+region = { role = "dialog" }
+because = "the form is taller than the panel, so the body must scroll"
+
+[[assert]]
+kind = "match"
+shots = ["panel-open", "panel-scrolled"]
+region = { role = "button", text = "Save", within = "dialog" }
+because = "Save sits in the sticky actions row, pinned to the panel's bottom edge while the fields scroll under it"

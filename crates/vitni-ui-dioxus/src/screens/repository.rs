@@ -670,19 +670,21 @@ fn RepositoryUrlForm(
         Input { label: loc.field_label("url"), name: "url".to_owned(), value: href(), oninput: move |event: FormEvent| href.set(event.value()) }
         Input { label: loc.field_label("description"), name: "description".to_owned(), value: description(), oninput: move |event: FormEvent| description.set(event.value()) }
         {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                let href = href();
-                if href.trim().is_empty() {
-                    return;
-                }
-                let description = description();
-                let description = if description.trim().is_empty() { None } else { Some(description) };
-                let url = Url { url_type: url_type.clone(), href, description };
-                onsubmit.call((RepositoryEdit::AddUrl { human_id: human_id.clone(), url }, prov()));
-            },
+        SidePanelActions {
+            Button {
+                label: save_label,
+                variant: ButtonVariant::Primary,
+                onclick: move |_| {
+                    let href = href();
+                    if href.trim().is_empty() {
+                        return;
+                    }
+                    let description = description();
+                    let description = if description.trim().is_empty() { None } else { Some(description) };
+                    let url = Url { url_type: url_type.clone(), href, description };
+                    onsubmit.call((RepositoryEdit::AddUrl { human_id: human_id.clone(), url }, prov()));
+                },
+            }
         }
     }
 }
@@ -823,16 +825,18 @@ fn RepositoryTagForm(human_id: String, onsubmit: EventHandler<(RepositoryEdit, P
                     onchange: move |event: FormEvent| chosen.set(event.value()),
                 }
                 {provenance_block(loc, prov)}
-                Button {
-                    label: save_label,
-                    variant: ButtonVariant::Primary,
-                    onclick: move |_| {
-                        let tag_id = chosen();
-                        if tag_id.is_empty() {
-                            return;
-                        }
-                        onsubmit.call((RepositoryEdit::Tag { human_id: human_id.clone(), tag_id, remove: false }, prov()));
-                    },
+                SidePanelActions {
+                    Button {
+                        label: save_label,
+                        variant: ButtonVariant::Primary,
+                        onclick: move |_| {
+                            let tag_id = chosen();
+                            if tag_id.is_empty() {
+                                return;
+                            }
+                            onsubmit.call((RepositoryEdit::Tag { human_id: human_id.clone(), tag_id, remove: false }, prov()));
+                        },
+                    }
                 }
             }
         }

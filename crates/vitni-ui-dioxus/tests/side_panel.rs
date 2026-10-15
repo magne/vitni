@@ -1,14 +1,15 @@
 //! SSR assertions for the shared `SidePanel`/`Modal` overlay containers (viewport-overflow fix):
-//! both render a click-away scrim alongside their head/body/foot regions, both bracket their content
-//! with the focus-trap guards, and both render nothing while closed. The viewport-bounded
-//! scroll (absolute positioning against `.detail`/`.overlay`, `.sp-body`/`.m-body` scrolling, the
-//! pinned head/foot), the slide-in motion, and the focus movement the guards drive are CSS/webview
+//! both render a click-away scrim alongside their regions (a panel's head/body, a modal's
+//! head/body/foot), both bracket their content with the focus-trap guards, and both render nothing
+//! while closed. The viewport-bounded scroll (absolute positioning against `.detail`/`.overlay`,
+//! `.sp-body`/`.m-body` scrolling, the pinned head, the sticky `.sp-actions` row, the modal's pinned
+//! foot), the slide-in motion, and the focus movement the guards drive are CSS/webview
 //! behaviour and not SSR-observable — verified by running the app, same constraint as the floating
 //! record-picker's measured position in `record_picker.rs`.
 
 use dioxus::prelude::*;
 use vitni_ui::Localizer;
-use vitni_ui_dioxus::components::{Modal, SidePanel};
+use vitni_ui_dioxus::components::{Modal, SidePanel, SidePanelActions};
 use vitni_ui_dioxus::screens::edit_side_panel;
 
 fn render(view: fn() -> Element) -> String {
@@ -25,7 +26,6 @@ fn open_side_panel_view() -> Element {
             open: true,
             close_label: "Close".to_owned(),
             onclose,
-            footer: rsx! { button { "Save" } },
             div { "body" }
         }
     }
@@ -39,7 +39,6 @@ fn closed_side_panel_view() -> Element {
             open: false,
             close_label: "Close".to_owned(),
             onclose,
-            footer: rsx! { button { "Save" } },
             div { "body" }
         }
     }
@@ -100,7 +99,10 @@ fn an_open_side_panel_renders_a_click_away_scrim() {
     assert!(html.contains("sidepanel"), "the panel surface renders:\n{html}");
     assert!(html.contains("sp-head"), "the panel head renders:\n{html}");
     assert!(html.contains("sp-body"), "the panel body renders:\n{html}");
-    assert!(html.contains("sp-foot"), "the panel footer renders:\n{html}");
+    assert!(
+        !html.contains("sp-foot"),
+        "no footer: a form's Save sits in its own sticky actions row (#663):\n{html}"
+    );
 }
 
 #[test]
@@ -115,9 +117,9 @@ fn an_open_side_panel_brackets_its_content_with_focus_guards() {
     let leading = html.find("focus-guard").unwrap_or_default();
     let head = html.find("sp-head").unwrap_or_default();
     let trailing = html.rfind("focus-guard").unwrap_or_default();
-    let foot = html.find("sp-foot").unwrap_or_default();
+    let body = html.find("sp-body").unwrap();
     assert!(leading < head, "the leading guard precedes the head:\n{html}");
-    assert!(foot < trailing, "the trailing guard follows the footer:\n{html}");
+    assert!(body < trailing, "the trailing guard follows the body:\n{html}");
     let scrim = html.find("sidepanel-scrim").unwrap_or_default();
     assert!(
         scrim < leading,
@@ -193,7 +195,7 @@ fn a_closed_modal_renders_nothing() {
     assert!(!html.contains("focus-guard"), "no guards while closed:\n{html}");
 }
 
-fn footerless_side_panel_view() -> Element {
+fn side_panel_with_actions_view() -> Element {
     let onclose = use_callback(|(): ()| {});
     rsx! {
         SidePanel {
@@ -202,17 +204,25 @@ fn footerless_side_panel_view() -> Element {
             close_label: "Close".to_owned(),
             onclose,
             div { "body" }
+            SidePanelActions { button { "Save" } }
         }
     }
 }
 
+/// The shared actions row (#663) sits inside the scrolling body, after the fields — it is the body's
+/// own last child, so `position: sticky; bottom: 0` pins it to the panel's bottom edge while the
+/// fields scroll under it.
 #[test]
-fn a_side_panel_without_a_footer_renders_an_empty_foot() {
-    let html = render(footerless_side_panel_view);
-    assert!(html.contains("body"), "the panel body renders:\n{html}");
+fn a_side_panels_actions_row_is_the_last_thing_in_its_body() {
+    let html = render(side_panel_with_actions_view);
+    let body = html.find("sp-body").unwrap();
+    let actions = html
+        .find(r#"<div class="sp-actions"><button>Save</button></div>"#)
+        .unwrap();
+    assert!(body < actions, "the row sits inside the body:\n{html}");
     assert!(
-        html.contains(r#"<div class="sp-foot"></div>"#),
-        "an omitted footer leaves the foot empty:\n{html}"
+        html[actions..].starts_with(r#"<div class="sp-actions"><button>Save</button></div></div>"#),
+        "the row is the body's last child:\n{html}"
     );
 }
 

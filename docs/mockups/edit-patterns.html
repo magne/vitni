@@ -60,6 +60,11 @@
     <b>sibling</b>, not inside it: <span class="mono">inert</span> is inherited and no descendant can
     undo it, so a panel within the inerted subtree would disable itself. Closing the panel lifts it all
     again and returns focus to the control that opened it.</p>
+  <p class="muted">Save (or a correction's confirm) ends the form in its own actions row, which sticks to
+    the bottom of the panel: the fields scroll under it, so Save stays in view however long the form
+    grows — the provenance block alone adds confidence, evidence axes, source, reason and note. There is
+    no separate Cancel: the panel's <b>✕</b> is its Cancel, as are <kbd>Esc</kbd> and a click on the
+    scrim.</p>
   <div class="specimen" style="display:grid;place-items:start">
     <div class="sidepanel">
       <div class="sp-head"><h3>Edit birth fact</h3><span class="spacer"></span><button class="btn sm ghost">✕</button></div>
@@ -73,8 +78,8 @@
         <div class="field"><label>Source</label><div class="picker-value"><span class="val">Baptism register, vol. 3</span><span class="row-id">S0003</span><button class="icon-btn" aria-label="Clear selection">✕</button></div></div>
         <div class="field"><label>Reason for this change <span class="faint">(optional · shown in History)</span></label><input class="in" placeholder="Why this change is being made…"></div>
         <div class="field"><label>Note</label><textarea class="in" rows="2">From baptism register, vol. 3.</textarea></div>
+        <div class="sp-actions"><button class="btn primary">Save</button></div>
       </div>
-      <div class="sp-foot"><button class="btn">Cancel</button><button class="btn primary">Save</button></div>
     </div>
   </div>
 

@@ -938,16 +938,18 @@ fn CitationAttributeForm(
             oninput: move |event: FormEvent| value.set(event.value()),
         }
         {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                let attribute_type = attribute_type();
-                if attribute_type.trim().is_empty() {
-                    return;
-                }
-                onsubmit.call((CitationEdit::AddAttribute { human_id: human_id.clone(), attribute_type, value: value() }, prov()));
-            },
+        SidePanelActions {
+            Button {
+                label: save_label,
+                variant: ButtonVariant::Primary,
+                onclick: move |_| {
+                    let attribute_type = attribute_type();
+                    if attribute_type.trim().is_empty() {
+                        return;
+                    }
+                    onsubmit.call((CitationEdit::AddAttribute { human_id: human_id.clone(), attribute_type, value: value() }, prov()));
+                },
+            }
         }
     }
 }
@@ -1039,16 +1041,18 @@ fn CitationTagForm(human_id: String, onsubmit: EventHandler<(CitationEdit, Prove
                     onchange: move |event: FormEvent| chosen.set(event.value()),
                 }
                 {provenance_block(loc, prov)}
-                Button {
-                    label: save_label,
-                    variant: ButtonVariant::Primary,
-                    onclick: move |_| {
-                        let tag_id = chosen();
-                        if tag_id.is_empty() {
-                            return;
-                        }
-                        onsubmit.call((CitationEdit::Tag { human_id: human_id.clone(), tag_id, remove: false }, prov()));
-                    },
+                SidePanelActions {
+                    Button {
+                        label: save_label,
+                        variant: ButtonVariant::Primary,
+                        onclick: move |_| {
+                            let tag_id = chosen();
+                            if tag_id.is_empty() {
+                                return;
+                            }
+                            onsubmit.call((CitationEdit::Tag { human_id: human_id.clone(), tag_id, remove: false }, prov()));
+                        },
+                    }
                 }
             }
         }

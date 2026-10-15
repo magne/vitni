@@ -812,26 +812,28 @@ fn GeographyCreateForm(point: (f64, f64), onsaved: EventHandler<()>) -> Element 
             },
         }
         {provenance_block(loc, prov)}
-        Button {
-            label: loc.action_button(ActionLabel::Save),
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                let request = vitni_ui::PlaceChangeSetRequest {
-                    human_id: None,
-                    place_type: place_type(),
-                    name: (!name().trim().is_empty()).then(|| name().trim().to_owned()),
-                    coordinates: Some(geo_point(lat, lon)),
-                    code: None,
-                };
-                let services = services.clone();
-                let prov = prov();
-                let onsaved = onsaved;
-                spawn(async move {
-                    if commit_place_change_set(services, request, prov).await.is_ok() {
-                        onsaved.call(());
-                    }
-                });
-            },
+        SidePanelActions {
+            Button {
+                label: loc.action_button(ActionLabel::Save),
+                variant: ButtonVariant::Primary,
+                onclick: move |_| {
+                    let request = vitni_ui::PlaceChangeSetRequest {
+                        human_id: None,
+                        place_type: place_type(),
+                        name: (!name().trim().is_empty()).then(|| name().trim().to_owned()),
+                        coordinates: Some(geo_point(lat, lon)),
+                        code: None,
+                    };
+                    let services = services.clone();
+                    let prov = prov();
+                    let onsaved = onsaved;
+                    spawn(async move {
+                        if commit_place_change_set(services, request, prov).await.is_ok() {
+                            onsaved.call(());
+                        }
+                    });
+                },
+            }
         }
     }
 }

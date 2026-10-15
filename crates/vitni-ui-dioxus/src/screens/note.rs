@@ -627,19 +627,21 @@ fn NoteTranslationForm(
         Input { label: loc.field_label("translation"), name: "translation".to_owned(), value: text(), oninput: move |event: FormEvent| text.set(event.value()) }
         Input { label: loc.field_label("translator"), name: "translator".to_owned(), value: translator(), oninput: move |event: FormEvent| translator.set(event.value()) }
         {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                let language = language();
-                let text = text();
-                if language.trim().is_empty() || text.trim().is_empty() {
-                    return;
-                }
-                let translator = translator();
-                let translator = if translator.trim().is_empty() { None } else { Some(translator) };
-                onsubmit.call((NoteEdit::AddTranslation { human_id: human_id.clone(), language, text, translator }, prov()));
-            },
+        SidePanelActions {
+            Button {
+                label: save_label,
+                variant: ButtonVariant::Primary,
+                onclick: move |_| {
+                    let language = language();
+                    let text = text();
+                    if language.trim().is_empty() || text.trim().is_empty() {
+                        return;
+                    }
+                    let translator = translator();
+                    let translator = if translator.trim().is_empty() { None } else { Some(translator) };
+                    onsubmit.call((NoteEdit::AddTranslation { human_id: human_id.clone(), language, text, translator }, prov()));
+                },
+            }
         }
     }
 }
@@ -686,16 +688,18 @@ fn NoteTagForm(human_id: String, onsubmit: EventHandler<(NoteEdit, ProvenanceDra
                     onchange: move |event: FormEvent| chosen.set(event.value()),
                 }
                 {provenance_block(loc, prov)}
-                Button {
-                    label: save_label,
-                    variant: ButtonVariant::Primary,
-                    onclick: move |_| {
-                        let tag_id = chosen();
-                        if tag_id.is_empty() {
-                            return;
-                        }
-                        onsubmit.call((NoteEdit::Tag { human_id: human_id.clone(), tag_id, remove: false }, prov()));
-                    },
+                SidePanelActions {
+                    Button {
+                        label: save_label,
+                        variant: ButtonVariant::Primary,
+                        onclick: move |_| {
+                            let tag_id = chosen();
+                            if tag_id.is_empty() {
+                                return;
+                            }
+                            onsubmit.call((NoteEdit::Tag { human_id: human_id.clone(), tag_id, remove: false }, prov()));
+                        },
+                    }
                 }
             }
         }

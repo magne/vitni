@@ -806,10 +806,12 @@ fn SourceLinkRepositoryForm(
             }
             {extra}
             {provenance_block(loc, prov)}
-            Button {
-                label: loc.action_button(ActionLabel::Save),
-                variant: ButtonVariant::Primary,
-                onclick: move |_| onsave.call(()),
+            SidePanelActions {
+                Button {
+                    label: loc.action_button(ActionLabel::Save),
+                    variant: ButtonVariant::Primary,
+                    onclick: move |_| onsave.call(()),
+                }
             }
         }
     } else {
@@ -851,16 +853,18 @@ fn SourceAttributeForm(
             oninput: move |event: FormEvent| value.set(event.value()),
         }
         {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                let attribute_type = attribute_type();
-                if attribute_type.trim().is_empty() {
-                    return;
-                }
-                onsubmit.call((SourceEdit::AddAttribute { human_id: human_id.clone(), attribute_type, value: value() }, prov()));
-            },
+        SidePanelActions {
+            Button {
+                label: save_label,
+                variant: ButtonVariant::Primary,
+                onclick: move |_| {
+                    let attribute_type = attribute_type();
+                    if attribute_type.trim().is_empty() {
+                        return;
+                    }
+                    onsubmit.call((SourceEdit::AddAttribute { human_id: human_id.clone(), attribute_type, value: value() }, prov()));
+                },
+            }
         }
     }
 }
@@ -946,16 +950,18 @@ fn SourceTagForm(human_id: String, onsubmit: EventHandler<(SourceEdit, Provenanc
                     onchange: move |event: FormEvent| chosen.set(event.value()),
                 }
                 {provenance_block(loc, prov)}
-                Button {
-                    label: save_label,
-                    variant: ButtonVariant::Primary,
-                    onclick: move |_| {
-                        let tag_id = chosen();
-                        if tag_id.is_empty() {
-                            return;
-                        }
-                        onsubmit.call((SourceEdit::Tag { human_id: human_id.clone(), tag_id, remove: false }, prov()));
-                    },
+                SidePanelActions {
+                    Button {
+                        label: save_label,
+                        variant: ButtonVariant::Primary,
+                        onclick: move |_| {
+                            let tag_id = chosen();
+                            if tag_id.is_empty() {
+                                return;
+                            }
+                            onsubmit.call((SourceEdit::Tag { human_id: human_id.clone(), tag_id, remove: false }, prov()));
+                        },
+                    }
                 }
             }
         }

@@ -963,15 +963,17 @@ fn DnaMatchSegmentForm(
             },
         }
         {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                let Some(segment) = build_segment(&chromosome(), &start(), &end(), &centimorgans(), &snps(), side()) else {
-                    return;
-                };
-                onsubmit.call((DnaMatchEdit::AddSegment { human_id: human_id.clone(), segment }, prov()));
-            },
+        SidePanelActions {
+            Button {
+                label: save_label,
+                variant: ButtonVariant::Primary,
+                onclick: move |_| {
+                    let Some(segment) = build_segment(&chromosome(), &start(), &end(), &centimorgans(), &snps(), side()) else {
+                        return;
+                    };
+                    onsubmit.call((DnaMatchEdit::AddSegment { human_id: human_id.clone(), segment }, prov()));
+                },
+            }
         }
     }
 }
@@ -1043,19 +1045,21 @@ fn DnaMatchAncestorForm(
             oninput: move |event: FormEvent| note.set(event.value()),
         }
         {provenance_block(loc, prov)}
-        Button {
-            label: save_label,
-            variant: ButtonVariant::Primary,
-            onclick: move |_| {
-                onsubmit.call((
-                    DnaMatchEdit::AssertSharedAncestor {
-                        human_id: human_id.clone(),
-                        person_id: person_id.clone(),
-                        note: non_empty(note()),
-                    },
-                    prov(),
-                ));
-            },
+        SidePanelActions {
+            Button {
+                label: save_label,
+                variant: ButtonVariant::Primary,
+                onclick: move |_| {
+                    onsubmit.call((
+                        DnaMatchEdit::AssertSharedAncestor {
+                            human_id: human_id.clone(),
+                            person_id: person_id.clone(),
+                            note: non_empty(note()),
+                        },
+                        prov(),
+                    ));
+                },
+            }
         }
     }
 }
@@ -1132,16 +1136,18 @@ fn DnaMatchTagForm(human_id: String, onsubmit: EventHandler<(DnaMatchEdit, Prove
                     onchange: move |event: FormEvent| chosen.set(event.value()),
                 }
                 {provenance_block(loc, prov)}
-                Button {
-                    label: save_label,
-                    variant: ButtonVariant::Primary,
-                    onclick: move |_| {
-                        let tag_id = chosen();
-                        if tag_id.is_empty() {
-                            return;
-                        }
-                        onsubmit.call((DnaMatchEdit::Tag { human_id: human_id.clone(), tag_id, remove: false }, prov()));
-                    },
+                SidePanelActions {
+                    Button {
+                        label: save_label,
+                        variant: ButtonVariant::Primary,
+                        onclick: move |_| {
+                            let tag_id = chosen();
+                            if tag_id.is_empty() {
+                                return;
+                            }
+                            onsubmit.call((DnaMatchEdit::Tag { human_id: human_id.clone(), tag_id, remove: false }, prov()));
+                        },
+                    }
                 }
             }
         }
