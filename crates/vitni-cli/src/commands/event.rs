@@ -3,12 +3,12 @@
 use clap::Subcommand;
 use uuid::Uuid;
 use vitni_app::{
-    AppError, DateParts, MatchableKind, MediaRefInput, MutationMeta, NewEvent, Provenance, Session, Workspace,
-    add_event_citation, assert_event_date, attach_event_media, attach_event_note, create_event, link_place,
-    list_events, set_event_description, set_event_restrictions, set_event_type, show_event, tag_event,
+    AppError, DateParts, ListPage, MatchableKind, MediaRefInput, MutationMeta, NewEvent, Provenance, Session,
+    Workspace, add_event_citation, assert_event_date, attach_event_media, attach_event_note, create_event, link_place,
+    list_events_page, set_event_description, set_event_restrictions, set_event_type, show_event, tag_event,
 };
 
-use crate::args::{EventTypeArg, RestrictionsArgs};
+use crate::args::{EventTypeArg, ListArgs, RestrictionsArgs};
 use crate::commands::similar::hint_similar;
 use crate::i18n::Localizer;
 
@@ -115,8 +115,8 @@ pub enum EventCmd {
         /// The event's human id (e.g. `E0001`).
         human_id: String,
     },
-    /// List all events.
-    List,
+    /// List the events by human id, all of them or one window.
+    List(ListArgs),
 }
 
 /// Runs an event subcommand against the open workspace.
@@ -203,7 +203,7 @@ pub async fn run(
             restrict(workspace, session, &human_id, restrictions, localizer).await
         }
         EventCmd::Show { human_id } => show(workspace, &human_id, localizer).await,
-        EventCmd::List => list(workspace, localizer).await,
+        EventCmd::List(window) => list(workspace, window.page(), localizer).await,
     }
 }
 
@@ -238,11 +238,11 @@ async fn show(workspace: &Workspace, human_id: &str, localizer: &Localizer) -> R
     }
 }
 
-/// Renders every event, ordered by human id.
-async fn list(workspace: &Workspace, localizer: &Localizer) -> Result<(), AppError> {
-    let events = list_events(workspace).await?;
+/// Renders the `page` of event records, ordered by human id.
+async fn list(workspace: &Workspace, page: ListPage, localizer: &Localizer) -> Result<(), AppError> {
+    let events = list_events_page(workspace, page).await?;
     if events.is_empty() {
-        println!("{}", localizer.event_list_empty());
+        println!("{}", localizer.empty_page(page, localizer.event_list_empty()));
         return Ok(());
     }
     for summary in &events {

@@ -4,6 +4,8 @@
 ## Command output
 created = Created { $id }
 updated = Updated { $id }
+# A `list --offset` page that starts past the last record.
+list-page-empty = Nothing to list past the first { $offset }.
 init-success = Initialized workspace "{ $name }" at { $path }
 config-line = Config: { $path }
 rebuild-success = Rebuilt all projections from the event log.

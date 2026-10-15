@@ -3,12 +3,12 @@
 use clap::Subcommand;
 use uuid::Uuid;
 use vitni_app::{
-    AppError, MutationMeta, NewDnaTest, Provenance, Session, Workspace, assert_dna_test_haplogroup,
-    attach_dna_test_note, create_dna_test, list_dna_tests, set_dna_test_genome_build, set_dna_test_kit_id,
+    AppError, ListPage, MutationMeta, NewDnaTest, Provenance, Session, Workspace, assert_dna_test_haplogroup,
+    attach_dna_test_note, create_dna_test, list_dna_tests_page, set_dna_test_genome_build, set_dna_test_kit_id,
     set_dna_test_provider, set_dna_test_restrictions, set_dna_test_type, show_dna_test, tag_dna_test,
 };
 
-use crate::args::{DnaGenomeBuildArg, DnaProviderArg, DnaTestTypeArg, RestrictionsArgs};
+use crate::args::{DnaGenomeBuildArg, DnaProviderArg, DnaTestTypeArg, ListArgs, RestrictionsArgs};
 use crate::i18n::Localizer;
 
 /// `DnaTest` subcommands.
@@ -97,8 +97,8 @@ pub enum DnaTestCmd {
         /// The test's human id (e.g. `D0001`).
         human_id: String,
     },
-    /// List all DNA tests.
-    List,
+    /// List the DNA tests by human id, all of them or one window.
+    List(ListArgs),
 }
 
 /// Runs a `DnaTest` subcommand against the open workspace.
@@ -181,7 +181,7 @@ pub async fn run(
             restrict(workspace, session, &human_id, restrictions, localizer).await
         }
         DnaTestCmd::Show { human_id } => show(workspace, &human_id, localizer).await,
-        DnaTestCmd::List => list(workspace, localizer).await,
+        DnaTestCmd::List(window) => list(workspace, window.page(), localizer).await,
     }
 }
 
@@ -216,11 +216,11 @@ async fn show(workspace: &Workspace, human_id: &str, localizer: &Localizer) -> R
     }
 }
 
-/// Renders every DNA test, ordered by human id.
-async fn list(workspace: &Workspace, localizer: &Localizer) -> Result<(), AppError> {
-    let tests = list_dna_tests(workspace).await?;
+/// Renders the `page` of DNA test records, ordered by human id.
+async fn list(workspace: &Workspace, page: ListPage, localizer: &Localizer) -> Result<(), AppError> {
+    let tests = list_dna_tests_page(workspace, page).await?;
     if tests.is_empty() {
-        println!("{}", localizer.dna_test_list_empty());
+        println!("{}", localizer.empty_page(page, localizer.dna_test_list_empty()));
         return Ok(());
     }
     for summary in &tests {

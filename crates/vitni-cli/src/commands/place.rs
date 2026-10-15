@@ -3,14 +3,14 @@
 use clap::Subcommand;
 use uuid::Uuid;
 use vitni_app::{
-    AppError, DateParts, MatchableKind, MediaRefInput, MutationMeta, NewPlace, PlaceSuccessionInput, Provenance,
-    Session, Workspace, add_place_citation, add_place_name, assert_place_coordinates, assert_place_enclosed_by,
-    assert_place_succession, attach_place_media, attach_place_note, create_place, gregorian_date, list_places,
-    set_place_code, set_place_restrictions, set_place_type, show_place, tag_place,
+    AppError, DateParts, ListPage, MatchableKind, MediaRefInput, MutationMeta, NewPlace, PlaceSuccessionInput,
+    Provenance, Session, Workspace, add_place_citation, add_place_name, assert_place_coordinates,
+    assert_place_enclosed_by, assert_place_succession, attach_place_media, attach_place_note, create_place,
+    gregorian_date, list_places_page, set_place_code, set_place_restrictions, set_place_type, show_place, tag_place,
 };
 use vitni_core::geo::{GeoCoordinates, Microdegrees};
 
-use crate::args::{PlaceTypeArg, RestrictionsArgs, SuccessionKindArg};
+use crate::args::{ListArgs, PlaceTypeArg, RestrictionsArgs, SuccessionKindArg};
 use crate::commands::similar::hint_similar;
 use crate::i18n::Localizer;
 
@@ -153,8 +153,8 @@ pub enum PlaceCmd {
         /// The place's human id (e.g. `P0001`).
         human_id: String,
     },
-    /// List all places.
-    List,
+    /// List the places by human id, all of them or one window.
+    List(ListArgs),
 }
 
 /// Runs a place subcommand against the open workspace.
@@ -260,7 +260,7 @@ pub async fn run(
             restrict(workspace, session, &human_id, restrictions, localizer).await
         }
         PlaceCmd::Show { human_id } => show(workspace, &human_id, localizer).await,
-        PlaceCmd::List => list(workspace, localizer).await,
+        PlaceCmd::List(window) => list(workspace, window.page(), localizer).await,
     }
 }
 
@@ -317,11 +317,11 @@ async fn show(workspace: &Workspace, human_id: &str, localizer: &Localizer) -> R
     }
 }
 
-/// Renders every place, ordered by human id.
-async fn list(workspace: &Workspace, localizer: &Localizer) -> Result<(), AppError> {
-    let places = list_places(workspace).await?;
+/// Renders the `page` of place records, ordered by human id.
+async fn list(workspace: &Workspace, page: ListPage, localizer: &Localizer) -> Result<(), AppError> {
+    let places = list_places_page(workspace, page).await?;
     if places.is_empty() {
-        println!("{}", localizer.place_list_empty());
+        println!("{}", localizer.empty_page(page, localizer.place_list_empty()));
         return Ok(());
     }
     for summary in &places {

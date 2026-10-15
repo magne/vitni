@@ -8,8 +8,8 @@ use std::collections::BTreeSet;
 use clap::{Args, ValueEnum};
 use vitni_app::{
     ChildParentRelationship, ChromosomeSide, Confidence, DnaGenomeBuild, DnaProvider, DnaTestType, EventType,
-    EvidenceKind, InformationKind, NoteType, ParticipantRole, PlaceType, RepositoryType, Restriction, SourceMediaType,
-    SourceQuality, SuccessionKind,
+    EvidenceKind, InformationKind, ListPage, NoteType, ParticipantRole, PlaceType, RepositoryType, Restriction,
+    SourceMediaType, SourceQuality, SuccessionKind,
 };
 use vitni_core::enums::EvidenceLevel;
 
@@ -562,5 +562,27 @@ impl RestrictionsArgs {
             set.insert(restriction.into());
         }
         set
+    }
+}
+
+/// The window of a `list` verb: skip `--offset` records, then print at most `--limit` of them.
+#[derive(Args)]
+pub struct ListArgs {
+    /// Print at most this many records.
+    #[arg(long)]
+    limit: Option<u32>,
+    /// Skip this many records first.
+    #[arg(long, default_value_t = 0)]
+    offset: u32,
+}
+
+impl ListArgs {
+    /// The page of the list to read.
+    #[must_use]
+    pub const fn page(&self) -> ListPage {
+        ListPage {
+            offset: self.offset,
+            limit: self.limit,
+        }
     }
 }

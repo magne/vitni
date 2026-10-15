@@ -3,13 +3,13 @@
 use clap::Subcommand;
 use uuid::Uuid;
 use vitni_app::{
-    AppError, MatchableKind, MediaRefInput, MutationMeta, NewSource, Provenance, Session, Workspace,
-    add_source_attribute, attach_source_media, attach_source_note, create_source, link_source_repository, list_sources,
-    set_source_abbrev, set_source_author, set_source_pub_info, set_source_restrictions, set_title, show_source,
-    tag_source,
+    AppError, ListPage, MatchableKind, MediaRefInput, MutationMeta, NewSource, Provenance, Session, Workspace,
+    add_source_attribute, attach_source_media, attach_source_note, create_source, link_source_repository,
+    list_sources_page, set_source_abbrev, set_source_author, set_source_pub_info, set_source_restrictions, set_title,
+    show_source, tag_source,
 };
 
-use crate::args::{RestrictionsArgs, SourceMediaTypeArg};
+use crate::args::{ListArgs, RestrictionsArgs, SourceMediaTypeArg};
 use crate::commands::similar::hint_similar;
 use crate::i18n::Localizer;
 
@@ -125,8 +125,8 @@ pub enum SourceCmd {
         /// The source's human id (e.g. `S0001`).
         human_id: String,
     },
-    /// List all sources.
-    List,
+    /// List the sources by human id, all of them or one window.
+    List(ListArgs),
 }
 
 /// Runs a source subcommand against the open workspace.
@@ -228,7 +228,7 @@ pub async fn run(
             restrict(workspace, session, &human_id, restrictions, localizer).await
         }
         SourceCmd::Show { human_id } => show(workspace, &human_id, localizer).await,
-        SourceCmd::List => list(workspace, localizer).await,
+        SourceCmd::List(window) => list(workspace, window.page(), localizer).await,
     }
 }
 
@@ -263,11 +263,11 @@ async fn show(workspace: &Workspace, human_id: &str, localizer: &Localizer) -> R
     }
 }
 
-/// Renders every source, ordered by human id.
-async fn list(workspace: &Workspace, localizer: &Localizer) -> Result<(), AppError> {
-    let sources = list_sources(workspace).await?;
+/// Renders the `page` of source records, ordered by human id.
+async fn list(workspace: &Workspace, page: ListPage, localizer: &Localizer) -> Result<(), AppError> {
+    let sources = list_sources_page(workspace, page).await?;
     if sources.is_empty() {
-        println!("{}", localizer.source_list_empty());
+        println!("{}", localizer.empty_page(page, localizer.source_list_empty()));
         return Ok(());
     }
     for summary in &sources {

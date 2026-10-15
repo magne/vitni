@@ -3,11 +3,11 @@
 use clap::Subcommand;
 use uuid::Uuid;
 use vitni_app::{
-    AppError, MatchableKind, MutationMeta, NewNote, Provenance, Session, Workspace, create_note, list_notes,
-    set_note_restrictions, set_note_text, set_note_type, show_note, tag_note,
+    AppError, ListPage, MatchableKind, MutationMeta, NewNote, Provenance, Session, Workspace, create_note,
+    list_notes_page, set_note_restrictions, set_note_text, set_note_type, show_note, tag_note,
 };
 
-use crate::args::{NoteTypeArg, RestrictionsArgs};
+use crate::args::{ListArgs, NoteTypeArg, RestrictionsArgs};
 use crate::commands::similar::hint_similar;
 use crate::i18n::Localizer;
 
@@ -66,8 +66,8 @@ pub enum NoteCmd {
         /// The note's human id (e.g. `N0001`).
         human_id: String,
     },
-    /// List all notes.
-    List,
+    /// List the notes by human id, all of them or one window.
+    List(ListArgs),
 }
 
 /// Runs a note subcommand against the open workspace.
@@ -131,7 +131,7 @@ pub async fn run(
             restrict(workspace, session, &human_id, restrictions, localizer).await
         }
         NoteCmd::Show { human_id } => show(workspace, &human_id, localizer).await,
-        NoteCmd::List => list(workspace, localizer).await,
+        NoteCmd::List(window) => list(workspace, window.page(), localizer).await,
     }
 }
 
@@ -166,11 +166,11 @@ async fn show(workspace: &Workspace, human_id: &str, localizer: &Localizer) -> R
     }
 }
 
-/// Renders every note, ordered by human id.
-async fn list(workspace: &Workspace, localizer: &Localizer) -> Result<(), AppError> {
-    let notes = list_notes(workspace).await?;
+/// Renders the `page` of note records, ordered by human id.
+async fn list(workspace: &Workspace, page: ListPage, localizer: &Localizer) -> Result<(), AppError> {
+    let notes = list_notes_page(workspace, page).await?;
     if notes.is_empty() {
-        println!("{}", localizer.note_list_empty());
+        println!("{}", localizer.empty_page(page, localizer.note_list_empty()));
         return Ok(());
     }
     for summary in &notes {

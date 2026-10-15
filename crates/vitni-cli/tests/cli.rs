@@ -1358,6 +1358,50 @@ fn set_restrictions_writes_and_clears_restrictions_on_every_aggregate() {
 }
 
 #[test]
+fn list_prints_the_window_offset_and_limit_name_on_every_paged_aggregate() {
+    let aggregates = [
+        "person",
+        "family",
+        "place",
+        "source",
+        "citation",
+        "event",
+        "dna-test",
+        "dna-match",
+        "repository",
+        "note",
+        "media",
+        "research-note",
+    ];
+    for aggregate in aggregates {
+        let dir = TempDir::new().unwrap();
+        init(dir.path());
+        let ids: Vec<String> = (0..3).map(|_| create_restrictable(dir.path(), aggregate)).collect();
+        let listed = |window: &[&str]| {
+            let assert = vitni(dir.path())
+                .args([aggregate, "list"])
+                .args(window)
+                .assert()
+                .success();
+            let out = stdout(&assert);
+            let shown: Vec<&str> = ids.iter().map(String::as_str).filter(|id| out.contains(*id)).collect();
+            (shown.join(" "), out)
+        };
+
+        assert_eq!(
+            listed(&["--limit", "2"]).0,
+            format!("{} {}", ids[0], ids[1]),
+            "{aggregate}"
+        );
+        assert_eq!(listed(&["--offset", "1", "--limit", "1"]).0, ids[1], "{aggregate}");
+        assert_eq!(listed(&["--offset", "2"]).0, ids[2], "{aggregate}");
+        let (shown, out) = listed(&["--offset", "3"]);
+        assert!(shown.is_empty(), "{aggregate}: {out}");
+        assert!(out.contains("Nothing to list past the first 3."), "{aggregate}: {out}");
+    }
+}
+
+#[test]
 fn set_restrictions_accepts_the_flag_repeated() {
     let dir = TempDir::new().unwrap();
     init(dir.path());

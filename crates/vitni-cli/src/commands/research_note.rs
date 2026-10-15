@@ -2,12 +2,12 @@
 
 use clap::Subcommand;
 use vitni_app::{
-    AppError, MutationMeta, NewResearchNote, NewResearchNoteSubject, Provenance, Session, Workspace,
-    add_subject_to_research_note, create_research_note, list_research_notes, remove_subject_from_research_note,
+    AppError, ListPage, MutationMeta, NewResearchNote, NewResearchNoteSubject, Provenance, Session, Workspace,
+    add_subject_to_research_note, create_research_note, list_research_notes_page, remove_subject_from_research_note,
     set_research_note_body, set_research_note_restrictions, show_research_note,
 };
 
-use crate::args::{RestrictionsArgs, SubjectKindArg};
+use crate::args::{ListArgs, RestrictionsArgs, SubjectKindArg};
 use crate::i18n::Localizer;
 
 /// `ResearchNote` subcommands.
@@ -68,8 +68,8 @@ pub enum ResearchNoteCmd {
         /// The research note's human id (e.g. `A0001`).
         human_id: String,
     },
-    /// List all research notes.
-    List,
+    /// List the research notes by human id, all of them or one window.
+    List(ListArgs),
 }
 
 /// Parses a repeatable `--subject KIND:HUMAN_ID` argument (e.g. `person:I0001`) into a
@@ -154,7 +154,7 @@ pub async fn run(
             restrict(workspace, session, &human_id, restrictions, localizer).await
         }
         ResearchNoteCmd::Show { human_id } => show(workspace, &human_id, localizer).await,
-        ResearchNoteCmd::List => list(workspace, localizer).await,
+        ResearchNoteCmd::List(window) => list(workspace, window.page(), localizer).await,
     }
 }
 
@@ -189,11 +189,11 @@ async fn show(workspace: &Workspace, human_id: &str, localizer: &Localizer) -> R
     }
 }
 
-/// Renders every research note, ordered by human id.
-async fn list(workspace: &Workspace, localizer: &Localizer) -> Result<(), AppError> {
-    let notes = list_research_notes(workspace).await?;
+/// Renders the `page` of research note records, ordered by human id.
+async fn list(workspace: &Workspace, page: ListPage, localizer: &Localizer) -> Result<(), AppError> {
+    let notes = list_research_notes_page(workspace, page).await?;
     if notes.is_empty() {
-        println!("{}", localizer.research_note_list_empty());
+        println!("{}", localizer.empty_page(page, localizer.research_note_list_empty()));
         return Ok(());
     }
     for summary in &notes {
