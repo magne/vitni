@@ -222,6 +222,7 @@ fn ListRows(
                         index,
                         total,
                         stop,
+                        focused,
                         row: rows[index].clone(),
                         selected,
                         nodes,
@@ -269,12 +270,14 @@ fn step_focus(
 
 /// One row in a [`ListPane`]: a [`ListRow`] at its offset in the whole list, wired to selection and
 /// the roving-focus bookkeeping — its mounted node is kept under its row id while it is mounted, and
-/// it takes focus on mount when ↑/↓ was waiting for it.
+/// it takes focus on mount when ↑/↓ was waiting for it. A click moves the tab stop to the row, so the
+/// row holding focus is always mounted, however far the window scrolls from it.
 #[component]
 fn ListItem(
     index: usize,
     total: usize,
     stop: usize,
+    focused: Signal<usize>,
     row: RowVm,
     selected: Signal<Option<String>>,
     nodes: Signal<HashMap<String, MountedEvent>>,
@@ -315,6 +318,7 @@ fn ListItem(
                 }
             },
             onclick: move |_| {
+                focused.set(index);
                 selected.set(Some(activated.id.clone()));
                 if let Some(onselect) = &onselect {
                     onselect.call(activated.clone());

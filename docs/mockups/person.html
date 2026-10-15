@@ -22,7 +22,8 @@
       <!-- Windowed (#590): the listbox is as tall as the whole list (--list-row-h per row) and mounts
            only a window of rows around the scroll offset, plus the roving tab stop — each row at its
            own offset, announcing its place in the whole list (aria-posinset of aria-setsize). ↑/↓ to a
-           row outside the window moves the window and focuses the row as it mounts. -->
+           row outside the window moves the window and focuses the row as it mounts; a click moves the
+           tab stop to the clicked row, so the focused row stays mounted. -->
       <div class="list-rows">
         <div class="list-window" role="listbox" aria-label="People" style="height:calc(5 * var(--list-row-h))">
           <div class="row sel" role="option" aria-selected="true" aria-posinset="1" aria-setsize="5" style="top:calc(0 * var(--list-row-h))" tabindex="0">

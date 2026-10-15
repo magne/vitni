@@ -2,8 +2,9 @@
 # window has left. `large.ged` (784 persons) is imported whole, so the People list runs far past one
 # window (`WINDOW_ROWS`). Scrolled away from the head, the second row is unmounted while the first —
 # the roving tab stop — stays mounted, so ↓ must move the window back and focus the second row as it
-# mounts, and Tab must still enter the list at its stop. SSR proves the bound on what mounts; only the
-# live app shows scrolling move the window and focus land on a row that was not mounted.
+# mounts, Tab must still enter the list at its stop, and a clicked row must stay mounted as the stop.
+# SSR proves the bound on what mounts; only the live app shows scrolling move the window and focus land
+# on a row that was not mounted.
 description = "A long list mounts a window of rows; ↓ and Tab still reach rows outside it (#590)"
 # Writing large.ged keeps the disk busy enough to starve the GUIs beside it.
 exclusive = true
@@ -114,6 +115,21 @@ label = "Tab: back into the list"
 do = "shot"
 name = "reentered"
 
+[[step]]
+do = "click"
+at = { role = "option", text = "I0005", within = "explorer" }
+label = "click the fifth row"
+
+[[step]]
+do = "wheel"
+at = { hook = "explorer", offset = [150, 400] }
+clicks = -60
+label = "scroll away from the clicked row"
+
+[[step]]
+do = "shot"
+name = "clicked-scrolled"
+
 [[assert]]
 kind = "focus"
 shot = "head"
@@ -155,3 +171,15 @@ kind = "focus"
 shot = "reentered"
 element = { role = "option", text = "I0002", within = "explorer" }
 because = "Tab back into a list scrolled away from its stop must still land on the stop"
+
+[[assert]]
+kind = "present"
+shot = "clicked-scrolled"
+element = { role = "option", text = "I0005", within = "explorer" }
+because = "a click moves the tab stop to the row, so it stays mounted however far the list scrolls"
+
+[[assert]]
+kind = "absent"
+shot = "clicked-scrolled"
+element = { role = "option", text = "I0006", within = "explorer" }
+because = "the row after the clicked one is outside the window"
