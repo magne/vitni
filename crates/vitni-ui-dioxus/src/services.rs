@@ -374,7 +374,11 @@ macro_rules! change_set_wrappers {
     ($($(#[$meta:meta])* fn $commit:ident($Request:ty) => $dispatch:path;)+) => {
         $(
             $(#[$meta])*
-            pub async fn $commit(services: Services, request: $Request, prov: ProvenanceDraft) -> Result<String, String> {
+            pub async fn $commit(
+                services: Services,
+                request: $Request,
+                prov: ProvenanceDraft,
+            ) -> Result<String, String> {
                 let loc = services.localizer();
                 let workspace = services.open().await.map_err(|error| loc.error(&error))?;
                 let session = Session::new(services.config.operator_agent());
