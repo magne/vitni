@@ -49,7 +49,7 @@ pub(crate) async fn create_tables(pool: &Pool<Sqlite>) -> Result<bool, sqlx::Err
         .await?;
     let current = columns.iter().any(|row| row.get::<String, _>("name") == "min_lat");
     if !columns.is_empty() && !current {
-        sqlx::query(&format!("DROP TABLE {PLACE_GEOMETRY_RTREE_TABLE}"))
+        sqlx::query(&format!("DROP TABLE IF EXISTS {PLACE_GEOMETRY_RTREE_TABLE}"))
             .execute(pool)
             .await?;
         sqlx::query(&format!("DROP TABLE {PLACE_GEOMETRY_TABLE}"))

@@ -194,7 +194,8 @@ fn corpus() -> Vec<(Bounds, Vec<String>)> {
         // The southern and western hemispheres: a corner hit, then one microdegree short of it.
         ((-34_000_000, -19_000_000, -33_000_000, -18_500_000), ids(&[SOUTH_WEST])),
         ((-33_999_999, -19_000_000, -33_000_000, -18_500_000), ids(&[])),
-        // An inverted box contains nothing.
+        // An inverted box: both engines apply the same literal comparison, so it matches only a geometry
+        // spanning the whole inverted gap, and none here does.
         ((max_lat, min_lon, min_lat, max_lon), ids(&[])),
         // Far from everything.
         ((10_000_000, 10_000_000, 11_000_000, 11_000_000), ids(&[])),
