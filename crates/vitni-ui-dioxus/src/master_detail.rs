@@ -7,13 +7,15 @@
 //! that builds those — not a bespoke layout. Creation is reached from the shell top bar/tabstrip
 //! (`⌘N`, the new-record menu), not a per-list `New` button.
 
+use std::collections::HashMap;
+
 use dioxus::prelude::*;
-use vitni_ui::{ListQuery, RowSort, RowVm, visible_rows};
+use vitni_ui::{ListQuery, ListWindow, RowSort, RowVm, visible_rows};
 
 use crate::components::{Badge, BadgeSpec, ListRow, TabItem, Tabs, TextInput};
 use crate::screens::DockedRecordDetail;
 use crate::shell::nav_state::{NavState, PaneRole};
-use crate::shell::roving::roving_vertical;
+use crate::shell::roving::next_vertical;
 
 /// The editor area: the active record's detail pane, plus a second docked pane when a record is
 /// split beside it. The list lives in the shell-level [`Explorer`](crate::shell::explorer::Explorer)
@@ -128,6 +130,9 @@ impl SortChrome {
 /// move the tab stop, Enter/Space activate the row). The caller owns the `query` and `selected`
 /// signals and supplies the localized [`ListChrome`]. Creating a new record is reached from the shell
 /// top bar/tabstrip (`⌘N`, the new-record menu), not from this pane.
+///
+/// A long list mounts only a window of its rows (#590, [`ListWindow`]): the filtered rows are a memo,
+/// so scrolling re-renders [`ListRows`] alone and never re-filters or re-sorts the whole list.
 #[component]
 pub fn ListPane(
     /// The rows to show (before the search filter, which this pane applies).
@@ -142,11 +147,7 @@ pub fn ListPane(
     #[props(default)]
     onselect: Option<Callback<RowVm>>,
 ) -> Element {
-    let visible = visible_rows(&rows, &query.read());
-    let total = visible.len();
-    let focused = use_signal(|| 0_usize);
-    let nodes = use_signal(Vec::<Option<MountedEvent>>::new);
-    let stop = focused().min(total.saturating_sub(1));
+    let visible = use_memo(use_reactive!(|rows| visible_rows(&rows, &query.read())));
     rsx! {
         div { class: "list-toolbar",
             TextInput {
@@ -168,29 +169,127 @@ pub fn ListPane(
                 "{chrome.sort.label(query.read().sort)}"
             }
         }
-        if visible.is_empty() {
+        if visible.read().is_empty() {
             p { class: "empty", "{chrome.empty}" }
         } else {
-            div { class: "list-rows", role: "listbox", aria_label: "{chrome.list_label}",
-                onkeydown: move |event| roving_vertical(&event, focused, nodes, total),
-                for (index , row) in visible.into_iter().enumerate() {
-                    ListItem { index, stop, row, selected, nodes, onselect }
+            ListRows { visible, label: chrome.list_label.clone(), selected, onselect }
+        }
+    }
+}
+
+/// The scrolled `listbox` of a [`ListPane`]: mounts the rows of the current [`ListWindow`] plus the
+/// roving tab stop, each at its own row offset inside a box as tall as the whole list, so the
+/// scrollbar spans every row while the DOM holds a bounded few.
+///
+/// Roving focus is window-aware: ↑/↓ to a row that is not mounted moves the window to it and the row
+/// takes focus as it mounts ([`ListItem`]'s `pending` check).
+#[component]
+fn ListRows(
+    visible: Memo<Vec<RowVm>>,
+    label: String,
+    selected: Signal<Option<String>>,
+    onselect: Option<Callback<RowVm>>,
+) -> Element {
+    let mut window = use_signal(ListWindow::default);
+    let focused = use_signal(|| 0_usize);
+    let nodes = use_signal(HashMap::<String, MountedEvent>::new);
+    let pending = use_signal(|| None::<String>);
+    let rows = visible.read();
+    let total = rows.len();
+    let stop = focused().min(total.saturating_sub(1));
+    rsx! {
+        div {
+            class: "list-rows",
+            onscroll: move |event| {
+                let next = ListWindow::at_scroll(
+                    event.scroll_top(),
+                    f64::from(event.scroll_height()),
+                    visible.peek().len(),
+                );
+                if *window.peek() != next {
+                    window.set(next);
+                }
+            },
+            div {
+                class: "list-window",
+                role: "listbox",
+                aria_label: "{label}",
+                style: "height:calc({total} * var(--list-row-h))",
+                onkeydown: move |event| step_focus(&event, visible, focused, window, nodes, pending),
+                for index in window().rendered(total, stop) {
+                    ListItem {
+                        key: "{rows[index].id}",
+                        index,
+                        total,
+                        stop,
+                        row: rows[index].clone(),
+                        selected,
+                        nodes,
+                        pending,
+                        onselect,
+                    }
                 }
             }
         }
     }
 }
 
-/// One row in a [`ListPane`]: a [`ListRow`] wired to selection and the roving-focus bookkeeping.
+/// ↑/↓ in a windowed list: moves the tab stop, keeps the window over it, and focuses the row — now if
+/// it is mounted, else once it mounts.
+fn step_focus(
+    event: &KeyboardEvent,
+    visible: Memo<Vec<RowVm>>,
+    mut focused: Signal<usize>,
+    mut window: Signal<ListWindow>,
+    nodes: Signal<HashMap<String, MountedEvent>>,
+    mut pending: Signal<Option<String>>,
+) {
+    let rows = visible.peek();
+    let current = focused.peek().min(rows.len().saturating_sub(1));
+    let Some(next) = next_vertical(&event.key(), current, rows.len()) else {
+        return;
+    };
+    event.prevent_default();
+    let Some(row) = rows.get(next) else {
+        return;
+    };
+    focused.set(next);
+    let revealed = window.peek().revealing(next);
+    if *window.peek() != revealed {
+        window.set(revealed);
+    }
+    if let Some(node) = nodes.peek().get(&row.id).cloned() {
+        spawn(async move {
+            let _ = node.set_focus(true).await;
+        });
+    } else {
+        pending.set(Some(row.id.clone()));
+    }
+}
+
+/// One row in a [`ListPane`]: a [`ListRow`] at its offset in the whole list, wired to selection and
+/// the roving-focus bookkeeping — its mounted node is kept under its row id while it is mounted, and
+/// it takes focus on mount when ↑/↓ was waiting for it.
 #[component]
 fn ListItem(
     index: usize,
+    total: usize,
     stop: usize,
     row: RowVm,
     selected: Signal<Option<String>>,
-    nodes: Signal<Vec<Option<MountedEvent>>>,
+    nodes: Signal<HashMap<String, MountedEvent>>,
+    pending: Signal<Option<String>>,
     #[props(default)] onselect: Option<Callback<RowVm>>,
 ) -> Element {
+    let id = row.id.clone();
+    use_drop({
+        let id = id.clone();
+        move || {
+            if let Ok(mut nodes) = nodes.try_write() {
+                nodes.remove(&id);
+            }
+        }
+    });
     let is_selected = selected().as_deref() == Some(row.id.as_str());
     let activated = row.clone();
     let id_label = row.display_id().to_owned();
@@ -203,12 +302,17 @@ fn ListItem(
             dot_color: row.dot_color,
             selected: is_selected,
             tabindex: if index == stop { 0 } else { -1 },
-            onmounted: move |event| {
-                let mut nodes = nodes.write();
-                if nodes.len() <= index {
-                    nodes.resize(index + 1, None);
+            style: "top:calc({index} * var(--list-row-h))",
+            aria_posinset: index + 1,
+            aria_setsize: total,
+            onmounted: move |event: MountedEvent| {
+                nodes.write().insert(id.clone(), event.clone());
+                if pending.peek().as_deref() == Some(id.as_str()) {
+                    pending.set(None);
+                    spawn(async move {
+                        let _ = event.set_focus(true).await;
+                    });
                 }
-                nodes[index] = Some(event);
             },
             onclick: move |_| {
                 selected.set(Some(activated.id.clone()));

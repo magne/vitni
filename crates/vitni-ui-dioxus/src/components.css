@@ -335,6 +335,10 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
   color: var(--ink); font-size: var(--fs-sm); outline: none;
 }
 .list-rows { overflow: auto; flex: 1; }
+/* A windowed entity list (#590): the listbox is as tall as every row, and only the mounted rows sit
+   in it, each at its own offset — so the scrollbar spans the whole list while the DOM holds a few. */
+.list-window { --list-row-h: 56px; position: relative; }
+.list-window > .row { position: absolute; left: 0; right: 0; height: var(--list-row-h); }
 .row {
   display: flex; align-items: center; gap: var(--sp-3);
   padding: var(--sp-2) var(--sp-3);

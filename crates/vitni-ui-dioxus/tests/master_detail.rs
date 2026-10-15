@@ -158,3 +158,77 @@ fn roving_tabindex_has_one_stop_per_group() {
     assert!(html.contains(r#"tabindex="0""#), "a roving tab stop:\n{html}");
     assert!(html.contains(r#"tabindex="-1""#), "a roving non-stop:\n{html}");
 }
+
+/// `count` people, `I00001`…, as the Explorer's People list would hand them over.
+fn many_rows(count: usize) -> Vec<RowVm> {
+    let mut rows = Vec::with_capacity(count);
+    for index in 0..count {
+        rows.push(RowVm {
+            id: format!("I{index:06}"),
+            title: format!("Person {index}"),
+            avatar: Some("P".to_owned()),
+            ..RowVm::default()
+        });
+    }
+    rows
+}
+
+#[component]
+fn LongList(count: usize) -> Element {
+    let query = use_signal(ListQuery::default);
+    let selected = use_signal(|| None::<String>);
+    rsx! {
+        ListPane {
+            rows: many_rows(count),
+            query,
+            selected,
+            chrome: ListChrome {
+                list_label: "People".to_owned(),
+                filter_placeholder: "Filter people…".to_owned(),
+                empty: "No persons yet.".to_owned(),
+                sort: sort_chrome(),
+            },
+        }
+    }
+}
+
+fn render_long(count: usize) -> String {
+    let mut vdom = VirtualDom::new_with_props(LongList, LongListProps { count });
+    vdom.rebuild_in_place();
+    dioxus_ssr::render(&vdom)
+}
+
+#[test]
+fn a_long_list_mounts_a_bounded_window_of_rows() {
+    let html = render_long(100_000);
+    let options = html.matches(r#"role="option""#).count();
+    assert!(
+        options > 0 && options <= vitni_ui::WINDOW_ROWS + 1,
+        "a 100 000-row list mounts {options} rows"
+    );
+    assert!(html.contains("Person 0<"), "the head of the list is mounted");
+    assert!(!html.contains("Person 99999<"), "the tail is not mounted");
+    // The listbox is sized for every row, so the scrollbar spans the whole list.
+    assert!(
+        html.contains("height:calc(100000 * var(--list-row-h))"),
+        "the listbox spans all rows:\n{}",
+        &html[..html.len().min(2_000)]
+    );
+}
+
+#[test]
+fn a_windowed_row_announces_its_place_in_the_whole_list() {
+    let html = render_long(100_000);
+    // Numeric attributes render unquoted (`aria-setsize=100000`), which HTML accepts.
+    assert!(html.contains("aria-setsize=100000"), "options carry the list's size");
+    assert!(html.contains("aria-posinset=1 "), "the first option is 1 of N");
+    assert!(
+        html.contains("top:calc(1 * var(--list-row-h))"),
+        "each option sits at its own row offset"
+    );
+    assert_eq!(
+        html.matches(r#"tabindex="0""#).count(),
+        1,
+        "the list keeps one roving tab stop"
+    );
+}
