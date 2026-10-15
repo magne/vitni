@@ -211,9 +211,9 @@ struct EnvelopeHeader {
 
 /// Reads one person's change log, newest first (the History tab).
 ///
-/// Resolves `human_id` to the Person aggregate, reads its raw event stream, and parses each event's
-/// provenance envelope. Entries already retracted/superseded — and the creation event — are marked
-/// not-undoable.
+/// Resolves `human_id` to the Person aggregate, reads its raw event stream and those of every person
+/// merged into it (ADR 0039 §5), and parses each event's provenance envelope. Entries already
+/// retracted/superseded — and the creation event — are marked not-undoable.
 ///
 /// # Errors
 ///
@@ -471,8 +471,9 @@ pub async fn run_record_changes(
 
 /// Undoes an assertion by retracting it (non-destructive — the event log is append-only).
 ///
-/// Emits a `RetractAssertion` against the person, stamped with the session operator and an "Undo"
-/// rationale. A no-op-equivalent for an unknown assertion is left to the domain core to reject.
+/// Emits a `RetractAssertion` against the person whose stream holds the assertion — this person, or
+/// one merged into it — stamped with the session operator and an "Undo" rationale. A no-op-equivalent
+/// for an unknown assertion is left to the domain core to reject.
 ///
 /// # Errors
 ///
@@ -961,11 +962,30 @@ async fn cluster_log<I: ClusterId>(
         for (_, entry) in &mut entries {
             entry.merged_from.clone_from(&merged_from);
         }
-        timed.extend(entries);
+        timed = interleave(timed, entries);
     }
-    // Stable, so entries recorded at one instant keep their stream's order and the root's lead.
-    timed.sort_by(|(first, _), (second, _)| second.cmp(first));
     label_entries(workspace, timed.into_iter().map(|(_, entry)| entry).collect()).await
+}
+
+/// Merges two newest-first change logs into one, newest first, keeping each log's own order even
+/// where its wall-clock instants do not descend; an entry of `lead` goes first on a tie.
+fn interleave(
+    lead: Vec<(Timestamp, ChangeLogEntry)>,
+    other: Vec<(Timestamp, ChangeLogEntry)>,
+) -> Vec<(Timestamp, ChangeLogEntry)> {
+    let mut merged = Vec::with_capacity(lead.len() + other.len());
+    let mut lead = lead.into_iter().peekable();
+    let mut other = other.into_iter().peekable();
+    loop {
+        let from_other = match (lead.peek(), other.peek()) {
+            (Some((lead_at, _)), Some((other_at, _))) => other_at > lead_at,
+            (None, Some(_)) => true,
+            (Some(_), None) => false,
+            (None, None) => break,
+        };
+        merged.extend(if from_other { other.next() } else { lead.next() });
+    }
+    merged
 }
 
 /// One stream's change log, newest first, each entry with the instant it was recorded at. An entry is
@@ -1029,17 +1049,19 @@ async fn undo_in_cluster<I: ClusterId>(
     I::View::retract(store, session, owner, target, undo_provenance(rationale)).await
 }
 
-/// The record of `id`'s cluster whose stream recorded `target`: a member's, else `id` itself.
+/// The record of `id`'s cluster whose stream recorded `target`: `id` itself, else a member — or `id`
+/// when none did, leaving the core to reject the retraction. `id`'s own stream is read first, since
+/// most undos target the record's own changes.
 ///
 /// # Errors
 ///
 /// [`AppError`] on a store read or payload-parse failure.
 async fn assertion_owner<I: ClusterId>(store: &Store, id: I, target: AssertionId) -> Result<I, AppError> {
     let kind = <I::View as ClusterView>::AGGREGATE;
-    for member in Clusters::<I>::load(store).await?.members(id) {
-        for event in store.read_aggregate_events(kind, &member.to_string()).await? {
+    for record in Clusters::<I>::load(store).await?.cluster(id) {
+        for event in store.read_aggregate_events(kind, &record.to_string()).await? {
             if AssertionId::from_uuid(parse_header(&event)?.assertion_id) == target {
-                return Ok(*member);
+                return Ok(record);
             }
         }
     }
@@ -1840,6 +1862,21 @@ mod tests {
         assert_eq!(run_row(&rows, 0).1, 2, "the member's changes fold together");
         assert_eq!(rows[1].merged_from, None);
         assert_eq!(run_row(&rows, 1).1, 1);
+    }
+
+    #[test]
+    fn interleave_keeps_each_streams_order_where_its_clock_stepped_back() {
+        let at = |second: i64| {
+            vitni_core::provenance::Timestamp::new(time::OffsetDateTime::UNIX_EPOCH + time::Duration::seconds(second))
+        };
+        let timed = |second: i64, id: &str| (at(second), synthetic_entry(id, None, true));
+        let root = vec![timed(30, "r2"), timed(40, "r1"), timed(10, "r0")];
+        let member = vec![timed(35, "m1"), timed(10, "m0")];
+        let ids: Vec<_> = super::interleave(root, member)
+            .into_iter()
+            .map(|(_, entry)| entry.assertion_id)
+            .collect();
+        assert_eq!(ids, ["m1", "r2", "r1", "r0", "m0"]);
     }
 
     #[test]
