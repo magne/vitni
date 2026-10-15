@@ -37,7 +37,7 @@ use vitni_app::{
 use vitni_app::{
     DecidableKind, ImportRunId, MatchQueueFilter, MatchVerdict, ancestors, assess, decide_match, descendants,
     evidence_health, list_import_runs, match_pair_decision, match_queue, person_names, relationship, run_checks,
-    run_record_changes, run_records, undo_match_distinction_and_merge,
+    run_counts, run_groups, run_record_changes, undo_match_distinction_and_merge,
 };
 use vitni_app::{
     DraftRecord, MatchBand, MatchableKind, SimilarRecord, assess_draft, find_similar, find_similar_to_draft,
@@ -515,12 +515,12 @@ pub async fn dispatch_decide_match(
     }
 }
 
-/// How many of an import run's records [`load_run_records`] reads at a time.
+/// How many groups of an import run's records [`load_run_records`] reads at a time.
 const RUN_RECORDS_PAGE: u32 = 50;
 
-/// Reads the first `pages` pages of the records the import run `run` changed, in one read, labelling
-/// people by their display names: what an import-run row on the Dashboard discloses, *Show more*
-/// adding a page.
+/// Reads the first `pages` pages of the records the import run `run` changed, grouped by the source
+/// item they came from, in one read, with the run's count line, labelling people by their display
+/// names: what an import-run row on the Dashboard discloses, *Show more* adding a page.
 ///
 /// # Errors
 ///
@@ -532,9 +532,10 @@ pub async fn load_run_records(
     pages: u32,
 ) -> Result<RunRecordsVm, AppError> {
     let limit = pages.max(1).saturating_mul(RUN_RECORDS_PAGE);
-    let page = run_records(workspace, run, 0, limit).await?;
+    let page = run_groups(workspace, run, 0, limit).await?;
+    let counts = run_counts(workspace, run).await?;
     let names = person_names(workspace, &RunRecordsVm::persons_named(&page)).await?;
-    Ok(RunRecordsVm::build(&page, &names, loc))
+    Ok(RunRecordsVm::build(&page, &counts, &names, loc))
 }
 
 /// Reads what the import run `run` changed in one record (`kind` + `aggregate_id`, from a

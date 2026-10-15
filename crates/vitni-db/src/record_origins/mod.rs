@@ -29,6 +29,7 @@ use cqrs_es::{Aggregate, EventEnvelope};
 use serde::Serialize;
 use sha2::{Digest as _, Sha256};
 use vitni_core::assertions::{Envelope, EventBody};
+use vitni_core::enums::EventType;
 use vitni_core::ids::AssertionId;
 use vitni_core::origin::ContentDigest;
 use vitni_core::provenance::Timestamp;
@@ -76,14 +77,89 @@ pub struct OriginRow {
     pub live: bool,
 }
 
-/// One aggregate an import run wrote to, as
-/// [`Store::run_records`](crate::Store::run_records) lists it.
+/// The aggregates an import run wrote to from one source record, as
+/// [`Store::run_groups`](crate::Store::run_groups) lists them.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RunRecordRow {
+pub struct RunGroupRow {
+    /// The source record (`RecordOrigin::record`).
+    pub record: String,
+    /// The aggregates this record wrote first (each aggregate is in one group only): the record's own
+    /// entity (first written with no item) leading, then the rest in the order the run first wrote them.
+    pub members: Vec<RunMemberRow>,
+}
+
+/// One aggregate of a [`RunGroupRow`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunMemberRow {
     /// The aggregate's kind (`Aggregate::TYPE`).
     pub aggregate_kind: String,
     /// The aggregate.
     pub aggregate_id: String,
+    /// An event's type, from its projection; `None` for any other kind.
+    pub event_type: Option<EventType>,
+}
+
+/// How many aggregates of one kind an import run wrote to, as
+/// [`Store::run_kind_counts`](crate::Store::run_kind_counts) counts them; events are counted per type.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunKindCount {
+    /// The aggregates' kind (`Aggregate::TYPE`).
+    pub aggregate_kind: String,
+    /// For events, their type; `None` for any other kind, or an event whose type was retracted.
+    pub event_type: Option<EventType>,
+    /// How many.
+    pub count: u64,
+}
+
+/// One row of the run-group read: `(dataset, record, aggregate_kind, aggregate_id, event_type)`,
+/// ordered by group and then by member.
+pub(crate) type RunMemberLine = (String, String, String, String, Option<String>);
+
+/// Folds [`RunMemberLine`]s, ordered by group, into one group per `(dataset, record)`.
+///
+/// # Errors
+///
+/// [`DbError::Backend`] if an event type does not decode.
+pub(crate) fn fold_groups(lines: Vec<RunMemberLine>) -> Result<Vec<RunGroupRow>, DbError> {
+    let mut groups: Vec<RunGroupRow> = Vec::new();
+    let mut last_dataset = String::new();
+    for (dataset, record, aggregate_kind, aggregate_id, event_type) in lines {
+        let member = RunMemberRow {
+            aggregate_kind,
+            aggregate_id,
+            event_type: decode_event_type(event_type.as_deref())?,
+        };
+        match groups.last_mut() {
+            Some(group) if group.record == record && last_dataset == dataset => group.members.push(member),
+            Some(_) | None => groups.push(RunGroupRow {
+                record,
+                members: vec![member],
+            }),
+        }
+        last_dataset = dataset;
+    }
+    Ok(groups)
+}
+
+/// Decodes a `COUNT(*)` read as a signed integer.
+///
+/// # Errors
+///
+/// [`DbError::Backend`] if it is negative.
+pub(crate) fn decode_count(count: i64) -> Result<u64, DbError> {
+    u64::try_from(count).map_err(|e| DbError::Backend(format!("decoding a record count {count}: {e}")))
+}
+
+/// Decodes an event type read as JSON text from an event's projection.
+///
+/// # Errors
+///
+/// [`DbError::Backend`] if it is not an encoded [`EventType`].
+pub(crate) fn decode_event_type(text: Option<&str>) -> Result<Option<EventType>, DbError> {
+    text.map(|text| {
+        serde_json::from_str(text).map_err(|e| DbError::Backend(format!("decoding an event type {text}: {e}")))
+    })
+    .transpose()
 }
 
 /// What an item resolved onto, as [`Store::resolve_origin`](crate::Store::resolve_origin) returns it.

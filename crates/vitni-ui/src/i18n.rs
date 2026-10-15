@@ -2211,6 +2211,87 @@ impl Localizer {
         fl!(self.loader, "run-records-empty")
     }
 
+    /// One entry of an open import run's count line: how many records of a kind it wrote (`6 persons`),
+    /// an event counted by its type (`6 births`).
+    #[must_use]
+    pub fn run_kind_count(&self, kind: &str, event_type: Option<&vitni_app::EventType>, count: u64) -> String {
+        let noun = self.run_kind_noun(kind, event_type, count);
+        fl!(
+            self.loader,
+            "run-kind-count",
+            count = Self::fluent_count(count),
+            noun = noun
+        )
+    }
+
+    /// The noun a record of `kind` is named by in an import run's disclosure, in the plural `count`
+    /// takes: an event by its type, a custom one verbatim; a kind with no noun by its stored name.
+    #[must_use]
+    pub fn run_kind_noun(&self, kind: &str, event_type: Option<&vitni_app::EventType>, count: u64) -> String {
+        let count = Self::fluent_count(count);
+        if let Some(event_type) = event_type {
+            return self.run_event_noun(event_type, count);
+        }
+        match Category::from_aggregate_kind(kind) {
+            Some(Category::People) => fl!(self.loader, "run-kind-person", count = count),
+            Some(Category::Families) => fl!(self.loader, "run-kind-family", count = count),
+            Some(Category::Events) => fl!(self.loader, "run-kind-event", count = count),
+            Some(Category::Places) => fl!(self.loader, "run-kind-place", count = count),
+            Some(Category::Sources) => fl!(self.loader, "run-kind-source", count = count),
+            Some(Category::Citations) => fl!(self.loader, "run-kind-citation", count = count),
+            Some(Category::Repositories) => fl!(self.loader, "run-kind-repository", count = count),
+            Some(Category::Media) => fl!(self.loader, "run-kind-media", count = count),
+            Some(Category::Notes) => fl!(self.loader, "run-kind-note", count = count),
+            Some(Category::ResearchNotes) => fl!(self.loader, "run-kind-research-note", count = count),
+            Some(Category::Tags) => fl!(self.loader, "run-kind-tag", count = count),
+            Some(Category::DnaTests) => fl!(self.loader, "run-kind-dna-test", count = count),
+            Some(Category::DnaMatches) => fl!(self.loader, "run-kind-dna-match", count = count),
+            Some(Category::Dashboard) | None => kind.to_owned(),
+        }
+    }
+
+    fn run_event_noun(&self, event_type: &vitni_app::EventType, count: i64) -> String {
+        use vitni_app::EventType;
+        match event_type {
+            EventType::Birth => fl!(self.loader, "run-event-birth", count = count),
+            EventType::Death => fl!(self.loader, "run-event-death", count = count),
+            EventType::Marriage => fl!(self.loader, "run-event-marriage", count = count),
+            EventType::Baptism => fl!(self.loader, "run-event-baptism", count = count),
+            EventType::Christening => fl!(self.loader, "run-event-christening", count = count),
+            EventType::Burial => fl!(self.loader, "run-event-burial", count = count),
+            EventType::Cremation => fl!(self.loader, "run-event-cremation", count = count),
+            EventType::Census => fl!(self.loader, "run-event-census", count = count),
+            EventType::Residence => fl!(self.loader, "run-event-residence", count = count),
+            EventType::Immigration => fl!(self.loader, "run-event-immigration", count = count),
+            EventType::Emigration => fl!(self.loader, "run-event-emigration", count = count),
+            EventType::Adoption => fl!(self.loader, "run-event-adoption", count = count),
+            EventType::Confirmation => fl!(self.loader, "run-event-confirmation", count = count),
+            EventType::BarMitzvah => fl!(self.loader, "run-event-bar-mitzvah", count = count),
+            EventType::BasMitzvah => fl!(self.loader, "run-event-bas-mitzvah", count = count),
+            EventType::FirstCommunion => fl!(self.loader, "run-event-first-communion", count = count),
+            EventType::Graduation => fl!(self.loader, "run-event-graduation", count = count),
+            EventType::Naturalization => fl!(self.loader, "run-event-naturalization", count = count),
+            EventType::Ordination => fl!(self.loader, "run-event-ordination", count = count),
+            EventType::Probate => fl!(self.loader, "run-event-probate", count = count),
+            EventType::Retirement => fl!(self.loader, "run-event-retirement", count = count),
+            EventType::Will => fl!(self.loader, "run-event-will", count = count),
+            EventType::Engagement => fl!(self.loader, "run-event-engagement", count = count),
+            EventType::Annulment => fl!(self.loader, "run-event-annulment", count = count),
+            EventType::Divorce => fl!(self.loader, "run-event-divorce", count = count),
+            EventType::DivorceFiled => fl!(self.loader, "run-event-divorce-filed", count = count),
+            EventType::MarriageBanns => fl!(self.loader, "run-event-marriage-banns", count = count),
+            EventType::MarriageContract => fl!(self.loader, "run-event-marriage-contract", count = count),
+            EventType::MarriageLicense => fl!(self.loader, "run-event-marriage-license", count = count),
+            EventType::MarriageSettlement => fl!(self.loader, "run-event-marriage-settlement", count = count),
+            EventType::Custom(value) => value.clone(),
+        }
+    }
+
+    /// A count as Fluent takes it, saturating past `i64::MAX`.
+    fn fluent_count(count: u64) -> i64 {
+        i64::try_from(count).unwrap_or(i64::MAX)
+    }
+
     /// The localized label for a person's evidence level — the personas badge (data-model §7).
     #[must_use]
     pub fn evidence_level_label(&self, level: EvidenceLevel) -> String {

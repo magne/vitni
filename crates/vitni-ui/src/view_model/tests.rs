@@ -16,7 +16,7 @@ use vitni_app::{
     OperatorKind, PersonName, PersonRow, PersonSummary, Restriction, RunRef, Sex, SourceQuality, Surname, TagRef,
     WorkspaceCounts,
 };
-use vitni_app::{DatasetId, ImportRunId, RunRecord, RunRecords, RunResume};
+use vitni_app::{DatasetId, EventType, ImportRunId, RunGroup, RunGroups, RunKindCount, RunRecord, RunResume};
 
 /// The display names the dashboard tests label persons with: I0001 is "Ada Lovelace".
 fn ada() -> HashMap<String, String> {
@@ -1891,28 +1891,45 @@ fn an_activity_row_names_its_value() {
     assert_eq!(vm.value.as_deref(), Some("male"));
 }
 
+fn run_record(kind: &str, human_id: Option<&str>, event_type: Option<EventType>) -> RunRecord {
+    RunRecord {
+        kind: kind.to_owned(),
+        aggregate_id: format!("{kind}-{}", human_id.unwrap_or("none")),
+        human_id: human_id.map(ToOwned::to_owned),
+        event_type,
+    }
+}
+
 #[test]
 fn a_runs_records_link_by_name_and_each_names_its_disclosure() {
     let loc = Localizer::for_test("en");
-    let record = |kind: &str, human_id: Option<&str>| RunRecord {
-        kind: kind.to_owned(),
-        aggregate_id: format!("{kind}-id"),
-        human_id: human_id.map(ToOwned::to_owned),
-    };
-    let page = RunRecords {
-        records: vec![
-            record("person", Some("I0001")),
-            record("place", Some("P0001")),
-            record("tag", None),
+    let page = RunGroups {
+        groups: vec![
+            RunGroup {
+                records: vec![run_record("person", Some("I0001"), None)],
+            },
+            RunGroup {
+                records: vec![run_record("place", Some("P0001"), None)],
+            },
+            RunGroup {
+                records: vec![run_record("tag", None, None)],
+            },
         ],
         more: true,
     };
-    let vm = RunRecordsVm::build(&page, &ada(), &loc);
+    let vm = RunRecordsVm::build(&page, &[], &ada(), &loc);
 
     assert!(vm.more);
-    let [person, place, tag] = vm.records.as_slice() else {
-        panic!("three records: {vm:?}");
+    let [person, place, tag] = vm.groups.as_slice() else {
+        panic!("three groups: {vm:?}");
     };
+    assert!(
+        vm.groups
+            .iter()
+            .all(|group| group.members.is_empty() && group.summary.is_none()),
+        "a group of one record reads as that record alone"
+    );
+    let (person, place, tag) = (&person.lead, &place.lead, &tag.lead);
     let linked = person.record.as_ref().expect("a person links");
     assert_eq!(
         (linked.label.as_str(), linked.human_id.as_str()),
@@ -1922,7 +1939,7 @@ fn a_runs_records_link_by_name_and_each_names_its_disclosure() {
     assert_eq!(person.toggle_label, "What it changed in Ada Lovelace");
     assert_eq!(
         (person.kind.as_str(), person.aggregate_id.as_str()),
-        ("person", "person-id")
+        ("person", "person-I0001")
     );
     assert_eq!(place.label, "P0001", "a record without a known name reads by its id");
     assert!(
@@ -1931,4 +1948,80 @@ fn a_runs_records_link_by_name_and_each_names_its_disclosure() {
     );
     assert_eq!(tag.label, "tag", "it reads as its kind, never its aggregate id");
     assert_eq!(tag.toggle_label, "What it changed in tag");
+}
+
+#[test]
+fn a_source_items_records_group_under_its_own_entity_named_by_kind() {
+    let loc = Localizer::for_test("en");
+    let page = RunGroups {
+        groups: vec![RunGroup {
+            records: vec![
+                run_record("person", Some("I0001"), None),
+                run_record("event", Some("E0001"), Some(EventType::Birth)),
+                run_record("citation", Some("C0001"), None),
+            ],
+        }],
+        more: false,
+    };
+    let vm = RunRecordsVm::build(&page, &[], &ada(), &loc);
+
+    let [group] = vm.groups.as_slice() else {
+        panic!("one group: {vm:?}");
+    };
+    assert_eq!(group.lead.label, "Ada Lovelace", "labelled by the item's own entity");
+    assert_eq!(group.summary.as_deref(), Some("person · birth · citation"));
+    let members: Vec<_> = group.members.iter().map(|member| member.label.as_str()).collect();
+    assert_eq!(members, ["E0001", "C0001"], "its items' records, in the order written");
+}
+
+#[test]
+fn a_runs_count_line_counts_its_records_by_kind_and_event_type() {
+    let loc = Localizer::for_test("en");
+    let count = |kind: &str, event_type: Option<EventType>, count: u64| RunKindCount {
+        kind: kind.to_owned(),
+        event_type,
+        count,
+    };
+    let counts = [
+        count("event", Some(EventType::Census), 1),
+        count("person", None, 6),
+        count("event", Some(EventType::Birth), 6),
+        count("citation", None, 6),
+        count("source", None, 1),
+        count("event", Some(EventType::Custom("Fishing trip".to_owned())), 2),
+    ];
+    let page = RunGroups {
+        groups: Vec::new(),
+        more: false,
+    };
+    let vm = RunRecordsVm::build(&page, &counts, &ada(), &loc);
+
+    assert_eq!(
+        vm.counts,
+        "1 census · 6 persons · 6 births · 6 citations · 1 source · 2 Fishing trip"
+    );
+}
+
+#[test]
+fn the_count_line_reads_in_norwegian() {
+    let loc = Localizer::for_test("no");
+    let counts = [
+        RunKindCount {
+            kind: "person".to_owned(),
+            event_type: None,
+            count: 1,
+        },
+        RunKindCount {
+            kind: "event".to_owned(),
+            event_type: Some(EventType::Birth),
+            count: 2,
+        },
+    ];
+    let page = RunGroups {
+        groups: Vec::new(),
+        more: false,
+    };
+    let vm = RunRecordsVm::build(&page, &counts, &ada(), &loc);
+
+    assert_eq!(vm.counts, "1 person · 2 fødsler");
 }

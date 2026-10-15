@@ -36,10 +36,16 @@
             <div class="tl-what">Name asserted: <b>John Smith</b> — <a href="person.html">John Smith</a></div>
             <div class="tl-who">magne · High</div>
           </div>
-          <!-- An import run's row opens with What it changed to the records it changed, read by run (not
-               from the feed's window), so a run of any size lists them all, 50 at a time with Show more.
-               Each record links to it and opens to what the run changed in it, newest first; the
-               Dashboard undoes nothing, so none carries Undo (#588). Shown open; it starts closed. -->
+          <!-- An import run's row opens with What it changed to a count line of what the whole run wrote,
+               by kind and events by type, then the records it changed, read by run (not from the
+               feed's window), so a run of any size lists them all, 50 source items at a time with Show
+               more. Records are grouped by the source item they came from (a GEDCOM INDI, a
+               Digitalarkivet person page): the item's own entity leads, its records' kinds muted
+               beside it, and the records its parts wrote nest under it. Each record sits under the item
+               that first wrote it, so a spouse a family item links stays under their own. An item
+               that wrote one record (a Gramps XML object, a shared place) reads as that record alone
+               (#660). Each record links to it and opens to what the run changed in it, newest first;
+               the Dashboard undoes nothing, so none carries Undo (#588). Shown open; it starts closed. -->
           <div class="tl-item">
             <div class="tl-when">today 11:48</div>
             <div class="tl-what">Imported from tree.ged<span class="muted tl-count">142 records</span></div>
@@ -47,9 +53,10 @@
             <div class="row-actions" style="margin-top:4px">
               <button class="btn sm ghost" type="button" aria-expanded="true" aria-label="What the import from tree.ged changed">▾ What it changed</button>
             </div>
+            <p class="muted" style="margin-top:4px">48 persons · 41 births · 12 deaths · 17 marriages · 21 places · 3 sources</p>
             <div class="timeline tl-children">
               <div class="tl-item">
-                <div class="tl-what"><a href="person.html">👤 John Smith</a></div>
+                <div class="tl-what"><a href="person.html">👤 John Smith</a><span class="muted tl-count">person · birth · citation</span></div>
                 <div class="row-actions" style="margin-top:4px">
                   <button class="btn sm ghost" type="button" aria-expanded="true" aria-label="What it changed in John Smith">▾ What it changed</button>
                 </div>
@@ -63,6 +70,20 @@
                     <div class="tl-when">today 11:48</div>
                     <div class="tl-what">Person created</div>
                     <div class="tl-who">gedcom-import (software agent)</div>
+                  </div>
+                </div>
+                <div class="timeline tl-children">
+                  <div class="tl-item">
+                    <div class="tl-what"><a href="event.html">📅 E0001</a></div>
+                    <div class="row-actions" style="margin-top:4px">
+                      <button class="btn sm ghost" type="button" aria-expanded="false" aria-label="What it changed in E0001">▸ What it changed</button>
+                    </div>
+                  </div>
+                  <div class="tl-item">
+                    <div class="tl-what"><a href="citation.html">❝ C0001</a></div>
+                    <div class="row-actions" style="margin-top:4px">
+                      <button class="btn sm ghost" type="button" aria-expanded="false" aria-label="What it changed in C0001">▸ What it changed</button>
+                    </div>
                   </div>
                 </div>
               </div>

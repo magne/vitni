@@ -7,14 +7,15 @@
 
 use time::macros::datetime;
 use uuid::Uuid;
-use vitni_core::enums::{EvidenceLevel, Sex};
-use vitni_core::ids::{AgentId, AssertionId, HumanId, ImportRunId, PersonId};
+use vitni_core::enums::{EventType, EvidenceLevel, Sex};
+use vitni_core::event::command::{EventCommand, EventCommandEnvelope};
+use vitni_core::ids::{AgentId, AssertionId, EventId, HumanId, ImportRunId, PersonId};
 use vitni_core::import_run::command::{ImportRunCommand, ImportRunCommandEnvelope, NewImportRun};
 use vitni_core::import_run::event::{ImportCounts, ResolutionDecision, ResolvedItem};
 use vitni_core::origin::{DatasetId, RecordOrigin};
 use vitni_core::person::command::{PersonCommand, PersonCommandEnvelope};
 use vitni_core::provenance::{Agent, AgentKind, AssertionMeta, EventContext, Timestamp};
-use vitni_db::Store;
+use vitni_db::{RunGroupRow, RunKindCount, RunMemberRow, Store};
 
 const PERSON: u128 = 1;
 const RUN: u128 = 0x5;
@@ -336,33 +337,116 @@ async fn create_another_person(store: &Store, n: u128, origin: RecordOrigin) -> 
     person_id
 }
 
-async fn the_records_a_run_wrote_are_listed_newest_first(store: &Store) {
+/// Creates event `n` (`E000n`) of `event_type` from `origin`, as assertion `0x200 + n`.
+async fn create_event(store: &Store, n: u128, event_type: EventType, origin: RecordOrigin) -> EventId {
+    let event_id = EventId::from_uuid(Uuid::from_u128(0x1000 + n));
+    let command = EventCommand::CreateEvent {
+        event_id,
+        human_id: HumanId::new(format!("E{n:04}")),
+        event_type,
+    };
+    store
+        .execute_event(
+            &event_id.to_string(),
+            EventCommandEnvelope {
+                meta: meta(0x200 + n, Some(origin)),
+                command,
+            },
+        )
+        .await
+        .unwrap();
+    event_id
+}
+
+/// A run that wrote person I1 (with a birth from its item), person I2, and a marriage from family F1's
+/// item that wrote to person I1 too; another run's person and a recorded resolution beside it.
+async fn seed_a_run(store: &Store) -> (EventId, PersonId, EventId) {
     create_person(store).await;
     person(store, 11, Some(origin("I1", None)), assert_sex(Sex::Female)).await;
+    let birth = create_event(store, 1, EventType::Birth, origin("I1", Some("event:BIRT:0"))).await;
     let second = create_another_person(store, 2, origin("I2", None)).await;
+    let marriage = create_event(store, 2, EventType::Marriage, origin("F1", Some("event:MARR:0"))).await;
+    person(
+        store,
+        12,
+        Some(origin("F1", Some("event:MARR:0"))),
+        assert_sex(Sex::Male),
+    )
+    .await;
     let other_run = RecordOrigin {
         run: ImportRunId::from_uuid(Uuid::from_u128(0x6)),
         ..origin("I3", None)
     };
     create_another_person(store, 3, other_run).await;
     a_recorded_resolution_resolves_the_item_in_later_runs(store).await;
+    (birth, second, marriage)
+}
+
+fn member(kind: &str, id: &impl ToString, event_type: Option<EventType>) -> RunMemberRow {
+    RunMemberRow {
+        aggregate_kind: kind.to_owned(),
+        aggregate_id: id.to_string(),
+        event_type,
+    }
+}
+
+async fn a_runs_records_are_grouped_by_the_source_record_they_came_from(store: &Store) {
+    let (birth, second, marriage) = seed_a_run(store).await;
 
     let run_id = ImportRunId::from_uuid(Uuid::from_u128(RUN));
-    let records = store.run_records(run_id, 0, 10).await.unwrap();
-    let ids: Vec<(&str, String)> = records
-        .iter()
-        .map(|row| (row.aggregate_kind.as_str(), row.aggregate_id.clone()))
-        .collect();
+    let groups = store.run_groups(run_id, 0, 10).await.unwrap();
+    let expected = [
+        RunGroupRow {
+            record: "F1".to_owned(),
+            members: vec![member("event", &marriage, Some(EventType::Marriage))],
+        },
+        RunGroupRow {
+            record: "I2".to_owned(),
+            members: vec![member("person", &second, None)],
+        },
+        RunGroupRow {
+            record: "I1".to_owned(),
+            members: vec![
+                member("person", &person_id(), None),
+                member("event", &birth, Some(EventType::Birth)),
+            ],
+        },
+    ];
     assert_eq!(
-        ids,
-        [("person", second.to_string()), ("person", person_id().to_string())],
-        "each record once, newest first; the other run's record and the resolution are not listed"
+        groups, expected,
+        "one group per record, newest first, its own entity first, each aggregate under the record that \
+         first wrote it; the other run's record and the resolution are not listed"
     );
-    let page = store.run_records(run_id, 1, 1).await.unwrap();
-    assert_eq!(page.len(), 1);
-    assert_eq!(page[0].aggregate_id, person_id().to_string(), "offset skips the newest");
+    let page = store.run_groups(run_id, 1, 1).await.unwrap();
+    assert_eq!(page, expected[1..2], "offset and limit count groups");
     let none = store
-        .run_records(ImportRunId::from_uuid(Uuid::from_u128(0x7)), 0, 10)
+        .run_groups(ImportRunId::from_uuid(Uuid::from_u128(0x7)), 0, 10)
+        .await
+        .unwrap();
+    assert!(none.is_empty(), "{none:?}");
+}
+
+async fn a_runs_records_are_counted_by_kind_and_event_type(store: &Store) {
+    seed_a_run(store).await;
+
+    let run_id = ImportRunId::from_uuid(Uuid::from_u128(RUN));
+    let counts = store.run_kind_counts(run_id).await.unwrap();
+    let count = |kind: &str, event_type: Option<EventType>, count: u64| RunKindCount {
+        aggregate_kind: kind.to_owned(),
+        event_type,
+        count,
+    };
+    assert_eq!(
+        counts,
+        [
+            count("person", None, 2),
+            count("event", Some(EventType::Birth), 1),
+            count("event", Some(EventType::Marriage), 1),
+        ],
+        "each record once, in the order the run first wrote each kind"
+    );
+    let none = store
+        .run_kind_counts(ImportRunId::from_uuid(Uuid::from_u128(0x7)))
         .await
         .unwrap();
     assert!(none.is_empty(), "{none:?}");
@@ -500,7 +584,8 @@ mod sqlite {
         a_rebuild_reproduces_the_index,
         a_preview_returns_the_events_and_writes_nothing,
         the_records_each_dataset_already_holds_are_counted,
-        the_records_a_run_wrote_are_listed_newest_first,
+        a_runs_records_are_grouped_by_the_source_record_they_came_from,
+        a_runs_records_are_counted_by_kind_and_event_type,
     );
 
     #[tokio::test]
@@ -660,7 +745,8 @@ mod postgres {
         a_rebuild_reproduces_the_index,
         a_preview_returns_the_events_and_writes_nothing,
         the_records_each_dataset_already_holds_are_counted,
-        the_records_a_run_wrote_are_listed_newest_first,
+        a_runs_records_are_grouped_by_the_source_record_they_came_from,
+        a_runs_records_are_counted_by_kind_and_event_type,
     );
 
     /// A seeded database closed and then changed by `statements`, the index the seeding made, and
