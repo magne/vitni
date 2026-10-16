@@ -41,6 +41,9 @@ CREATE TABLE IF NOT EXISTS identity_links (
     PRIMARY KEY (kind, member)
 )";
 
+const CREATE_IDENTITY_LINKS_ROOT_INDEX: &str =
+    "CREATE INDEX IF NOT EXISTS identity_links_by_root ON identity_links (kind, root)";
+
 const CREATE_IDENTITY_DISTINCTIONS_TABLE: &str = "
 CREATE TABLE IF NOT EXISTS identity_distinctions (
     kind    TEXT NOT NULL,
@@ -69,6 +72,7 @@ pub(crate) async fn create_tables(pool: &Pool<Postgres>) -> Result<bool, sqlx::E
         .get("existed");
     sqlx::query(CREATE_IDENTITY_EDGES_TABLE).execute(pool).await?;
     sqlx::query(CREATE_IDENTITY_LINKS_TABLE).execute(pool).await?;
+    sqlx::query(CREATE_IDENTITY_LINKS_ROOT_INDEX).execute(pool).await?;
     sqlx::query(CREATE_IDENTITY_DISTINCTIONS_TABLE).execute(pool).await?;
     Ok(!existed)
 }
@@ -283,6 +287,40 @@ pub(crate) async fn links(pool: &Pool<Postgres>, kind: MatchableKind) -> Result<
     .fetch_all(pool)
     .await
     .map_err(backend("reading the identity links"))?;
+    Ok(rows
+        .iter()
+        .map(|row| IdentityLink {
+            member: row.get("member"),
+            root: row.get("root"),
+        })
+        .collect())
+}
+
+/// Every member of each `kind` cluster that holds one of `ids`, as member or root, with its root, ordered
+/// by member — the clusters a page of records reads, without the rest of the index.
+///
+/// # Errors
+///
+/// A [`DbError`] if the query fails.
+pub(crate) async fn links_of(
+    pool: &Pool<Postgres>,
+    kind: MatchableKind,
+    ids: &[String],
+) -> Result<Vec<IdentityLink>, DbError> {
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let rows = sqlx::query(&format!(
+        "SELECT member, root FROM {IDENTITY_LINKS_TABLE} WHERE kind = $1 AND root IN ( \
+         SELECT unnest($2::text[]) \
+         UNION SELECT root FROM {IDENTITY_LINKS_TABLE} WHERE kind = $1 AND member = ANY($2)) \
+         ORDER BY member"
+    ))
+    .bind(kind.as_str())
+    .bind(ids)
+    .fetch_all(pool)
+    .await
+    .map_err(backend("reading the identity links of some records"))?;
     Ok(rows
         .iter()
         .map(|row| IdentityLink {

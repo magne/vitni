@@ -618,6 +618,53 @@ async fn identity_links_follow_merges_retractions_and_rebuild_on_postgres() {
 }
 
 #[tokio::test]
+async fn identity_links_of_reads_the_whole_cluster_of_each_named_record_on_postgres() {
+    let (store, _db) = store().await;
+    for n in 1..=6 {
+        create(&store, n, &format!("I000{n}")).await;
+    }
+    let id = |n: u128| PersonId::from_uuid(Uuid::from_u128(n));
+    let merge = |surviving: u128, merged: u128| PersonCommand::MergePersons {
+        surviving: id(surviving),
+        merged: id(merged),
+        assessment: None,
+    };
+    person_command(&store, 2, 200, merge(2, 3)).await;
+    person_command(&store, 1, 201, merge(1, 2)).await;
+    person_command(&store, 4, 202, merge(4, 5)).await;
+
+    let kind = vitni_core::matching::MatchableKind::Person;
+    let links_of = async |ns: &[u128]| {
+        let ids: Vec<String> = ns.iter().map(|n| id(*n).to_string()).collect();
+        store
+            .identity_links_of(kind, &ids)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|link| (link.member, link.root))
+            .collect::<Vec<_>>()
+    };
+    let first = vec![
+        (id(2).to_string(), id(1).to_string()),
+        (id(3).to_string(), id(1).to_string()),
+    ];
+    assert_eq!(links_of(&[3]).await, first, "a member names its whole cluster");
+    assert_eq!(links_of(&[1]).await, first, "a root names its whole cluster");
+    assert_eq!(
+        links_of(&[5, 6]).await,
+        vec![(id(5).to_string(), id(4).to_string())],
+        "an unmerged record adds nothing"
+    );
+    assert_eq!(links_of(&[6]).await, Vec::<(String, String)>::new());
+    assert_eq!(links_of(&[]).await, Vec::<(String, String)>::new());
+    let other_kind = store
+        .identity_links_of(vitni_core::matching::MatchableKind::Event, &[id(1).to_string()])
+        .await
+        .unwrap();
+    assert_eq!(other_kind.len(), 0, "another kind's index is not read");
+}
+
+#[tokio::test]
 async fn identity_distinctions_follow_decisions_retractions_and_rebuild_on_postgres() {
     let (store, _db) = store().await;
     for (n, human_id) in [(1, "I0001"), (2, "I0002")] {
