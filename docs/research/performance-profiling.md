@@ -205,6 +205,26 @@ seeded workspace that bench builds (one dated birth per person), pages of 50:
   summary's references, whatever the page size. The page read itself is the 226 µs above. Scoping those
   joins to the page's references is the next lever for a paged screen.
 
+### Scoped summary joins (#673, 2026-10-16)
+
+Every kind's summary lookups now read only the records the page's views name: the referenced records by
+id (`*_by_ids`), the identity clusters that hold them (`Store::identity_links_of`, over an index on
+`(kind, root)`), and the joins read backwards — an event's participants, a source's citations, a
+repository's sources — through the record links index (ADR 0047). A place's lookups walk its enclosing
+places level by level. The reverse-usage fields no index answers (a citation's Backs count, a source
+citation's backers, a media object's or note's users, a DNA match's citing inferences, a DNA test's
+matches) are left empty in a list summary and filled by `show_*` alone. Same bench, same seeded
+workspace:
+
+| read (mean)                                        | 10 000 persons | 100 000 persons |
+| -------------------------------------------------- | -------------: | --------------: |
+| `vitni_app::list_persons_page`, first page, before |         136 ms |          1.38 s |
+| `vitni_app::list_persons_page`, first page, after  |         704 µs |          640 µs |
+
+The app page is now flat in workspace size: the 250 µs page read plus a handful of by-id reads for the
+50 persons' births, their places, and the clusters holding them. `show_*` still reads whole projections
+for the reverse-usage fields it fills.
+
 ## Reproducing
 
 ```bash
