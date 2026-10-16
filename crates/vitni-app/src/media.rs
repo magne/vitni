@@ -64,7 +64,8 @@ pub struct MediaSummary {
     pub notes: Vec<AttachedRef>,
     /// The applied tags (the Tags tab), by name/colour/priority.
     pub tags: Vec<TagRef>,
-    /// The records that reference this media (the Overview "Used by" card).
+    /// The records that reference this media (the Overview "Used by" card). Filled by `show_media` alone;
+    /// a list summary leaves it empty, as reading it means reading every record (#673).
     pub used_by: Vec<UsingRecordRef>,
     /// The media's privacy restrictions (GEDCOM `RESN`; empty = unrestricted).
     pub restrictions: BTreeSet<Restriction>,
@@ -551,9 +552,12 @@ pub async fn show_media(workspace: &Workspace, human_id: &str) -> Result<Option<
     let Some(media_id) = store.find_media(human_id).await?.and_then(|view| view.media_id()) else {
         return Ok(None);
     };
-    let views = identity::cluster_records(store, media_id).await?;
-    let lookups = MediaLookups::load(workspace).await?;
-    Ok(summarize_cluster(&views.iter().collect::<Vec<_>>(), &lookups))
+    let clusters = MediaClusters::load_of(store, &BTreeSet::from([media_id])).await?;
+    let views = identity::views(store, &clusters.cluster(clusters.root(media_id))).await?;
+    let views: Vec<&MediaView> = views.iter().collect();
+    let mut lookups = MediaLookups::load(store, &views).await?;
+    lookups.usage = Some(MediaUsage::load(workspace).await?);
+    Ok(summarize_cluster(&views, &lookups))
 }
 
 /// Lists every media object's summary, ordered by `human_id`. A merged record is listed once, as its cluster's
@@ -573,9 +577,8 @@ pub async fn list_media(workspace: &Workspace) -> Result<Vec<MediaSummary>, AppE
 /// A store/read-model error.
 pub async fn list_media_page(workspace: &Workspace, page: ListPage) -> Result<Vec<MediaSummary>, AppError> {
     let store = workspace.store();
-    let clusters = MediaClusters::load(store).await?;
-    let views: Vec<MediaView> = identity::listed_page(store, &clusters, page).await?;
-    let lookups = MediaLookups::load(workspace).await?;
+    let (clusters, views) = identity::listed_page::<MediaView>(store, page).await?;
+    let lookups = MediaLookups::load(store, &views.iter().collect::<Vec<_>>()).await?;
     let mut summaries = Vec::with_capacity(views.len());
     for cluster in identity::group_clusters(&views, &clusters) {
         summaries.extend(summarize_cluster(&cluster, &lookups));
@@ -589,17 +592,28 @@ struct MediaLookups {
     citations: HashMap<CitationId, CitationRef>,
     notes: HashMap<NoteId, use_case::NoteLookup>,
     tags: HashMap<TagId, TagRef>,
-    usage: MediaUsage,
+    /// The records using each media object: read from every record, so only a shown media object
+    /// fills it (#673).
+    usage: Option<MediaUsage>,
 }
 
 impl MediaLookups {
-    async fn load(workspace: &Workspace) -> Result<Self, AppError> {
-        let store = workspace.store();
+    /// The lookups for summarizing `views`, each read for the records they name and no others. No
+    /// media object's users are read.
+    async fn load(store: &Store, views: &[&MediaView]) -> Result<Self, AppError> {
+        let mut citations = BTreeSet::new();
+        let mut notes = BTreeSet::new();
+        let mut tags = BTreeSet::new();
+        for view in views {
+            citations.extend(view.citations());
+            notes.extend(view.notes());
+            tags.extend(view.tags());
+        }
         Ok(Self {
-            citations: citation_refs(store).await?,
-            notes: use_case::note_lookups(store).await?,
-            tags: tag_refs(store).await?,
-            usage: MediaUsage::load(workspace).await?,
+            citations: citation_refs(store, &citations).await?,
+            notes: use_case::note_lookups(store, &notes).await?,
+            tags: tag_refs(store, &tags).await?,
+            usage: None,
         })
     }
 }
@@ -905,7 +919,11 @@ fn summarize(view: &MediaView, lookups: &MediaLookups) -> MediaSummary {
         .into_iter()
         .filter_map(|id| lookups.tags.get(&id).cloned())
         .collect();
-    let used_by = view.media_id().map(|id| lookups.usage.used_by(id)).unwrap_or_default();
+    let used_by = view
+        .media_id()
+        .zip(lookups.usage.as_ref())
+        .map(|(id, usage)| usage.used_by(id))
+        .unwrap_or_default();
     let (file_path, web_path) = split_path(view.path());
     MediaSummary {
         human_id: view.human_id().map(|h| h.as_str().to_owned()).unwrap_or_default(),

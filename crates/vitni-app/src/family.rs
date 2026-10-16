@@ -25,9 +25,9 @@ use vitni_db::{ListPage, Store};
 use crate::citation::TagRef;
 use crate::dto::{AggRef, AttachedRef, CitationRef, MediaLookup, MediaRefSummary};
 use crate::error::AppError;
-use crate::event::{EventSummary, list_events};
+use crate::event::EventSummary;
 use crate::identity::{self, EventClusters, FamilyClusters, IdentityDecision, PairDecision, PersonClusters};
-use crate::person::{list_persons, render_name};
+use crate::person::render_name;
 use crate::session::Session;
 use crate::use_case::{self, MediaRefInput, MutationMeta, Provenance, resolve_media_id, resolve_note_id};
 use crate::workspace::Workspace;
@@ -887,10 +887,11 @@ pub async fn show_family(workspace: &Workspace, human_id: &str) -> Result<Option
     let Some(family_id) = found.family_id() else {
         return Ok(None);
     };
-    let clusters = FamilyClusters::load(store).await?;
+    let clusters = FamilyClusters::load_of(store, &BTreeSet::from([family_id])).await?;
     let views = identity::views(store, &clusters.cluster(clusters.root(family_id))).await?;
-    let lookups = FamilyLookups::load(workspace).await?;
-    Ok(summarize_cluster(&views.iter().collect::<Vec<_>>(), &lookups))
+    let views: Vec<&FamilyView> = views.iter().collect();
+    let lookups = FamilyLookups::shown(store, &views).await?;
+    Ok(summarize_cluster(&views, &lookups))
 }
 
 /// Lists every family's summary, ordered by `human_id`. A merged family is listed once, as its
@@ -910,9 +911,8 @@ pub async fn list_families(workspace: &Workspace) -> Result<Vec<FamilySummary>, 
 /// A store/read-model error.
 pub async fn list_families_page(workspace: &Workspace, page: ListPage) -> Result<Vec<FamilySummary>, AppError> {
     let store = workspace.store();
-    let clusters = FamilyClusters::load(store).await?;
-    let views: Vec<FamilyView> = crate::identity::listed_page(store, &clusters, page).await?;
-    let lookups = FamilyLookups::load(workspace).await?;
+    let (clusters, views) = crate::identity::listed_page::<FamilyView>(store, page).await?;
+    let lookups = FamilyLookups::load(store, &views.iter().collect::<Vec<_>>()).await?;
     let mut summaries = Vec::with_capacity(views.len());
     for cluster in root_clusters(&views, &clusters) {
         summaries.extend(summarize_cluster(&cluster, &lookups));
@@ -1311,58 +1311,73 @@ struct FamilyLookups {
 }
 
 impl FamilyLookups {
-    async fn load(workspace: &Workspace) -> Result<Self, AppError> {
-        let store = workspace.store();
-        let person_ids: HashMap<String, PersonId> = store
-            .list_persons()
-            .await?
-            .iter()
-            .filter_map(|p| Some((p.human_id()?.to_string(), p.person_id()?)))
-            .collect();
-        let mut persons = HashMap::new();
-        for summary in list_persons(workspace).await? {
-            if let Some(id) = person_ids.get(&summary.human_id) {
-                persons.insert(
-                    *id,
-                    PersonInfo {
-                        human_id: summary.human_id.clone(),
-                        name: summary.display_name.clone(),
-                        birth_year: summary.birth_year(),
-                        death_year: summary.death_year(),
-                    },
-                );
+    /// The lookups for summarizing `views`, each read for the records they name and no others. Each
+    /// citation's Backs count is left at 0; only [`Self::shown`] fills it (#673).
+    async fn load(store: &Store, views: &[&FamilyView]) -> Result<Self, AppError> {
+        let mut persons = BTreeSet::new();
+        let mut events = BTreeSet::new();
+        let mut citations = BTreeSet::new();
+        let mut media = BTreeSet::new();
+        let mut notes = BTreeSet::new();
+        let mut tags = BTreeSet::new();
+        for view in views {
+            for partner in view.asserted_partners() {
+                persons.insert(partner.value);
+                citations.extend(partner.citations.iter().filter_map(|cited| cited.as_citation()));
             }
-        }
-
-        let event_ids: HashMap<String, EventId> = store
-            .list_events()
-            .await?
-            .iter()
-            .filter_map(|e| Some((e.human_id()?.to_string(), e.event_id()?)))
-            .collect();
-        let mut events = HashMap::new();
-        for summary in list_events(workspace).await? {
-            if let Some(id) = event_ids.get(&summary.human_id) {
-                events.insert(*id, event_info(summary));
+            persons.extend(view.children_with_assertions().iter().map(|child| child.value.value));
+            for link in view.child_relationships_with_assertions() {
+                persons.insert(link.value.value.parent_id);
             }
+            events.extend(
+                view.linked_events_with_assertions()
+                    .iter()
+                    .map(|linked| linked.value.value),
+            );
+            citations.extend(view.citations());
+            media.extend(view.media().iter().map(|media| media.media_id));
+            notes.extend(view.notes());
+            tags.extend(view.tags());
         }
+        let (clusters, person_summaries) = crate::person::summaries_by_root(store, &persons).await?;
+        let mut person_infos = HashMap::with_capacity(person_summaries.len());
+        for (id, summary) in person_summaries {
+            person_infos.insert(
+                id,
+                PersonInfo {
+                    birth_year: summary.birth_year(),
+                    death_year: summary.death_year(),
+                    human_id: summary.human_id,
+                    name: summary.display_name,
+                },
+            );
+        }
+        let (event_clusters, event_summaries) = crate::event::summaries_by_root(store, &events).await?;
+        let mut event_infos = HashMap::with_capacity(event_summaries.len());
+        for (id, summary) in event_summaries {
+            event_infos.insert(id, event_info(summary));
+        }
+        Ok(Self {
+            persons: person_infos,
+            clusters,
+            event_clusters,
+            events: event_infos,
+            citations: crate::dto::citation_refs(store, &citations).await?,
+            media: crate::dto::media_lookups(store, &media).await?,
+            notes: use_case::note_lookups(store, &notes).await?,
+            tags: crate::dto::tag_refs(store, &tags).await?,
+        })
+    }
 
-        let mut citations = crate::dto::citation_refs(store).await?;
+    /// [`Self::load`] with each citation's Backs count filled — what a shown family's Citations tab
+    /// renders, read from every citing record.
+    async fn shown(store: &Store, views: &[&FamilyView]) -> Result<Self, AppError> {
+        let mut lookups = Self::load(store, views).await?;
         let backs = crate::citation_usage::citation_backs_counts(store).await?;
-        for (id, citation) in &mut citations {
+        for (id, citation) in &mut lookups.citations {
             citation.backs_count = backs.get(id).copied().unwrap_or(0);
         }
-
-        Ok(Self {
-            persons,
-            clusters: PersonClusters::load(store).await?,
-            event_clusters: EventClusters::load(store).await?,
-            events,
-            citations,
-            media: crate::dto::media_lookups(store).await?,
-            notes: use_case::note_lookups(store).await?,
-            tags: tag_labels(store).await?,
-        })
+        Ok(lookups)
     }
 }
 
@@ -1376,26 +1391,6 @@ fn event_info(summary: EventSummary) -> EventInfo {
         source_count: summary.citations.len(),
         citations: summary.citations,
     }
-}
-
-/// Builds a `TagId -> TagRef` lookup from the Tag projection, to render applied tags by name/colour/
-/// priority (never by id — data-model §9).
-async fn tag_labels(store: &Store) -> Result<HashMap<TagId, TagRef>, AppError> {
-    let mut map = HashMap::new();
-    for view in store.list_tags().await? {
-        if let (Some(id), Some(name)) = (view.tag_id(), view.name()) {
-            map.insert(
-                id,
-                TagRef {
-                    id: id.to_string(),
-                    name: name.to_owned(),
-                    color: view.color().map(ToOwned::to_owned),
-                    priority: view.priority(),
-                },
-            );
-        }
-    }
-    Ok(map)
 }
 
 /// Renders a [`FamilyView`] into the frontend DTO, joining members and attachments to the other

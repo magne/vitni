@@ -21,6 +21,7 @@ use vitni_core::event::EventView;
 use vitni_core::event::command::{EventCommand, EventCommandEnvelope};
 use vitni_core::event::error::EventError;
 use vitni_core::ids::{AssertionId, CitationId, EventId, HumanId, MediaId, NoteId, PersonId, PlaceId, TagId};
+use vitni_core::person::PersonView;
 use vitni_core::place::PlaceView;
 use vitni_core::provenance::{Confidence, EvidenceRef};
 use vitni_core::text::{Attribute, MediaRef};
@@ -30,7 +31,6 @@ use crate::citation::TagRef;
 use crate::dto::{AggRef, AttachedRef, CitationRef, MediaLookup, MediaRefSummary, citation_refs, tag_refs};
 use crate::error::AppError;
 use crate::identity::{self, EventClusters, IdentityDecision, PairDecision};
-use crate::person::list_persons;
 use crate::session::Session;
 use crate::use_case::{self, MediaRefInput, MutationMeta, Provenance, resolve_media_id, resolve_note_id};
 use crate::workspace::Workspace;
@@ -738,10 +738,11 @@ pub async fn show_event(workspace: &Workspace, human_id: &str) -> Result<Option<
     let Some(event_id) = found.event_id() else {
         return Ok(None);
     };
-    let clusters = EventClusters::load(store).await?;
+    let clusters = EventClusters::load_of(store, &BTreeSet::from([event_id])).await?;
     let views = identity::views(store, &clusters.cluster(clusters.root(event_id))).await?;
-    let lookups = EventLookups::load(workspace).await?;
-    Ok(summarize_cluster(&views.iter().collect::<Vec<_>>(), &lookups))
+    let views: Vec<&EventView> = views.iter().collect();
+    let lookups = EventLookups::load(store, &views).await?;
+    Ok(summarize_cluster(&views, &lookups))
 }
 
 /// Lists every event's summary, ordered by `human_id`. A merged event is listed once, as its cluster's
@@ -761,10 +762,9 @@ pub async fn list_events(workspace: &Workspace) -> Result<Vec<EventSummary>, App
 /// A store/read-model error.
 pub async fn list_events_page(workspace: &Workspace, page: ListPage) -> Result<Vec<EventSummary>, AppError> {
     let store = workspace.store();
-    let clusters = EventClusters::load(store).await?;
-    let views: Vec<EventView> = crate::identity::listed_page(store, &clusters, page).await?;
+    let (clusters, views) = crate::identity::listed_page::<EventView>(store, page).await?;
     let by_id: HashMap<EventId, &EventView> = views.iter().filter_map(|view| Some((view.event_id()?, view))).collect();
-    let lookups = EventLookups::load(workspace).await?;
+    let lookups = EventLookups::load(store, &views.iter().collect::<Vec<_>>()).await?;
     let mut summaries = Vec::with_capacity(views.len());
     for view in &views {
         let Some(id) = view.event_id() else { continue };
@@ -779,6 +779,35 @@ pub async fn list_events_page(workspace: &Workspace, page: ListPage) -> Result<V
         summaries.extend(summarize_cluster(&cluster, &lookups));
     }
     Ok(summaries)
+}
+
+/// The summaries of the events `ids` names, each read as its cluster's — the root's summary with its
+/// members' rows, as [`list_events`] lists it (ADR 0039 §5) — keyed by root, with the clusters that map
+/// each of `ids` to its root: what another record's summary joins for the events it names.
+///
+/// # Errors
+///
+/// A store/read-model error.
+pub(crate) async fn summaries_by_root(
+    store: &Store,
+    ids: &BTreeSet<EventId>,
+) -> Result<(EventClusters, HashMap<EventId, EventSummary>), AppError> {
+    let (clusters, views) = identity::clustered(store, ids).await?;
+    let lookups = EventLookups::load(store, &views.iter().collect::<Vec<_>>()).await?;
+    let by_id: HashMap<EventId, &EventView> = views.iter().filter_map(|view| Some((view.event_id()?, view))).collect();
+    let roots: BTreeSet<EventId> = ids.iter().map(|id| clusters.root(*id)).collect();
+    let mut summaries = HashMap::with_capacity(roots.len());
+    for root in roots {
+        let cluster: Vec<&EventView> = clusters
+            .cluster(root)
+            .iter()
+            .filter_map(|id| by_id.get(id).copied())
+            .collect();
+        if let Some(summary) = summarize_cluster(&cluster, &lookups) {
+            summaries.insert(root, summary);
+        }
+    }
+    Ok((clusters, summaries))
 }
 
 /// The place on a lightweight event list row: the place's user-facing id and primary name.
@@ -853,12 +882,6 @@ pub async fn list_event_rows(workspace: &Workspace) -> Result<Vec<EventRow>, App
     Ok(rows)
 }
 
-/// A person joined to the Person projection: the `human_id` and display name, for participant rows.
-struct PersonInfo {
-    human_id: String,
-    name: Option<String>,
-}
-
 /// A place joined to the Place projection: the `human_id` and primary name, for the linked-place row.
 #[derive(Clone)]
 struct PlaceInfo {
@@ -901,78 +924,112 @@ struct EventLookups {
 }
 
 impl EventLookups {
-    async fn load(workspace: &Workspace) -> Result<Self, AppError> {
-        let store = workspace.store();
-        let person_views = store.list_persons().await?;
-        let clusters = crate::identity::PersonClusters::load(store).await?;
-        let person_ids: HashMap<String, PersonId> = person_views
-            .iter()
-            .filter_map(|p| Some((p.human_id()?.to_string(), p.person_id()?)))
-            .collect();
-        let mut persons = HashMap::new();
-        for summary in list_persons(workspace).await? {
-            if let Some(id) = person_ids.get(&summary.human_id) {
-                persons.insert(
-                    *id,
-                    PersonInfo {
-                        human_id: summary.human_id.clone(),
-                        name: summary.display_name.clone(),
-                    },
-                );
+    /// The lookups for summarizing `views`, each read for the records they name and no others: the
+    /// participants come from the persons whose participations reach `views` (ADR 0047).
+    async fn load(store: &Store, views: &[&EventView]) -> Result<Self, AppError> {
+        let mut places = BTreeSet::new();
+        let mut citations = BTreeSet::new();
+        let mut media = BTreeSet::new();
+        let mut notes = BTreeSet::new();
+        let mut tags = BTreeSet::new();
+        let mut event_ids = Vec::with_capacity(views.len());
+        for view in views {
+            event_ids.extend(view.event_id().map(|id| id.to_string()));
+            places.extend(view.asserted_place().map(|asserted| asserted.value));
+            citations.extend(view.citations());
+            if let Some(date) = view.asserted_date() {
+                citations.extend(date.citations.iter().filter_map(|cited| cited.as_citation()));
+            }
+            media.extend(view.media().iter().map(|media| media.media_id));
+            notes.extend(view.notes());
+            tags.extend(view.tags());
+        }
+        let person_side = participating_persons(store, &event_ids).await?;
+        for view in &person_side {
+            for participation in view.participations() {
+                notes.extend(participation.notes.iter().copied());
             }
         }
-        let mut person_participations: HashMap<EventId, Vec<PersonSideParticipation>> = HashMap::new();
-        for view in &person_views {
-            let Some(person_id) = view.person_id() else {
-                continue;
-            };
-            let person_id = clusters.root(person_id);
-            let info = persons.get(&person_id);
-            let human_id = info.map_or_else(|| person_id.to_string(), |i| i.human_id.clone());
-            let name = info.and_then(|i| i.name.clone());
-            for attributed in view.participations_with_assertions() {
-                let asserted = &attributed.value;
-                let participation = &asserted.value;
-                person_participations
-                    .entry(participation.event_id)
-                    .or_default()
-                    .push(PersonSideParticipation {
-                        person_id,
-                        human_id: human_id.clone(),
-                        name: name.clone(),
-                        role: participation.role.clone(),
-                        age: participation.age.clone(),
-                        attributes: participation.attributes.clone(),
-                        notes: participation.notes.clone(),
-                        confidence: asserted.confidence,
-                        source_count: asserted.citation_ids().count(),
-                        assertion_id: attributed.assertion_id.to_string(),
-                    });
-            }
-        }
-        let mut places = HashMap::new();
-        for view in store.list_places().await? {
-            if let (Some(id), Some(human_id)) = (view.place_id(), view.human_id()) {
-                places.insert(
-                    id,
-                    PlaceInfo {
-                        id,
-                        human_id: human_id.as_str().to_owned(),
-                        name: view.names().first().map(|n| n.text.clone()),
-                    },
-                );
-            }
-        }
-        crate::identity::PlaceClusters::load(store).await?.redirect(&mut places);
         Ok(Self {
-            places,
-            citations: citation_refs(store).await?,
-            media: crate::dto::media_lookups(store).await?,
-            notes: use_case::note_lookups(store).await?,
-            tags: tag_refs(store).await?,
-            person_participations,
+            places: place_infos(store, &places).await?,
+            citations: citation_refs(store, &citations).await?,
+            media: crate::dto::media_lookups(store, &media).await?,
+            notes: use_case::note_lookups(store, &notes).await?,
+            tags: tag_refs(store, &tags).await?,
+            person_participations: person_participations(store, &person_side).await?,
         })
     }
+}
+
+/// The persons taking part in any of the events `event_ids`, in `human_id` order, read through the
+/// record links index (ADR 0047).
+async fn participating_persons(store: &Store, event_ids: &[String]) -> Result<Vec<PersonView>, AppError> {
+    if event_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut person_ids = crate::profile::linking(store, vitni_db::RecordLink::Participation, event_ids).await?;
+    person_ids.sort_unstable();
+    person_ids.dedup();
+    let mut persons = store.persons_by_ids(&person_ids).await?;
+    persons.sort_by(|a, b| (a.human_id(), a.person_id()).cmp(&(b.human_id(), b.person_id())));
+    Ok(persons)
+}
+
+/// Every participation `persons` assert, grouped by the event it references, each person named by its
+/// cluster's root (ADR 0039 §5).
+async fn person_participations(
+    store: &Store,
+    persons: &[PersonView],
+) -> Result<HashMap<EventId, Vec<PersonSideParticipation>>, AppError> {
+    let ids: BTreeSet<PersonId> = persons.iter().filter_map(PersonView::person_id).collect();
+    let labels = crate::person::person_labels(store, &ids).await?;
+    let mut person_participations: HashMap<EventId, Vec<PersonSideParticipation>> = HashMap::new();
+    for view in persons {
+        let Some(label) = view.person_id().and_then(|id| labels.get(&id)) else {
+            continue;
+        };
+        let (person_id, human_id, name) = (label.root, label.human_id.clone(), label.name.clone());
+        for attributed in view.participations_with_assertions() {
+            let asserted = &attributed.value;
+            let participation = &asserted.value;
+            person_participations
+                .entry(participation.event_id)
+                .or_default()
+                .push(PersonSideParticipation {
+                    person_id,
+                    human_id: human_id.clone(),
+                    name: name.clone(),
+                    role: participation.role.clone(),
+                    age: participation.age.clone(),
+                    attributes: participation.attributes.clone(),
+                    notes: participation.notes.clone(),
+                    confidence: asserted.confidence,
+                    source_count: asserted.citation_ids().count(),
+                    assertion_id: attributed.assertion_id.to_string(),
+                });
+        }
+    }
+    Ok(person_participations)
+}
+
+/// The places `ids` names, a merged place reading as its cluster's root (ADR 0039 §5).
+async fn place_infos(store: &Store, ids: &BTreeSet<PlaceId>) -> Result<HashMap<PlaceId, PlaceInfo>, AppError> {
+    let (clusters, views) = identity::referenced(store, ids).await?;
+    let mut places = HashMap::new();
+    for view in &views {
+        if let (Some(id), Some(human_id)) = (view.place_id(), view.human_id()) {
+            places.insert(
+                id,
+                PlaceInfo {
+                    id,
+                    human_id: human_id.as_str().to_owned(),
+                    name: view.names().first().map(|n| n.text.clone()),
+                },
+            );
+        }
+    }
+    clusters.redirect(&mut places);
+    Ok(places)
 }
 
 /// Sets (or changes) an event's user-facing identifier, identified by its current `human_id`,

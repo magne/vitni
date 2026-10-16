@@ -66,7 +66,8 @@ pub struct DnaMatchSummary {
     /// The Person/Family relationship inferences that cite this match as evidence (data-model §12,
     /// ADR 0023) — the reverse index over the evidence-bearing projections, filtered to the
     /// `DnaMatch` variant. Each row carries a back-link to its citing record, that claim's confidence,
-    /// and how many documentary citations also back it (the source cue).
+    /// and how many documentary citations also back it (the source cue). Filled by `show_dna_match`
+    /// alone; a list summary leaves it empty, as reading it means reading every person and family (#673).
     pub cited_by: Vec<DnaInferenceRef>,
 }
 
@@ -345,7 +346,8 @@ pub async fn show_dna_match(workspace: &Workspace, human_id: &str) -> Result<Opt
     let Some(view) = workspace.store().find_dna_match(human_id).await? else {
         return Ok(None);
     };
-    let lookups = DnaMatchLookups::load(workspace).await?;
+    let mut lookups = DnaMatchLookups::load(workspace.store(), &[&view]).await?;
+    lookups.usage = Some(DnaMatchUsage::load(workspace).await?);
     Ok(Some(summarize(&view, &lookups)))
 }
 
@@ -365,7 +367,7 @@ pub async fn list_dna_matches(workspace: &Workspace) -> Result<Vec<DnaMatchSumma
 /// A store/read-model error.
 pub async fn list_dna_matches_page(workspace: &Workspace, page: ListPage) -> Result<Vec<DnaMatchSummary>, AppError> {
     let views = workspace.store().list_dna_matches_page(page).await?;
-    let lookups = DnaMatchLookups::load(workspace).await?;
+    let lookups = DnaMatchLookups::load(workspace.store(), &views.iter().collect::<Vec<_>>()).await?;
     Ok(views.iter().map(|view| summarize(view, &lookups)).collect())
 }
 
@@ -381,44 +383,52 @@ struct DnaMatchLookups {
     notes: HashMap<NoteId, use_case::NoteLookup>,
     /// `TagId -> TagRef`.
     tags: HashMap<TagId, TagRef>,
-    /// The reverse index of relationship inferences citing each match (data-model §12, ADR 0023).
-    usage: DnaMatchUsage,
+    /// The reverse index of relationship inferences citing each match (data-model §12, ADR 0023): read
+    /// from every person and family, so only a shown match fills it (#673).
+    usage: Option<DnaMatchUsage>,
 }
 
 impl DnaMatchLookups {
-    async fn load(workspace: &Workspace) -> Result<Self, AppError> {
-        let store = workspace.store();
-        let names: HashMap<String, Option<String>> = crate::person::list_persons(workspace)
-            .await?
-            .into_iter()
-            .map(|p| (p.human_id, p.display_name))
-            .collect();
-        let references = crate::identity::PersonReferences::load(store).await?;
-        let mut persons = HashMap::new();
-        for view in store.list_persons().await? {
-            if let Some(id) = view.person_id() {
-                let (_, human_id) = references.resolve(id);
-                let name = names.get(&human_id).cloned().flatten();
-                persons.insert(id.to_string(), (human_id, name));
-            }
+    /// The lookups for summarizing `views`, each read for the records they name and no others. No
+    /// match's citing inferences are read.
+    async fn load(store: &Store, views: &[&DnaMatchView]) -> Result<Self, AppError> {
+        let mut test_ids = BTreeSet::new();
+        let mut persons = BTreeSet::new();
+        let mut notes = BTreeSet::new();
+        let mut tags = BTreeSet::new();
+        for view in views {
+            test_ids.extend(view.test_a().into_iter().chain(view.test_b()).map(|id| id.to_string()));
+            persons.extend(
+                view.shared_ancestors()
+                    .iter()
+                    .filter_map(|ancestor| ancestor.ancestor_person_id),
+            );
+            notes.extend(view.notes());
+            tags.extend(view.tags());
+        }
+        let test_views = store.dna_tests_by_ids(&Vec::from_iter(test_ids)).await?;
+        persons.extend(test_views.iter().filter_map(DnaTestView::person_id));
+        let mut labels = HashMap::new();
+        for (id, label) in crate::person::person_labels(store, &persons).await? {
+            labels.insert(id.to_string(), (label.human_id, label.name));
         }
         let mut tests = HashMap::new();
-        for view in store.list_dna_tests().await? {
+        for view in &test_views {
             if let Some(id) = view.dna_test_id() {
                 let human_id = view.human_id().map(|h| h.as_str().to_owned()).unwrap_or_default();
                 let person_name = view
                     .person_id()
-                    .and_then(|p| persons.get(&p.to_string()))
+                    .and_then(|p| labels.get(&p.to_string()))
                     .and_then(|(_, name)| name.clone());
                 tests.insert(id.to_string(), (human_id, person_name));
             }
         }
         Ok(Self {
             tests,
-            persons,
-            notes: use_case::note_lookups(store).await?,
-            tags: tag_refs(store).await?,
-            usage: DnaMatchUsage::load(workspace).await?,
+            persons: labels,
+            notes: use_case::note_lookups(store, &notes).await?,
+            tags: tag_refs(store, &tags).await?,
+            usage: None,
         })
     }
 
@@ -647,7 +657,8 @@ fn summarize(view: &DnaMatchView, lookups: &DnaMatchLookups) -> DnaMatchSummary 
         .collect();
     let cited_by = view
         .dna_match_id()
-        .map(|id| lookups.usage.inferences(id))
+        .zip(lookups.usage.as_ref())
+        .map(|(id, usage)| usage.inferences(id))
         .unwrap_or_default();
     DnaMatchSummary {
         human_id: view.human_id().map(|h| h.as_str().to_owned()).unwrap_or_default(),

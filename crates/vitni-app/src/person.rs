@@ -1013,17 +1013,19 @@ pub async fn show_person(workspace: &Workspace, human_id: &str) -> Result<Option
     let Some(found) = store.find_person(human_id).await? else {
         return Ok(None);
     };
-    let clusters = PersonClusters::load(store).await?;
-    let lookups = Lookups::load(workspace).await?;
     let Some(id) = found.person_id() else {
+        let lookups = Lookups::shown(store, &[&found]).await?;
         return Ok(Some(summarize(&found, &lookups)));
     };
+    let clusters = PersonClusters::load_of(store, &BTreeSet::from([id])).await?;
     let cluster = clusters.cluster(clusters.root(id));
     if cluster == [id] {
+        let lookups = Lookups::shown(store, &[&found]).await?;
         return Ok(Some(summarize(&found, &lookups)));
     }
     let views = crate::identity::views(store, &cluster).await?;
     let views: Vec<&PersonView> = views.iter().collect();
+    let lookups = Lookups::shown(store, &views).await?;
     Ok(summarize_cluster(&views, &lookups))
 }
 
@@ -1044,9 +1046,8 @@ pub async fn list_persons(workspace: &Workspace) -> Result<Vec<PersonSummary>, A
 /// A store/read-model error.
 pub async fn list_persons_page(workspace: &Workspace, page: ListPage) -> Result<Vec<PersonSummary>, AppError> {
     let store = workspace.store();
-    let clusters = PersonClusters::load(store).await?;
-    let views: Vec<PersonView> = crate::identity::listed_page(store, &clusters, page).await?;
-    let lookups = Lookups::load(workspace).await?;
+    let (clusters, views) = crate::identity::listed_page::<PersonView>(store, page).await?;
+    let lookups = Lookups::load(store, &views.iter().collect::<Vec<_>>()).await?;
     let mut by_id: HashMap<PersonId, &PersonView> = HashMap::with_capacity(views.len());
     for view in &views {
         if let Some(id) = view.person_id() {
@@ -1070,6 +1071,88 @@ pub async fn list_persons_page(workspace: &Workspace, page: ListPage) -> Result<
         summaries.extend(summarize_cluster(&cluster, &lookups));
     }
     Ok(summaries)
+}
+
+/// The summaries of the persons `ids` names, each read as its cluster's — the root's summary with its
+/// members' rows, as [`list_persons`] lists it (ADR 0039 §5) — keyed by root, with the clusters that
+/// map each of `ids` to its root: what another record's summary joins for the persons it names.
+///
+/// # Errors
+///
+/// A store/read-model error.
+pub(crate) async fn summaries_by_root(
+    store: &Store,
+    ids: &BTreeSet<PersonId>,
+) -> Result<(PersonClusters, HashMap<PersonId, PersonSummary>), AppError> {
+    let (clusters, views) = identity::clustered(store, ids).await?;
+    let lookups = Lookups::load(store, &views.iter().collect::<Vec<_>>()).await?;
+    let mut by_id: HashMap<PersonId, &PersonView> = HashMap::with_capacity(views.len());
+    for view in &views {
+        if let Some(id) = view.person_id() {
+            by_id.insert(id, view);
+        }
+    }
+    let roots: BTreeSet<PersonId> = ids.iter().map(|id| clusters.root(*id)).collect();
+    let mut summaries = HashMap::with_capacity(roots.len());
+    for root in roots {
+        let cluster: Vec<&PersonView> = clusters
+            .cluster(root)
+            .iter()
+            .filter_map(|member| by_id.get(member).copied())
+            .collect();
+        if let Some(summary) = summarize_cluster(&cluster, &lookups) {
+            summaries.insert(root, summary);
+        }
+    }
+    Ok((clusters, summaries))
+}
+
+/// A person as another record's summary names it: by its cluster — the root's id and `human_id`, and
+/// the cluster's display name (ADR 0039 §5).
+pub(crate) struct PersonLabel {
+    /// The person's cluster root.
+    pub(crate) root: PersonId,
+    /// The root's `human_id`, or its id when the root has no projection.
+    pub(crate) human_id: String,
+    /// The root's primary name, else the first member's that has one, as the cluster's summary reads.
+    pub(crate) name: Option<String>,
+}
+
+/// The label of each of the persons `ids` names that has a projection, keyed by that id —
+/// [`summaries_by_root`] for a record that names a person only by `human_id` and name.
+///
+/// # Errors
+///
+/// A store/read-model error.
+pub(crate) async fn person_labels(
+    store: &Store,
+    ids: &BTreeSet<PersonId>,
+) -> Result<HashMap<PersonId, PersonLabel>, AppError> {
+    let (clusters, views) = identity::clustered(store, ids).await?;
+    let mut by_id: HashMap<PersonId, &PersonView> = HashMap::with_capacity(views.len());
+    for view in &views {
+        if let Some(id) = view.person_id() {
+            by_id.insert(id, view);
+        }
+    }
+    let mut labels = HashMap::with_capacity(ids.len());
+    for &id in ids {
+        if !by_id.contains_key(&id) {
+            continue;
+        }
+        let root = clusters.root(id);
+        let human_id = by_id
+            .get(&root)
+            .and_then(|view| view.human_id())
+            .map_or_else(|| root.to_string(), |human_id| human_id.as_str().to_owned());
+        let name = clusters
+            .cluster(root)
+            .iter()
+            .filter_map(|member| by_id.get(member))
+            .find_map(|view| primary_name_fields(view.names().first().copied()).display_name);
+        labels.insert(id, PersonLabel { root, human_id, name });
+    }
+    Ok(labels)
 }
 
 /// How many facts the persons assert, and how many of them cite a source: the Dashboard's evidence
@@ -1161,7 +1244,11 @@ pub(crate) struct PersonVitals {
 pub(crate) async fn person_vitals(store: &Store) -> Result<Vec<PersonVitals>, AppError> {
     let views = store.list_persons().await?;
     let clusters = PersonClusters::load(store).await?;
-    let events = event_joins(store, &HashMap::new()).await?;
+    let events = event_joins(
+        &store.list_events().await?,
+        &crate::identity::EventClusters::load(store).await?,
+        &HashMap::new(),
+    );
     let vitals_of = |view: &PersonView| {
         (
             vital_event_date(view, &events, &EventType::Birth),
@@ -1248,7 +1335,8 @@ pub async fn list_person_rows(workspace: &Workspace) -> Result<Vec<PersonRow>, A
 }
 
 /// The `id -> human_id` lookups `summarize` needs to resolve a person's cross-aggregate references
-/// (associations, participations) and attachments (citations, media, notes) without a per-row query.
+/// (associations, participations) and attachments (citations, media, notes) without a per-row query,
+/// each read for the records the summarized persons name and no others.
 ///
 /// `events` resolves each `ParticipationAsserted.event_id` to the event's stable id + `human_id` +
 /// date, so the person's Events tab shows the event a participation references (data-model §6, §10).
@@ -1274,44 +1362,68 @@ struct EventJoin {
     place: Option<String>,
 }
 
-impl Lookups {
-    async fn load(workspace: &Workspace) -> Result<Self, AppError> {
-        let store = workspace.store();
-        let mut citations = crate::dto::citation_refs(store).await?;
-        let backs = crate::citation_usage::citation_backs_counts(store).await?;
-        for (id, citation) in &mut citations {
-            citation.backs_count = backs.get(id).copied().unwrap_or(0);
+/// The records a person's summary names, by kind.
+#[derive(Default)]
+struct Named {
+    persons: BTreeSet<PersonId>,
+    events: BTreeSet<EventId>,
+    citations: BTreeSet<CitationId>,
+    media: BTreeSet<MediaId>,
+    notes: BTreeSet<NoteId>,
+    tags: BTreeSet<TagId>,
+}
+
+impl Named {
+    /// Collects what `view`'s summary resolves.
+    fn add(&mut self, view: &PersonView) {
+        for association in view.associations() {
+            self.persons.insert(association.other);
         }
-        Ok(Self {
-            persons: person_human_ids(store).await?,
-            clusters: PersonClusters::load(store).await?,
-            events: event_lookups(store).await?,
-            citations,
-            media: crate::dto::media_lookups(store).await?,
-            notes: use_case::note_lookups(store).await?,
-            tags: tag_labels(store).await?,
-        })
+        for participation in view.participations() {
+            self.events.insert(participation.event_id);
+            self.notes.extend(participation.notes.iter().copied());
+        }
+        for fact in view.facts() {
+            self.citations
+                .extend(fact.citations.iter().filter_map(|cited| cited.as_citation()));
+        }
+        self.citations.extend(view.citations());
+        self.media.extend(view.media().iter().map(|media| media.media_id));
+        self.notes.extend(view.notes());
+        self.tags.extend(view.tags().iter().copied());
     }
 }
 
-/// Builds a `TagId -> TagRef` lookup from the Tag projection, so a person's applied tags render by
-/// name/colour/priority (never by id — data-model §9).
-async fn tag_labels(store: &Store) -> Result<HashMap<TagId, crate::citation::TagRef>, AppError> {
-    let mut map = HashMap::new();
-    for view in store.list_tags().await? {
-        if let (Some(id), Some(name)) = (view.tag_id(), view.name()) {
-            map.insert(
-                id,
-                crate::citation::TagRef {
-                    id: id.to_string(),
-                    name: name.to_owned(),
-                    color: view.color().map(ToOwned::to_owned),
-                    priority: view.priority(),
-                },
-            );
+impl Lookups {
+    /// The lookups for summarizing `views`. Each citation's Backs count is left at 0; only
+    /// [`Self::shown`] fills it (#673).
+    async fn load(store: &Store, views: &[&PersonView]) -> Result<Self, AppError> {
+        let mut named = Named::default();
+        for view in views {
+            named.add(view);
         }
+        let (clusters, associated) = identity::referenced(store, &named.persons).await?;
+        Ok(Self {
+            persons: person_id_map(&associated),
+            clusters,
+            events: event_lookups(store, &named.events).await?,
+            citations: crate::dto::citation_refs(store, &named.citations).await?,
+            media: crate::dto::media_lookups(store, &named.media).await?,
+            notes: use_case::note_lookups(store, &named.notes).await?,
+            tags: crate::dto::tag_refs(store, &named.tags).await?,
+        })
     }
-    Ok(map)
+
+    /// [`Self::load`] with each citation's Backs count filled — what a shown person's Citations tab
+    /// renders, read from every citing record.
+    async fn shown(store: &Store, views: &[&PersonView]) -> Result<Self, AppError> {
+        let mut lookups = Self::load(store, views).await?;
+        let backs = crate::citation_usage::citation_backs_counts(store).await?;
+        for (id, citation) in &mut lookups.citations {
+            citation.backs_count = backs.get(id).copied().unwrap_or(0);
+        }
+        Ok(lookups)
+    }
 }
 
 /// Builds a `PersonId -> human_id` lookup from already-loaded person views, to resolve association
@@ -1326,34 +1438,34 @@ fn person_id_map(views: &[PersonView]) -> HashMap<PersonId, String> {
     map
 }
 
-/// Loads the `PersonId -> human_id` lookup from the Person projection (for resolving associations).
-async fn person_human_ids(store: &Store) -> Result<HashMap<PersonId, String>, AppError> {
-    Ok(person_id_map(&store.list_persons().await?))
-}
-
-/// Loads the `EventId -> (human_id, date)` lookup from the Event projection so a person's
+/// Loads the `EventId -> (human_id, date)` lookup of the events `ids` names, so a person's
 /// participations resolve to the event's stable id + `human_id` + date (without a per-row query).
-async fn event_lookups(store: &Store) -> Result<HashMap<EventId, EventJoin>, AppError> {
+async fn event_lookups(store: &Store, ids: &BTreeSet<EventId>) -> Result<HashMap<EventId, EventJoin>, AppError> {
+    let (clusters, views) = identity::clustered(store, ids).await?;
+    let place_ids: BTreeSet<PlaceId> = views
+        .iter()
+        .filter_map(|view| view.asserted_place().map(|asserted| asserted.value))
+        .collect();
+    let (place_clusters, places) = identity::referenced(store, &place_ids).await?;
     let mut place_names: HashMap<PlaceId, String> = HashMap::new();
-    for view in store.list_places().await? {
+    for view in &places {
         if let (Some(id), Some(name)) = (view.place_id(), view.names().first().map(|n| n.text.clone())) {
             place_names.insert(id, name);
         }
     }
-    crate::identity::PlaceClusters::load(store)
-        .await?
-        .redirect(&mut place_names);
-    event_joins(store, &place_names).await
+    place_clusters.redirect(&mut place_names);
+    Ok(event_joins(&views, &clusters, &place_names))
 }
 
-/// The `EventId -> EventJoin` lookup from the Event projection, each event's place named from
-/// `place_names` (left unnamed when it is not there), a merged event reading as its cluster's root.
-async fn event_joins(
-    store: &Store,
+/// The `EventId -> EventJoin` lookup of `views`, each event's place named from `place_names` (left
+/// unnamed when it is not there), a merged event reading as its cluster's root.
+fn event_joins(
+    views: &[EventView],
+    clusters: &crate::identity::EventClusters,
     place_names: &HashMap<PlaceId, String>,
-) -> Result<HashMap<EventId, EventJoin>, AppError> {
+) -> HashMap<EventId, EventJoin> {
     let mut own = HashMap::new();
-    for view in store.list_events().await? {
+    for view in views {
         let (Some(id), Some(human_id)) = (view.event_id(), view.human_id()) else {
             continue;
         };
@@ -1373,7 +1485,6 @@ async fn event_joins(
     }
     // A merged event reads as its cluster's root: the root's id and `human_id`, and what the root
     // lacks filled from its members (ADR 0039 §5).
-    let clusters = crate::identity::EventClusters::load(store).await?;
     let mut events = HashMap::with_capacity(own.len());
     for &id in own.keys() {
         let root = clusters.root(id);
@@ -1387,7 +1498,7 @@ async fn event_joins(
         }
         events.insert(id, join);
     }
-    Ok(events)
+    events
 }
 
 /// The date of the first Birth/Death (etc.) event this person is a `Primary` participant in — the

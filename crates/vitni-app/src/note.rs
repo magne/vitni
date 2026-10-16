@@ -38,7 +38,8 @@ pub struct NoteSummary {
     pub language: Option<String>,
     /// Translations of the primary content into other languages (the Language tab).
     pub translations: Vec<TranslationRef>,
-    /// The records that reference this note (the References tab).
+    /// The records that reference this note (the References tab). Filled by `show_note` alone; a list
+    /// summary leaves it empty, as reading it means reading every record (#673).
     pub references: Vec<UsingRecordRef>,
     /// The applied tags (the Tags tab), by name/colour/priority.
     pub tags: Vec<TagRef>,
@@ -429,9 +430,12 @@ pub async fn show_note(workspace: &Workspace, human_id: &str) -> Result<Option<N
     let Some(note_id) = store.find_note(human_id).await?.and_then(|view| view.note_id()) else {
         return Ok(None);
     };
-    let views = identity::cluster_records(store, note_id).await?;
-    let lookups = NoteLookups::load(workspace).await?;
-    Ok(summarize_cluster(&views.iter().collect::<Vec<_>>(), &lookups))
+    let clusters = NoteClusters::load_of(store, &BTreeSet::from([note_id])).await?;
+    let views = identity::views(store, &clusters.cluster(clusters.root(note_id))).await?;
+    let views: Vec<&NoteView> = views.iter().collect();
+    let mut lookups = NoteLookups::load(store, &views).await?;
+    lookups.usage = Some(NoteUsage::load(workspace).await?);
+    Ok(summarize_cluster(&views, &lookups))
 }
 
 /// Lists every note's summary, ordered by `human_id`. A merged record is listed once, as its cluster's
@@ -451,9 +455,8 @@ pub async fn list_notes(workspace: &Workspace) -> Result<Vec<NoteSummary>, AppEr
 /// A store/read-model error.
 pub async fn list_notes_page(workspace: &Workspace, page: ListPage) -> Result<Vec<NoteSummary>, AppError> {
     let store = workspace.store();
-    let clusters = NoteClusters::load(store).await?;
-    let views: Vec<NoteView> = identity::listed_page(store, &clusters, page).await?;
-    let lookups = NoteLookups::load(workspace).await?;
+    let (clusters, views) = identity::listed_page::<NoteView>(store, page).await?;
+    let lookups = NoteLookups::load(store, &views.iter().collect::<Vec<_>>()).await?;
     let mut summaries = Vec::with_capacity(views.len());
     for cluster in identity::group_clusters(&views, &clusters) {
         summaries.extend(summarize_cluster(&cluster, &lookups));
@@ -465,14 +468,20 @@ pub async fn list_notes_page(workspace: &Workspace, page: ListPage) -> Result<Ve
 /// without a per-row query (the cross-aggregate join lives here — the app/db layer).
 struct NoteLookups {
     tags: HashMap<TagId, TagRef>,
-    usage: NoteUsage,
+    /// The records using each note: read from every record, so only a shown note fills it (#673).
+    usage: Option<NoteUsage>,
 }
 
 impl NoteLookups {
-    async fn load(workspace: &Workspace) -> Result<Self, AppError> {
+    /// The lookups for summarizing `views`: their tags, and no note's users.
+    async fn load(store: &Store, views: &[&NoteView]) -> Result<Self, AppError> {
+        let mut tags = BTreeSet::new();
+        for view in views {
+            tags.extend(view.tags());
+        }
         Ok(Self {
-            tags: tag_refs(workspace.store()).await?,
-            usage: NoteUsage::load(workspace).await?,
+            tags: tag_refs(store, &tags).await?,
+            usage: None,
         })
     }
 }
@@ -664,7 +673,11 @@ fn summarize(view: &NoteView, lookups: &NoteLookups) -> NoteSummary {
         .into_iter()
         .filter_map(|id| lookups.tags.get(&id).cloned())
         .collect();
-    let references = view.note_id().map(|id| lookups.usage.used_by(id)).unwrap_or_default();
+    let references = view
+        .note_id()
+        .zip(lookups.usage.as_ref())
+        .map(|(id, usage)| usage.used_by(id))
+        .unwrap_or_default();
     NoteSummary {
         human_id: view.human_id().map(|h| h.as_str().to_owned()).unwrap_or_default(),
         id: view.note_id().map(|id| id.to_string()).unwrap_or_default(),

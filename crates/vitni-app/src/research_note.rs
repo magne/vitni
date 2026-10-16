@@ -47,14 +47,37 @@ struct SubjectIndex {
     events: crate::identity::EventReferences,
 }
 
-/// Loads the [`SubjectIndex`] for the four conclusion-bearing aggregates.
-async fn subject_index(store: &Store) -> Result<SubjectIndex, AppError> {
+/// Loads the [`SubjectIndex`] for the subjects `views` name, and no others.
+async fn subject_index(store: &Store, views: &[ResearchNoteView]) -> Result<SubjectIndex, AppError> {
+    let (mut places, mut persons, mut families, mut events) =
+        (BTreeSet::new(), BTreeSet::new(), BTreeSet::new(), BTreeSet::new());
+    for view in views {
+        for subject in view.subjects() {
+            match *subject {
+                SubjectRef::Person(id) => persons.insert(id),
+                SubjectRef::Family(id) => families.insert(id),
+                SubjectRef::Event(id) => events.insert(id),
+                SubjectRef::Place(id) => places.insert(id),
+            };
+        }
+    }
     Ok(SubjectIndex {
-        places: crate::identity::PlaceReferences::load(store).await?,
-        persons: crate::identity::PersonReferences::load(store).await?,
-        families: crate::identity::FamilyReferences::load(store).await?,
-        events: crate::identity::EventReferences::load(store).await?,
+        places: crate::identity::PlaceReferences::load_of(store, &places).await?,
+        persons: crate::identity::PersonReferences::load_of(store, &persons).await?,
+        families: crate::identity::FamilyReferences::load_of(store, &families).await?,
+        events: crate::identity::EventReferences::load_of(store, &events).await?,
     })
+}
+
+/// The summaries of `views`, each joined to the tags and subjects it names.
+async fn summaries(store: &Store, views: &[ResearchNoteView]) -> Result<Vec<ResearchNoteSummary>, AppError> {
+    let mut tag_ids = BTreeSet::new();
+    for view in views {
+        tag_ids.extend(view.tags());
+    }
+    let tags = tag_refs(store, &tag_ids).await?;
+    let subjects = subject_index(store, views).await?;
+    Ok(views.iter().map(|view| summarize(view, &tags, &subjects)).collect())
 }
 
 /// Resolves one stored [`SubjectRef`] against `index` into the display/navigation DTO.
@@ -407,9 +430,7 @@ pub async fn show_research_note(
     let Some(view) = workspace.store().find_research_note(human_id).await? else {
         return Ok(None);
     };
-    let tags = tag_refs(workspace.store()).await?;
-    let subjects = subject_index(workspace.store()).await?;
-    Ok(Some(summarize(&view, &tags, &subjects)))
+    Ok(summaries(workspace.store(), &[view]).await?.pop())
 }
 
 /// Lists every research note's summary, ordered by `human_id`.
@@ -431,9 +452,7 @@ pub async fn list_research_notes_page(
     page: ListPage,
 ) -> Result<Vec<ResearchNoteSummary>, AppError> {
     let views = workspace.store().list_research_notes_page(page).await?;
-    let tags = tag_refs(workspace.store()).await?;
-    let subjects = subject_index(workspace.store()).await?;
-    Ok(views.iter().map(|view| summarize(view, &tags, &subjects)).collect())
+    summaries(workspace.store(), &views).await
 }
 
 /// Lists every research note arguing about `subject` — "which arguments exist about this
@@ -448,9 +467,7 @@ pub async fn list_research_notes_for_subject(
     subject: SubjectRef,
 ) -> Result<Vec<ResearchNoteSummary>, AppError> {
     let views = workspace.store().list_research_notes_for_subject(subject).await?;
-    let tags = tag_refs(workspace.store()).await?;
-    let subjects = subject_index(workspace.store()).await?;
-    Ok(views.iter().map(|view| summarize(view, &tags, &subjects)).collect())
+    summaries(workspace.store(), &views).await
 }
 
 /// Lists every research note arguing about the record `subject` names by its `human_id` — the

@@ -5,7 +5,7 @@
 //! cross-aggregate-joins dependency note; ADR 0004 §2). These types are shared by more than one
 //! aggregate's summary (family/event/place), so they live here rather than in any one module.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 use vitni_core::date::GenealogicalDate;
 use vitni_core::enums::{AssociationRole, FactType, NoteType, ParticipantRole, SourceMediaType};
@@ -17,7 +17,7 @@ use vitni_db::Store;
 use crate::citation::TagRef;
 use crate::error::AppError;
 use crate::history::{OperatorKind, operator_kind};
-use crate::identity::{CitationClusters, MediaClusters, RepositoryClusters, SourceClusters};
+use crate::identity;
 
 /// A reference to a related aggregate, carrying both its user-facing `human_id` (the display label)
 /// and its stable aggregate `id` (a UUID string) so a frontend can join/navigate by the stable id.
@@ -98,7 +98,8 @@ pub struct CitationRef {
     pub page: Option<String>,
     /// How many records this citation backs (the reverse-index count — the Citations tab's "Backs"
     /// column). `0` unless the owning lookup filled it from [`CitationUsage`](crate::citation_usage);
-    /// only the tabs that render Backs (Person, Family) pay to compute it.
+    /// only the tabs that render Backs pay to compute it — `show_person` and `show_family`, never a
+    /// list, which reads only the records its page names (#673).
     pub backs_count: usize,
     /// The operator's confidence in this citation. Structured so the frontend localizes it.
     pub confidence: Option<Confidence>,
@@ -271,7 +272,8 @@ pub struct UsingRecordRef {
 pub struct SourceCitationRef {
     /// The citation (page · surety · evidence axes · stable id).
     pub citation: CitationRef,
-    /// The records that use this citation (the reverse index).
+    /// The records that use this citation (the reverse index). Filled by `show_source` alone; a list
+    /// summary leaves it empty, as reading it means reading every citing record (#673).
     pub backers: Vec<CitingRecordRef>,
 }
 
@@ -286,18 +288,21 @@ pub struct SourceReliability {
     pub evidence: Option<EvidenceAnalysis>,
     /// How many citations cite this source.
     pub citation_count: usize,
-    /// How many distinct records use those citations.
+    /// How many distinct records use those citations — counted from the citations' backers, so `0` in a
+    /// list summary (#673).
     pub record_count: usize,
 }
 
-/// Builds a `RepositoryId -> (id, human_id, name)` lookup from the Repository projection, so a source's
+/// Builds a `RepositoryId -> (id, human_id, name)` lookup of the repositories `ids` names, so a source's
 /// repository links resolve to a name + stable id without a per-link query. A merged repository resolves
 /// to its cluster's root (ADR 0039 §5).
 pub(crate) async fn repository_refs(
     store: &Store,
+    ids: &BTreeSet<RepositoryId>,
 ) -> Result<HashMap<RepositoryId, (RepositoryId, String, Option<String>)>, AppError> {
+    let (clusters, views) = identity::referenced(store, ids).await?;
     let mut map = HashMap::new();
-    for view in store.list_repositories().await? {
+    for view in views {
         if let (Some(id), Some(human_id)) = (view.repository_id(), view.human_id()) {
             map.insert(
                 id,
@@ -305,19 +310,25 @@ pub(crate) async fn repository_refs(
             );
         }
     }
-    RepositoryClusters::load(store).await?.redirect(&mut map);
+    clusters.redirect(&mut map);
     Ok(map)
 }
 
-/// Builds a `CitationId -> CitationRef` lookup from the Citation projection, joined to the Source
-/// projection for the source label, so an owner's attached citations resolve to a full row without a
-/// per-citation query (the cross-aggregate join lives here — the app/db layer). A merged citation
-/// resolves to its cluster's root, and a citation of a merged source names the source's root (ADR 0039
-/// §5).
-pub(crate) async fn citation_refs(store: &Store) -> Result<HashMap<CitationId, CitationRef>, AppError> {
-    let mut sources: HashMap<_, (SourceId, String, Option<String>)> = store
-        .list_sources()
-        .await?
+/// Builds a `CitationId -> CitationRef` lookup of the citations `ids` names, joined to their sources
+/// for the source label, so an owner's attached citations resolve to a full row without a per-citation
+/// query (the cross-aggregate join lives here — the app/db layer). A merged citation resolves to its
+/// cluster's root, and a citation of a merged source names the source's root (ADR 0039 §5).
+pub(crate) async fn citation_refs(
+    store: &Store,
+    ids: &BTreeSet<CitationId>,
+) -> Result<HashMap<CitationId, CitationRef>, AppError> {
+    let (clusters, views) = identity::referenced(store, ids).await?;
+    let source_ids: BTreeSet<SourceId> = views
+        .iter()
+        .filter_map(vitni_core::citation::CitationView::source_id)
+        .collect();
+    let (source_clusters, source_views) = identity::referenced(store, &source_ids).await?;
+    let mut sources: HashMap<_, (SourceId, String, Option<String>)> = source_views
         .iter()
         .filter_map(|s| {
             let id = s.source_id()?;
@@ -327,10 +338,10 @@ pub(crate) async fn citation_refs(store: &Store) -> Result<HashMap<CitationId, C
             ))
         })
         .collect();
-    SourceClusters::load(store).await?.redirect(&mut sources);
+    source_clusters.redirect(&mut sources);
 
     let mut map = HashMap::new();
-    for view in store.list_citations().await? {
+    for view in views {
         let (Some(id), Some(human_id)) = (view.citation_id(), view.human_id()) else {
             continue;
         };
@@ -363,7 +374,7 @@ pub(crate) async fn citation_refs(store: &Store) -> Result<HashMap<CitationId, C
             },
         );
     }
-    CitationClusters::load(store).await?.redirect(&mut map);
+    clusters.redirect(&mut map);
     Ok(map)
 }
 
@@ -408,12 +419,16 @@ pub(crate) struct MediaLookup {
     pub mime: Option<String>,
 }
 
-/// Loads a `MediaId -> MediaLookup` lookup from the Media projection, joining each attached media
-/// object's `human_id`, path, and MIME so an owner's `MediaRefSummary` rows resolve without a
-/// per-row query. A merged media object resolves to its cluster's root (ADR 0039 §5).
-pub(crate) async fn media_lookups(store: &Store) -> Result<HashMap<MediaId, MediaLookup>, AppError> {
+/// Loads a `MediaId -> MediaLookup` lookup of the media objects `ids` names, joining each one's
+/// `human_id`, path, and MIME so an owner's `MediaRefSummary` rows resolve without a per-row query. A
+/// merged media object resolves to its cluster's root (ADR 0039 §5).
+pub(crate) async fn media_lookups(
+    store: &Store,
+    ids: &BTreeSet<MediaId>,
+) -> Result<HashMap<MediaId, MediaLookup>, AppError> {
+    let (clusters, views) = identity::referenced(store, ids).await?;
     let mut map = HashMap::new();
-    for view in store.list_media().await? {
+    for view in views {
         if let (Some(id), Some(human_id)) = (view.media_id(), view.human_id()) {
             map.insert(
                 id,
@@ -426,7 +441,7 @@ pub(crate) async fn media_lookups(store: &Store) -> Result<HashMap<MediaId, Medi
             );
         }
     }
-    MediaClusters::load(store).await?.redirect(&mut map);
+    clusters.redirect(&mut map);
     Ok(map)
 }
 
@@ -439,11 +454,15 @@ fn media_path_string(path: &vitni_core::media_path::MediaPath) -> String {
     }
 }
 
-/// Builds a `TagId -> TagRef` lookup from the Tag projection, to render applied tags by name/colour/
+/// Builds a `TagId -> TagRef` lookup of the tags `ids` names, to render applied tags by name/colour/
 /// priority (never by id — data-model §9).
-pub(crate) async fn tag_refs(store: &Store) -> Result<HashMap<TagId, TagRef>, AppError> {
+pub(crate) async fn tag_refs(store: &Store, ids: &BTreeSet<TagId>) -> Result<HashMap<TagId, TagRef>, AppError> {
     let mut map = HashMap::new();
-    for view in store.list_tags().await? {
+    if ids.is_empty() {
+        return Ok(map);
+    }
+    let ids: Vec<String> = ids.iter().map(ToString::to_string).collect();
+    for view in store.tags_by_ids(&ids).await? {
         if let (Some(id), Some(name)) = (view.tag_id(), view.name()) {
             map.insert(
                 id,

@@ -4,7 +4,7 @@
 //! [`AppError`] and resolve a `human_id` to an aggregate id the same way; those two steps live here
 //! so each use-case stays a thin, aggregate-specific wrapper.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 use uuid::Uuid;
 use vitni_core::assertions::Attributed;
@@ -112,11 +112,15 @@ pub(crate) struct NoteLookup {
     pub(crate) language: Option<String>,
 }
 
-/// Loads a `NoteId` → [`NoteLookup`] map from the Note projection. A merged note resolves to its
+/// Loads a `NoteId` → [`NoteLookup`] map of the notes `ids` names. A merged note resolves to its
 /// cluster's root (ADR 0039 §5).
-pub(crate) async fn note_lookups(store: &Store) -> Result<HashMap<NoteId, NoteLookup>, AppError> {
+pub(crate) async fn note_lookups(
+    store: &Store,
+    ids: &BTreeSet<NoteId>,
+) -> Result<HashMap<NoteId, NoteLookup>, AppError> {
+    let (clusters, views) = crate::identity::referenced(store, ids).await?;
     let mut map = HashMap::new();
-    for view in store.list_notes().await? {
+    for view in views {
         if let (Some(id), Some(human_id)) = (view.note_id(), view.human_id()) {
             let text = view.text();
             map.insert(
@@ -131,7 +135,7 @@ pub(crate) async fn note_lookups(store: &Store) -> Result<HashMap<NoteId, NoteLo
             );
         }
     }
-    crate::identity::NoteClusters::load(store).await?.redirect(&mut map);
+    clusters.redirect(&mut map);
     Ok(map)
 }
 

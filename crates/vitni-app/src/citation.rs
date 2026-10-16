@@ -672,9 +672,11 @@ pub async fn show_citation(workspace: &Workspace, human_id: &str) -> Result<Opti
     let Some(citation_id) = store.find_citation(human_id).await?.and_then(|view| view.citation_id()) else {
         return Ok(None);
     };
-    let views = identity::cluster_records(store, citation_id).await?;
-    let lookups = Lookups::load(store).await?;
-    Ok(summarize_cluster(&views.iter().collect::<Vec<_>>(), &lookups))
+    let clusters = CitationClusters::load_of(store, &BTreeSet::from([citation_id])).await?;
+    let views = identity::views(store, &clusters.cluster(clusters.root(citation_id))).await?;
+    let views: Vec<&CitationView> = views.iter().collect();
+    let lookups = Lookups::load(store, &views).await?;
+    Ok(summarize_cluster(&views, &lookups))
 }
 
 /// Lists every citation's summary, ordered by `human_id`. A merged record is listed once, as its cluster's
@@ -694,9 +696,8 @@ pub async fn list_citations(workspace: &Workspace) -> Result<Vec<CitationSummary
 /// A store/read-model error.
 pub async fn list_citations_page(workspace: &Workspace, page: ListPage) -> Result<Vec<CitationSummary>, AppError> {
     let store = workspace.store();
-    let clusters = CitationClusters::load(store).await?;
-    let views: Vec<CitationView> = identity::listed_page(store, &clusters, page).await?;
-    let lookups = Lookups::load(store).await?;
+    let (clusters, views) = identity::listed_page::<CitationView>(store, page).await?;
+    let lookups = Lookups::load(store, &views.iter().collect::<Vec<_>>()).await?;
     let mut summaries = Vec::with_capacity(views.len());
     for cluster in identity::group_clusters(&views, &clusters) {
         summaries.extend(summarize_cluster(&cluster, &lookups));
@@ -892,46 +893,41 @@ struct Lookups {
 }
 
 impl Lookups {
-    async fn load(store: &Store) -> Result<Self, AppError> {
+    /// The lookups for summarizing `views`, each read for the records they name and no others.
+    async fn load(store: &Store, views: &[&CitationView]) -> Result<Self, AppError> {
+        let mut sources = BTreeSet::new();
+        let mut media = BTreeSet::new();
+        let mut notes = BTreeSet::new();
+        let mut tags = BTreeSet::new();
+        for view in views {
+            sources.extend(view.source_id());
+            media.extend(view.media().iter().map(|media| media.media_id));
+            notes.extend(view.notes());
+            tags.extend(view.tags());
+        }
         Ok(Self {
-            sources: source_human_ids(store).await?,
-            media: crate::dto::media_lookups(store).await?,
-            notes: use_case::note_lookups(store).await?,
-            tags: tag_labels(store).await?,
+            sources: source_human_ids(store, &sources).await?,
+            media: crate::dto::media_lookups(store, &media).await?,
+            notes: use_case::note_lookups(store, &notes).await?,
+            tags: crate::dto::tag_refs(store, &tags).await?,
         })
     }
 }
 
-/// Builds a `TagId -> TagRef` lookup from the Tag projection, to render applied tags by name/colour/
-/// priority (never by id).
-async fn tag_labels(store: &Store) -> Result<HashMap<TagId, TagRef>, AppError> {
-    let mut map = HashMap::new();
-    for view in store.list_tags().await? {
-        if let (Some(id), Some(name)) = (view.tag_id(), view.name()) {
-            map.insert(
-                id,
-                TagRef {
-                    id: id.to_string(),
-                    name: name.to_owned(),
-                    color: view.color().map(ToOwned::to_owned),
-                    priority: view.priority(),
-                },
-            );
-        }
-    }
-    Ok(map)
-}
-
-/// Builds a `SourceId -> (id, human_id)` lookup from the Source projection, to render the cited source.
+/// Builds a `SourceId -> (id, human_id)` lookup of the sources `ids` names, to render the cited source.
 /// A merged source resolves to its cluster's root (ADR 0039 §5).
-async fn source_human_ids(store: &Store) -> Result<HashMap<SourceId, (SourceId, String)>, AppError> {
+async fn source_human_ids(
+    store: &Store,
+    ids: &BTreeSet<SourceId>,
+) -> Result<HashMap<SourceId, (SourceId, String)>, AppError> {
+    let (clusters, views) = identity::referenced(store, ids).await?;
     let mut map = HashMap::new();
-    for view in store.list_sources().await? {
+    for view in &views {
         if let (Some(id), Some(human_id)) = (view.source_id(), view.human_id()) {
             map.insert(id, (id, human_id.as_str().to_owned()));
         }
     }
-    crate::identity::SourceClusters::load(store).await?.redirect(&mut map);
+    clusters.redirect(&mut map);
     Ok(map)
 }
 
