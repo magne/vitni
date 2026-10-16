@@ -929,7 +929,6 @@ using-kind-place = Sted
 using-kind-source = Kilde
 using-kind-citation = Sitering
 using-kind-repository = Oppbevaringssted
-reference-count = { $count } referanser
 field-file-path = Filsti
 field-mime = MIME
 field-checksum = Kontrollsum
