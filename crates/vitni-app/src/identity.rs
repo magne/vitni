@@ -962,12 +962,7 @@ pub(crate) async fn referenced<I: ClusterId>(
         read.insert(clusters.root(id).to_string());
     }
     let read: Vec<String> = read.into_iter().collect();
-    let views = if read.is_empty() {
-        Vec::new()
-    } else {
-        I::View::by_ids(store, &read).await?
-    };
-    Ok((clusters, views))
+    Ok((clusters, I::View::by_ids(store, &read).await?))
 }
 
 /// Every record of each cluster holding one of `ids`, with those clusters: what a lookup reads to fold a
@@ -986,12 +981,7 @@ pub(crate) async fn clustered<I: ClusterId>(
         read.extend(clusters.cluster(clusters.root(id)).iter().map(ToString::to_string));
     }
     let read: Vec<String> = read.into_iter().collect();
-    let views = if read.is_empty() {
-        Vec::new()
-    } else {
-        I::View::by_ids(store, &read).await?
-    };
-    Ok((clusters, views))
+    Ok((clusters, I::View::by_ids(store, &read).await?))
 }
 
 /// Every record of `id`'s cluster, its root first.
@@ -1000,7 +990,7 @@ pub(crate) async fn clustered<I: ClusterId>(
 ///
 /// A store error.
 pub(crate) async fn cluster_records<I: ClusterId>(store: &Store, id: I) -> Result<Vec<I::View>, AppError> {
-    let clusters = Clusters::<I>::load(store).await?;
+    let clusters = Clusters::<I>::load_of(store, &BTreeSet::from([id])).await?;
     views(store, &clusters.cluster(clusters.root(id))).await
 }
 

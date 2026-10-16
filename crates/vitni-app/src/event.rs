@@ -738,8 +738,7 @@ pub async fn show_event(workspace: &Workspace, human_id: &str) -> Result<Option<
     let Some(event_id) = found.event_id() else {
         return Ok(None);
     };
-    let clusters = EventClusters::load_of(store, &BTreeSet::from([event_id])).await?;
-    let views = identity::views(store, &clusters.cluster(clusters.root(event_id))).await?;
+    let views = identity::cluster_records(store, event_id).await?;
     let views: Vec<&EventView> = views.iter().collect();
     let lookups = EventLookups::load(store, &views).await?;
     Ok(summarize_cluster(&views, &lookups))

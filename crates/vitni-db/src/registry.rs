@@ -80,7 +80,8 @@ macro_rules! for_each_db_external_id_aggregate {
 pub(crate) use for_each_db_external_id_aggregate;
 
 /// Invokes `$callback!` with one row per aggregate read by id: the matchable kinds the matching
-/// profiles read (ADR 0038 §2), and the records a page of list summaries names. Columns, in order: `(snake, by_ids_fn, table_const, View)`.
+/// profiles read (ADR 0038 §2), and the records a page of list summaries names. Columns, in order:
+/// `(snake, by_ids_fn, table_const, View)`.
 macro_rules! for_each_db_by_ids_aggregate {
     ($callback:ident) => {
         $callback! {

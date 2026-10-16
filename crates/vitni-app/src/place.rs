@@ -907,8 +907,7 @@ async fn show_place_resolved(
     let Some(place_id) = store.find_place(human_id).await?.and_then(|view| view.place_id()) else {
         return Ok(None);
     };
-    let clusters = PlaceClusters::load_of(store, &BTreeSet::from([place_id])).await?;
-    let views = identity::views(store, &clusters.cluster(clusters.root(place_id))).await?;
+    let views = identity::cluster_records(store, place_id).await?;
     let mut successions = Vec::with_capacity(views.len());
     let mut succession_places = BTreeSet::new();
     for view in &views {
@@ -1132,19 +1131,24 @@ async fn enclosing_places(
     store: &Store,
     mut places: BTreeSet<PlaceId>,
 ) -> Result<(PlaceClusters, Vec<PlaceView>), AppError> {
+    let mut read = HashMap::new();
     let mut frontier = places.clone();
     while !frontier.is_empty() {
         let (_, views) = identity::referenced(store, &frontier).await?;
         frontier = BTreeSet::new();
-        for view in &views {
-            for id in view.place_id().into_iter().chain(enclosing_ids(view)) {
-                if places.insert(id) {
-                    frontier.insert(id);
+        for view in views {
+            let Some(id) = view.place_id() else { continue };
+            places.insert(id);
+            for enclosing in enclosing_ids(&view) {
+                if places.insert(enclosing) {
+                    frontier.insert(enclosing);
                 }
             }
+            read.insert(id, view);
         }
     }
-    identity::referenced(store, &places).await
+    let clusters = PlaceClusters::load_of(store, &places).await?;
+    Ok((clusters, read.into_values().collect()))
 }
 
 /// Sets a place's privacy restrictions (GEDCOM `RESN` — data-model §6). A merged member restricted

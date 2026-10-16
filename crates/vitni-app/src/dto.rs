@@ -458,9 +458,6 @@ fn media_path_string(path: &vitni_core::media_path::MediaPath) -> String {
 /// priority (never by id — data-model §9).
 pub(crate) async fn tag_refs(store: &Store, ids: &BTreeSet<TagId>) -> Result<HashMap<TagId, TagRef>, AppError> {
     let mut map = HashMap::new();
-    if ids.is_empty() {
-        return Ok(map);
-    }
     let ids: Vec<String> = ids.iter().map(ToString::to_string).collect();
     for view in store.tags_by_ids(&ids).await? {
         if let (Some(id), Some(name)) = (view.tag_id(), view.name()) {

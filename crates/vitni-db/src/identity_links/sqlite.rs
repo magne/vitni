@@ -295,7 +295,8 @@ pub(crate) async fn links_of(
     let rows = sqlx::query(&format!(
         "SELECT member, root FROM {IDENTITY_LINKS_TABLE} WHERE kind = ?1 AND root IN ( \
          SELECT value FROM json_each(?2) \
-         UNION SELECT root FROM {IDENTITY_LINKS_TABLE} WHERE kind = ?1 AND member IN (SELECT value FROM json_each(?2))) \
+         UNION SELECT root FROM {IDENTITY_LINKS_TABLE} \
+         WHERE kind = ?1 AND member IN (SELECT value FROM json_each(?2))) \
          ORDER BY member"
     ))
     .bind(kind.as_str())

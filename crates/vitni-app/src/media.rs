@@ -28,7 +28,7 @@ use crate::citation::TagRef;
 use crate::dto::{AggRef, AttachedRef, CitationRef, UsingRecordRef, citation_refs, tag_refs};
 use crate::error::AppError;
 use crate::event::{DateParts, gregorian_date};
-use crate::identity::{self, IdentityDecision, MediaClusters, PairDecision};
+use crate::identity::{self, IdentityDecision, PairDecision};
 use crate::media_usage::MediaUsage;
 use crate::session::Session;
 use crate::use_case::{self, MutationMeta, Provenance, resolve_media_id, resolve_note_id};
@@ -552,8 +552,7 @@ pub async fn show_media(workspace: &Workspace, human_id: &str) -> Result<Option<
     let Some(media_id) = store.find_media(human_id).await?.and_then(|view| view.media_id()) else {
         return Ok(None);
     };
-    let clusters = MediaClusters::load_of(store, &BTreeSet::from([media_id])).await?;
-    let views = identity::views(store, &clusters.cluster(clusters.root(media_id))).await?;
+    let views = identity::cluster_records(store, media_id).await?;
     let views: Vec<&MediaView> = views.iter().collect();
     let mut lookups = MediaLookups::load(store, &views).await?;
     lookups.usage = Some(MediaUsage::load(workspace).await?);

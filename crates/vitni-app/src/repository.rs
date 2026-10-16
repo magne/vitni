@@ -474,8 +474,7 @@ pub async fn show_repository(workspace: &Workspace, human_id: &str) -> Result<Op
     else {
         return Ok(None);
     };
-    let clusters = RepositoryClusters::load_of(store, &BTreeSet::from([repository_id])).await?;
-    let views = identity::views(store, &clusters.cluster(clusters.root(repository_id))).await?;
+    let views = identity::cluster_records(store, repository_id).await?;
     let views: Vec<&RepositoryView> = views.iter().collect();
     let lookups = RepositoryLookups::load(store, &views).await?;
     Ok(summarize_cluster(&views, &lookups))
@@ -787,10 +786,17 @@ async fn citation_counts(
     let citing = store.linking(RecordLink::CitationSource, &targets).await?;
     let mut parsed = Vec::with_capacity(citing.len());
     for (citation, source) in &citing {
-        let (Ok(citation), Ok(source)) = (Uuid::parse_str(citation), Uuid::parse_str(source)) else {
-            continue;
+        let parse = |raw: &str| {
+            Uuid::parse_str(raw).map_err(|e| {
+                AppError::Db(vitni_db::DbError::Malformed(format!(
+                    "record id {raw:?} in the citation-source link index: {e}"
+                )))
+            })
         };
-        parsed.push((CitationId::from_uuid(citation), SourceId::from_uuid(source)));
+        parsed.push((
+            CitationId::from_uuid(parse(citation)?),
+            SourceId::from_uuid(parse(source)?),
+        ));
     }
     let citations: BTreeSet<CitationId> = parsed.iter().map(|(citation, _)| *citation).collect();
     let citation_clusters = CitationClusters::load_of(store, &citations).await?;

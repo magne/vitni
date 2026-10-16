@@ -649,8 +649,7 @@ pub async fn show_source(workspace: &Workspace, human_id: &str) -> Result<Option
     let Some(source_id) = store.find_source(human_id).await?.and_then(|view| view.source_id()) else {
         return Ok(None);
     };
-    let clusters = SourceClusters::load_of(store, &BTreeSet::from([source_id])).await?;
-    let views = identity::views(store, &clusters.cluster(clusters.root(source_id))).await?;
+    let views = identity::cluster_records(store, source_id).await?;
     let views: Vec<&SourceView> = views.iter().collect();
     let mut lookups = SourceLookups::load(store, &views).await?;
     lookups.usage = Some(CitationUsage::load(workspace).await?);

@@ -887,8 +887,7 @@ pub async fn show_family(workspace: &Workspace, human_id: &str) -> Result<Option
     let Some(family_id) = found.family_id() else {
         return Ok(None);
     };
-    let clusters = FamilyClusters::load_of(store, &BTreeSet::from([family_id])).await?;
-    let views = identity::views(store, &clusters.cluster(clusters.root(family_id))).await?;
+    let views = identity::cluster_records(store, family_id).await?;
     let views: Vec<&FamilyView> = views.iter().collect();
     let lookups = FamilyLookups::shown(store, &views).await?;
     Ok(summarize_cluster(&views, &lookups))

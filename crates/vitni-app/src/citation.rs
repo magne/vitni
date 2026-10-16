@@ -25,7 +25,7 @@ use vitni_db::{ListPage, Store};
 use crate::dto::{AggRef, AttachedRef, MediaLookup, MediaRefSummary};
 use crate::error::AppError;
 use crate::event::{DateParts, gregorian_date};
-use crate::identity::{self, CitationClusters, IdentityDecision, PairDecision};
+use crate::identity::{self, IdentityDecision, PairDecision};
 use crate::session::Session;
 use crate::use_case::{self, MediaRefInput, MutationMeta, Provenance, resolve_media_id, resolve_note_id};
 use crate::workspace::Workspace;
@@ -672,8 +672,7 @@ pub async fn show_citation(workspace: &Workspace, human_id: &str) -> Result<Opti
     let Some(citation_id) = store.find_citation(human_id).await?.and_then(|view| view.citation_id()) else {
         return Ok(None);
     };
-    let clusters = CitationClusters::load_of(store, &BTreeSet::from([citation_id])).await?;
-    let views = identity::views(store, &clusters.cluster(clusters.root(citation_id))).await?;
+    let views = identity::cluster_records(store, citation_id).await?;
     let views: Vec<&CitationView> = views.iter().collect();
     let lookups = Lookups::load(store, &views).await?;
     Ok(summarize_cluster(&views, &lookups))

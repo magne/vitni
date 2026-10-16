@@ -14,7 +14,7 @@ use vitni_db::{ListPage, Store};
 use crate::citation::TagRef;
 use crate::dto::{AggRef, UsingRecordRef, tag_refs};
 use crate::error::AppError;
-use crate::identity::{self, IdentityDecision, NoteClusters, PairDecision};
+use crate::identity::{self, IdentityDecision, PairDecision};
 use crate::note_usage::NoteUsage;
 use crate::session::Session;
 use crate::use_case::{self, MutationMeta, Provenance, resolve_note_id};
@@ -430,8 +430,7 @@ pub async fn show_note(workspace: &Workspace, human_id: &str) -> Result<Option<N
     let Some(note_id) = store.find_note(human_id).await?.and_then(|view| view.note_id()) else {
         return Ok(None);
     };
-    let clusters = NoteClusters::load_of(store, &BTreeSet::from([note_id])).await?;
-    let views = identity::views(store, &clusters.cluster(clusters.root(note_id))).await?;
+    let views = identity::cluster_records(store, note_id).await?;
     let views: Vec<&NoteView> = views.iter().collect();
     let mut lookups = NoteLookups::load(store, &views).await?;
     lookups.usage = Some(NoteUsage::load(workspace).await?);
