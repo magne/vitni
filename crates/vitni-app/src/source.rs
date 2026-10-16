@@ -7,6 +7,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
+use vitni_core::citation::CitationView;
 use vitni_core::enums::{Restriction, SourceMediaType};
 use vitni_core::ids::{AssertionId, CitationId, HumanId, MediaId, NoteId, RepositoryId, SourceId, TagId};
 use vitni_core::provenance::EvidenceRef;
@@ -649,8 +650,10 @@ pub async fn show_source(workspace: &Workspace, human_id: &str) -> Result<Option
         return Ok(None);
     };
     let views = identity::cluster_records(store, source_id).await?;
-    let lookups = SourceLookups::load(workspace).await?;
-    Ok(summarize_cluster(&views.iter().collect::<Vec<_>>(), &lookups))
+    let views: Vec<&SourceView> = views.iter().collect();
+    let mut lookups = SourceLookups::load(store, &views).await?;
+    lookups.usage = Some(CitationUsage::load(workspace).await?);
+    Ok(summarize_cluster(&views, &lookups))
 }
 
 /// Lists every source's summary, ordered by `human_id`. A merged record is listed once, as its cluster's
@@ -670,9 +673,8 @@ pub async fn list_sources(workspace: &Workspace) -> Result<Vec<SourceSummary>, A
 /// A store/read-model error.
 pub async fn list_sources_page(workspace: &Workspace, page: ListPage) -> Result<Vec<SourceSummary>, AppError> {
     let store = workspace.store();
-    let clusters = SourceClusters::load(store).await?;
-    let views: Vec<SourceView> = identity::listed_page(store, &clusters, page).await?;
-    let lookups = SourceLookups::load(workspace).await?;
+    let (clusters, views) = identity::listed_page::<SourceView>(store, page).await?;
+    let lookups = SourceLookups::load(store, &views.iter().collect::<Vec<_>>()).await?;
     let mut summaries = Vec::with_capacity(views.len());
     for cluster in identity::group_clusters(&views, &clusters) {
         summaries.extend(summarize_cluster(&cluster, &lookups));
@@ -860,34 +862,69 @@ struct SourceLookups {
     media: HashMap<MediaId, MediaLookup>,
     notes: HashMap<NoteId, use_case::NoteLookup>,
     tags: HashMap<TagId, TagRef>,
-    usage: CitationUsage,
+    /// The records each citation backs: read from every citing record, so only a shown source fills it
+    /// (#673).
+    usage: Option<CitationUsage>,
 }
 
 impl SourceLookups {
-    async fn load(workspace: &Workspace) -> Result<Self, AppError> {
-        let store = workspace.store();
-        // A merged citation is listed once, as its root, and a citation of a merged source under the
-        // source's root (ADR 0039 §5).
-        let citation_clusters = CitationClusters::load(store).await?;
-        let mut citations_by_source: HashMap<SourceId, Vec<CitationId>> = HashMap::new();
-        for view in store.list_citations().await? {
-            if let (Some(citation_id), Some(source_id)) = (view.citation_id(), view.source_id())
-                && !citation_clusters.is_member(citation_id)
-            {
-                citations_by_source.entry(source_id).or_default().push(citation_id);
-            }
+    /// The lookups for summarizing `views`, each read for the records they name and no others: the
+    /// citations come from the record links index (ADR 0047). No citation's backers are read.
+    async fn load(store: &Store, views: &[&SourceView]) -> Result<Self, AppError> {
+        let mut sources = BTreeSet::new();
+        let mut repositories = BTreeSet::new();
+        let mut media = BTreeSet::new();
+        let mut notes = BTreeSet::new();
+        let mut tags = BTreeSet::new();
+        for view in views {
+            sources.extend(view.source_id());
+            repositories.extend(view.repositories().iter().map(|repo_ref| repo_ref.repository_id));
+            media.extend(view.media().iter().map(|media| media.media_id));
+            notes.extend(view.notes());
+            tags.extend(view.tags());
         }
-        SourceClusters::load(store).await?.fold(&mut citations_by_source);
+        let citations_by_source = citations_by_source(store, &sources).await?;
+        let citations: BTreeSet<CitationId> = citations_by_source.values().flatten().copied().collect();
         Ok(Self {
-            repositories: repository_refs(store).await?,
-            citations: citation_refs(store).await?,
+            repositories: repository_refs(store, &repositories).await?,
+            citations: citation_refs(store, &citations).await?,
             citations_by_source,
-            media: media_lookups(store).await?,
-            notes: use_case::note_lookups(store).await?,
-            tags: tag_refs(store).await?,
-            usage: CitationUsage::load(workspace).await?,
+            media: media_lookups(store, &media).await?,
+            notes: use_case::note_lookups(store, &notes).await?,
+            tags: tag_refs(store, &tags).await?,
+            usage: None,
         })
     }
+}
+
+/// The citations of each of `sources`, in `human_id` order, read through the record links index (ADR
+/// 0047). A merged citation is listed once, as its root, and a citation of a merged source under the
+/// source's root (ADR 0039 §5).
+async fn citations_by_source(
+    store: &Store,
+    sources: &BTreeSet<SourceId>,
+) -> Result<HashMap<SourceId, Vec<CitationId>>, AppError> {
+    let mut by_source: HashMap<SourceId, Vec<CitationId>> = HashMap::new();
+    if sources.is_empty() {
+        return Ok(by_source);
+    }
+    let targets: Vec<String> = sources.iter().map(ToString::to_string).collect();
+    let mut citing = crate::profile::linking(store, vitni_db::RecordLink::CitationSource, &targets).await?;
+    citing.sort_unstable();
+    citing.dedup();
+    let mut views = store.citations_by_ids(&citing).await?;
+    views.sort_by(|a, b| (a.human_id(), a.citation_id()).cmp(&(b.human_id(), b.citation_id())));
+    let ids: BTreeSet<CitationId> = views.iter().filter_map(CitationView::citation_id).collect();
+    let citation_clusters = CitationClusters::load_of(store, &ids).await?;
+    for view in &views {
+        if let (Some(citation_id), Some(source_id)) = (view.citation_id(), view.source_id())
+            && !citation_clusters.is_member(citation_id)
+        {
+            by_source.entry(source_id).or_default().push(citation_id);
+        }
+    }
+    SourceClusters::load_of(store, sources).await?.fold(&mut by_source);
+    Ok(by_source)
 }
 
 /// Renders a [`SourceView`] into the frontend DTO, joining its repository links, the citations that
@@ -933,7 +970,7 @@ fn summarize(view: &SourceView, lookups: &SourceLookups) -> SourceSummary {
         .filter_map(|id| {
             lookups.citations.get(id).map(|citation| SourceCitationRef {
                 citation: citation.clone(),
-                backers: lookups.usage.backers(*id),
+                backers: lookups.usage.as_ref().map_or_else(Vec::new, |usage| usage.backers(*id)),
             })
         })
         .collect();

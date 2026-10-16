@@ -46,7 +46,9 @@ pub struct DnaTestSummary {
     pub genome_build: Option<DnaGenomeBuild>,
     /// The recorded haplogroups (the Haplogroups tab), each with the `AssertionId` that introduced it.
     pub haplogroups: Vec<HaplogroupRef>,
-    /// The matches this kit produced (the Matches tab), joined to the other test.
+    /// The matches this kit produced (the Matches tab), joined to the other test. Filled by
+    /// `show_dna_test` alone; a list summary leaves it empty, as reading it means reading every match
+    /// (#673).
     pub matches: Vec<DnaTestMatchRef>,
     /// The attached notes (the Notes tab), with the attach `AssertionId` (the Detach target).
     pub notes: Vec<AttachedRef>,
@@ -326,7 +328,9 @@ pub async fn show_dna_test(workspace: &Workspace, human_id: &str) -> Result<Opti
     let Some(view) = workspace.store().find_dna_test(human_id).await? else {
         return Ok(None);
     };
-    let lookups = DnaTestLookups::load(workspace).await?;
+    let store = workspace.store();
+    let mut lookups = DnaTestLookups::load(store, &[&view]).await?;
+    lookups.load_matches(store).await?;
     Ok(Some(summarize(&view, &lookups)))
 }
 
@@ -346,7 +350,7 @@ pub async fn list_dna_tests(workspace: &Workspace) -> Result<Vec<DnaTestSummary>
 /// A store/read-model error.
 pub async fn list_dna_tests_page(workspace: &Workspace, page: ListPage) -> Result<Vec<DnaTestSummary>, AppError> {
     let views = workspace.store().list_dna_tests_page(page).await?;
-    let lookups = DnaTestLookups::load(workspace).await?;
+    let lookups = DnaTestLookups::load(workspace.store(), &views.iter().collect::<Vec<_>>()).await?;
     Ok(views.iter().map(|view| summarize(view, &lookups)).collect())
 }
 
@@ -361,7 +365,8 @@ struct DnaTestLookups {
     tags: HashMap<TagId, TagRef>,
     /// `DnaTestId string -> human_id`, for labelling the compared test of each match.
     tests: HashMap<String, String>,
-    /// Every observed match, for the per-test Matches join.
+    /// Every observed match, for the per-test Matches join: read from every match, so only a shown
+    /// test fills it (#673).
     matches: Vec<DnaMatchRow>,
 }
 
@@ -377,32 +382,40 @@ struct DnaMatchRow {
 }
 
 impl DnaTestLookups {
-    async fn load(workspace: &Workspace) -> Result<Self, AppError> {
-        let store = workspace.store();
-        let names: HashMap<String, Option<String>> = crate::person::list_persons(workspace)
-            .await?
-            .into_iter()
-            .map(|p| (p.human_id, p.display_name))
-            .collect();
-        let references = crate::identity::PersonReferences::load(store).await?;
-        let mut persons = HashMap::new();
-        for view in store.list_persons().await? {
-            if let Some(id) = view.person_id() {
-                let (_, human_id) = references.resolve(id);
-                let name = names.get(&human_id).cloned().flatten();
-                persons.insert(id.to_string(), (human_id, name));
-            }
+    /// The lookups for summarizing `views`, each read for the records they name and no others. No
+    /// test's matches are read.
+    async fn load(store: &Store, views: &[&DnaTestView]) -> Result<Self, AppError> {
+        let mut persons = BTreeSet::new();
+        let mut notes = BTreeSet::new();
+        let mut tags = BTreeSet::new();
+        for view in views {
+            persons.extend(view.person_id());
+            notes.extend(view.notes());
+            tags.extend(view.tags());
         }
-        let mut tests = HashMap::new();
+        let mut labels = HashMap::new();
+        for (id, label) in crate::person::person_labels(store, &persons).await? {
+            labels.insert(id.to_string(), (label.human_id, label.name));
+        }
+        Ok(Self {
+            persons: labels,
+            notes: use_case::note_lookups(store, &notes).await?,
+            tags: tag_refs(store, &tags).await?,
+            tests: HashMap::new(),
+            matches: Vec::new(),
+        })
+    }
+
+    /// Reads every match and every test it compares, for a shown test's Matches tab.
+    async fn load_matches(&mut self, store: &Store) -> Result<(), AppError> {
         for view in store.list_dna_tests().await? {
             if let (Some(id), Some(human_id)) = (view.dna_test_id(), view.human_id()) {
-                tests.insert(id.to_string(), human_id.as_str().to_owned());
+                self.tests.insert(id.to_string(), human_id.as_str().to_owned());
             }
         }
-        let mut matches = Vec::new();
         for view in store.list_dna_matches().await? {
             let Some(id) = view.dna_match_id() else { continue };
-            matches.push(DnaMatchRow {
+            self.matches.push(DnaMatchRow {
                 human_id: view.human_id().map(|h| h.as_str().to_owned()).unwrap_or_default(),
                 id: id.to_string(),
                 test_a: view.test_a().map(|t| t.to_string()),
@@ -412,13 +425,7 @@ impl DnaTestLookups {
                 predicted_relationship: view.predicted_relationship().map(ToOwned::to_owned),
             });
         }
-        Ok(Self {
-            persons,
-            notes: use_case::note_lookups(store).await?,
-            tags: tag_refs(store).await?,
-            tests,
-            matches,
-        })
+        Ok(())
     }
 
     /// Resolves a `PersonId` string to its `human_id` + stable id reference.

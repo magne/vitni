@@ -8,19 +8,21 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
+use uuid::Uuid;
 use vitni_core::address::Address;
 use vitni_core::enums::{RepositoryType, Restriction};
-use vitni_core::ids::{AssertionId, HumanId, NoteId, RepositoryId, SourceId, TagId};
+use vitni_core::ids::{AssertionId, CitationId, HumanId, NoteId, RepositoryId, SourceId, TagId};
 use vitni_core::provenance::EvidenceRef;
 use vitni_core::repository::RepositoryView;
 use vitni_core::repository::command::{RepositoryCommand, RepositoryCommandEnvelope};
+use vitni_core::source::SourceView;
 use vitni_core::text::Url;
-use vitni_db::{ListPage, Store};
+use vitni_db::{ListPage, RecordLink, Store};
 
 use crate::citation::TagRef;
 use crate::dto::{AggRef, AttachedRef, SourceLinkRef, tag_refs};
 use crate::error::AppError;
-use crate::identity::{self, IdentityDecision, PairDecision, RepositoryClusters};
+use crate::identity::{self, CitationClusters, IdentityDecision, PairDecision, RepositoryClusters};
 use crate::session::Session;
 use crate::use_case::{self, MutationMeta, Provenance, resolve_note_id};
 use crate::workspace::Workspace;
@@ -473,8 +475,9 @@ pub async fn show_repository(workspace: &Workspace, human_id: &str) -> Result<Op
         return Ok(None);
     };
     let views = identity::cluster_records(store, repository_id).await?;
-    let lookups = RepositoryLookups::load(workspace).await?;
-    Ok(summarize_cluster(&views.iter().collect::<Vec<_>>(), &lookups))
+    let views: Vec<&RepositoryView> = views.iter().collect();
+    let lookups = RepositoryLookups::load(store, &views).await?;
+    Ok(summarize_cluster(&views, &lookups))
 }
 
 /// Lists every repository's summary, ordered by `human_id`. A merged record is listed once, as its cluster's
@@ -494,9 +497,8 @@ pub async fn list_repositories(workspace: &Workspace) -> Result<Vec<RepositorySu
 /// A store/read-model error.
 pub async fn list_repositories_page(workspace: &Workspace, page: ListPage) -> Result<Vec<RepositorySummary>, AppError> {
     let store = workspace.store();
-    let clusters = RepositoryClusters::load(store).await?;
-    let views: Vec<RepositoryView> = identity::listed_page(store, &clusters, page).await?;
-    let lookups = RepositoryLookups::load(workspace).await?;
+    let (clusters, views) = identity::listed_page::<RepositoryView>(store, page).await?;
+    let lookups = RepositoryLookups::load(store, &views.iter().collect::<Vec<_>>()).await?;
     let mut summaries = Vec::with_capacity(views.len());
     for cluster in identity::group_clusters(&views, &clusters) {
         summaries.extend(summarize_cluster(&cluster, &lookups));
@@ -686,54 +688,125 @@ struct RepositoryLookups {
 }
 
 impl RepositoryLookups {
-    async fn load(workspace: &Workspace) -> Result<Self, AppError> {
-        let store = workspace.store();
-        // A source held by a merged repository is listed under the repository's root, and a merged
-        // source names its own root (ADR 0039 §5). Its citation count is its cluster's, each merged
-        // citation counted once, as the Source › Citations tab lists them.
-        let sources = crate::identity::SourceReferences::load(store).await?;
-        let citation_clusters = crate::identity::CitationClusters::load(store).await?;
-        let mut citation_counts: HashMap<SourceId, usize> = HashMap::new();
-        for view in store.list_citations().await? {
-            if view.citation_id().is_some_and(|id| citation_clusters.is_member(id)) {
-                continue;
-            }
-            if let Some(source_id) = view.source_id() {
-                let (root, _) = sources.resolve(source_id);
-                *citation_counts.entry(root).or_default() += 1;
-            }
+    /// The lookups for summarizing `views`, each read for the records they name and no others: the
+    /// sources they hold come from the record links index (ADR 0047).
+    async fn load(store: &Store, views: &[&RepositoryView]) -> Result<Self, AppError> {
+        let mut repositories = BTreeSet::new();
+        let mut notes = BTreeSet::new();
+        let mut tags = BTreeSet::new();
+        for view in views {
+            repositories.extend(view.repository_id());
+            notes.extend(view.notes());
+            tags.extend(view.tags());
         }
-        let mut sources_by_repository: HashMap<RepositoryId, Vec<SourceLinkRef>> = HashMap::new();
-        for view in store.list_sources().await? {
-            let Some(source_id) = view.source_id() else {
-                continue;
-            };
-            let (source_id, human_id) = sources.resolve(source_id);
-            let title = view.title().map(ToOwned::to_owned);
-            let citation_count = citation_counts.get(&source_id).copied().unwrap_or_default();
-            for repo_ref in view.repositories() {
-                sources_by_repository
-                    .entry(repo_ref.repository_id)
-                    .or_default()
-                    .push(SourceLinkRef {
-                        source: AggRef {
-                            human_id: human_id.clone(),
-                            id: source_id.to_string(),
-                        },
-                        title: title.clone(),
-                        call_number: repo_ref.call_number.clone(),
-                        media_type: repo_ref.media_type.clone(),
-                        citation_count,
-                    });
-            }
-        }
-        RepositoryClusters::load(store).await?.fold(&mut sources_by_repository);
         Ok(Self {
-            sources_by_repository,
-            notes: use_case::note_lookups(store).await?,
-            tags: tag_refs(store).await?,
+            sources_by_repository: sources_by_repository(store, &repositories).await?,
+            notes: use_case::note_lookups(store, &notes).await?,
+            tags: tag_refs(store, &tags).await?,
         })
     }
+}
+
+/// The sources each of `repositories` holds, in `human_id` order, read through the record links index
+/// (ADR 0047). A source held by a merged repository is listed under the repository's root, and a merged
+/// source names its own root (ADR 0039 §5). Its citation count is its cluster's, each merged citation
+/// counted once, as the Source › Citations tab lists them.
+async fn sources_by_repository(
+    store: &Store,
+    repositories: &BTreeSet<RepositoryId>,
+) -> Result<HashMap<RepositoryId, Vec<SourceLinkRef>>, AppError> {
+    let mut by_repository: HashMap<RepositoryId, Vec<SourceLinkRef>> = HashMap::new();
+    if repositories.is_empty() {
+        return Ok(by_repository);
+    }
+    let targets: Vec<String> = repositories.iter().map(ToString::to_string).collect();
+    let mut held = crate::profile::linking(store, RecordLink::SourceRepository, &targets).await?;
+    held.sort_unstable();
+    held.dedup();
+    let mut views = store.sources_by_ids(&held).await?;
+    views.sort_by(|a, b| (a.human_id(), a.source_id()).cmp(&(b.human_id(), b.source_id())));
+    let held: BTreeSet<SourceId> = views.iter().filter_map(SourceView::source_id).collect();
+    let (source_clusters, cluster_views) = identity::clustered(store, &held).await?;
+    let mut human_ids = HashMap::with_capacity(cluster_views.len());
+    for view in &cluster_views {
+        if let (Some(id), Some(human_id)) = (view.source_id(), view.human_id()) {
+            human_ids.insert(id, human_id.as_str().to_owned());
+        }
+    }
+    let resolve = |id: SourceId| {
+        let root = source_clusters.root(id);
+        (root, human_ids.get(&root).cloned().unwrap_or_else(|| root.to_string()))
+    };
+    let citation_counts = citation_counts(store, &cluster_views, &resolve).await?;
+    for view in &views {
+        let Some(source_id) = view.source_id() else {
+            continue;
+        };
+        let (source_id, human_id) = resolve(source_id);
+        let title = view.title().map(ToOwned::to_owned);
+        let citation_count = citation_counts.get(&source_id).copied().unwrap_or_default();
+        for repo_ref in view.repositories() {
+            by_repository
+                .entry(repo_ref.repository_id)
+                .or_default()
+                .push(SourceLinkRef {
+                    source: AggRef {
+                        human_id: human_id.clone(),
+                        id: source_id.to_string(),
+                    },
+                    title: title.clone(),
+                    call_number: repo_ref.call_number.clone(),
+                    media_type: repo_ref.media_type.clone(),
+                    citation_count,
+                });
+        }
+    }
+    RepositoryClusters::load_of(store, repositories)
+        .await?
+        .fold(&mut by_repository);
+    Ok(by_repository)
+}
+
+/// How many citations cite each source cluster of `sources` (every record of those clusters), keyed by
+/// the root `resolve` names, a merged citation counted once (ADR 0039 §5).
+async fn citation_counts(
+    store: &Store,
+    sources: &[SourceView],
+    resolve: &impl Fn(SourceId) -> (SourceId, String),
+) -> Result<HashMap<SourceId, usize>, AppError> {
+    let mut counts: HashMap<SourceId, usize> = HashMap::new();
+    let targets: Vec<String> = sources
+        .iter()
+        .filter_map(SourceView::source_id)
+        .map(|id| id.to_string())
+        .collect();
+    if targets.is_empty() {
+        return Ok(counts);
+    }
+    let citing = store.linking(RecordLink::CitationSource, &targets).await?;
+    let mut parsed = Vec::with_capacity(citing.len());
+    for (citation, source) in &citing {
+        let parse = |raw: &str| {
+            Uuid::parse_str(raw).map_err(|e| {
+                AppError::Db(vitni_db::DbError::Malformed(format!(
+                    "record id {raw:?} in the citation-source link index: {e}"
+                )))
+            })
+        };
+        parsed.push((
+            CitationId::from_uuid(parse(citation)?),
+            SourceId::from_uuid(parse(source)?),
+        ));
+    }
+    let citations: BTreeSet<CitationId> = parsed.iter().map(|(citation, _)| *citation).collect();
+    let citation_clusters = CitationClusters::load_of(store, &citations).await?;
+    for (citation, source) in parsed {
+        if citation_clusters.is_member(citation) {
+            continue;
+        }
+        *counts.entry(resolve(source).0).or_default() += 1;
+    }
+    Ok(counts)
 }
 
 /// Renders a [`RepositoryView`] into the frontend DTO, joining the sources it holds and its

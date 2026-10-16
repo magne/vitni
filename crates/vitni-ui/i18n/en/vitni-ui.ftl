@@ -932,7 +932,6 @@ using-kind-place = Place
 using-kind-source = Source
 using-kind-citation = Citation
 using-kind-repository = Repository
-reference-count = { $count } references
 field-file-path = File path
 field-mime = MIME
 field-checksum = Checksum

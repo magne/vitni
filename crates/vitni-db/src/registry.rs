@@ -79,8 +79,9 @@ macro_rules! for_each_db_external_id_aggregate {
 
 pub(crate) use for_each_db_external_id_aggregate;
 
-/// Invokes `$callback!` with one row per aggregate the matching profiles read by id (ADR 0038 §2) —
-/// the matchable kinds. Columns, in order: `(snake, by_ids_fn, table_const, View)`.
+/// Invokes `$callback!` with one row per aggregate read by id: the matchable kinds the matching
+/// profiles read (ADR 0038 §2), and the records a page of list summaries names. Columns, in order:
+/// `(snake, by_ids_fn, table_const, View)`.
 macro_rules! for_each_db_by_ids_aggregate {
     ($callback:ident) => {
         $callback! {
@@ -94,6 +95,7 @@ macro_rules! for_each_db_by_ids_aggregate {
             (media, media_by_ids, MEDIA_VIEW_TABLE, vitni_core::media::MediaView),
             (note, notes_by_ids, NOTE_VIEW_TABLE, vitni_core::note::NoteView),
             (tag, tags_by_ids, TAG_VIEW_TABLE, vitni_core::tag::TagView),
+            (dna_test, dna_tests_by_ids, DNA_TEST_VIEW_TABLE, vitni_core::dna_test::DnaTestView),
         }
     };
 }

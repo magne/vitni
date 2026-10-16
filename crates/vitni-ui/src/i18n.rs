@@ -1611,12 +1611,6 @@ impl Localizer {
         fl!(self.loader, "record-count", count = count)
     }
 
-    /// The reference-count subtitle text, e.g. `2 references` (Note list row / header).
-    #[must_use]
-    pub fn reference_count(&self, count: usize) -> String {
-        fl!(self.loader, "reference-count", count = count)
-    }
-
     /// The provenance popover title ("Why we believe this").
     #[must_use]
     pub fn provenance_title(&self) -> String {

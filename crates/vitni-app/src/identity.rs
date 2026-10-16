@@ -781,6 +781,26 @@ impl<I: ClusterId> Clusters<I> {
         Ok(Self { root_of, members_of })
     }
 
+    /// Loads the whole clusters of `I`'s kind that hold any of `ids`, as member or root — enough to
+    /// answer every question below about `ids` and the records of their clusters, and nothing else.
+    ///
+    /// # Errors
+    ///
+    /// A store error, or [`DbError::Malformed`] if the index holds an id that is not a UUID.
+    pub(crate) async fn load_of(store: &Store, ids: &BTreeSet<I>) -> Result<Self, AppError> {
+        let mut clusters = Self::default();
+        if ids.is_empty() {
+            return Ok(clusters);
+        }
+        let ids: Vec<String> = ids.iter().map(ToString::to_string).collect();
+        for link in store.identity_links_of(I::View::KIND, &ids).await? {
+            let (member, root) = (parse_id::<I>(&link.member)?, parse_id::<I>(&link.root)?);
+            clusters.root_of.insert(member, root);
+            clusters.members_of.entry(root).or_default().push(member);
+        }
+        Ok(clusters)
+    }
+
     /// Every merged record with its cluster root.
     pub(crate) fn links(&self) -> impl Iterator<Item = (I, I)> + '_ {
         self.root_of.iter().map(|(member, root)| (*member, *root))
@@ -884,27 +904,27 @@ pub(crate) fn group_clusters<'a, V: ClusterView>(views: &'a [V], clusters: &Clus
 }
 
 /// One page of the records of `V`'s kind a list shows, followed by the members of their clusters, so
-/// [`group_clusters`] folds each root on the page with every record merged into it.
+/// [`group_clusters`] folds each root on the page with every record merged into it — with the clusters
+/// of the page's records, and no others.
 ///
 /// # Errors
 ///
 /// A store error.
 pub(crate) async fn listed_page<V: ClusterView>(
     store: &Store,
-    clusters: &Clusters<V::Id>,
     page: ListPage,
-) -> Result<Vec<V>, AppError> {
+) -> Result<(Clusters<V::Id>, Vec<V>), AppError> {
     let mut views = V::list_page(store, page).await?;
+    let ids: BTreeSet<V::Id> = views.iter().filter_map(ClusterRecord::record_id).collect();
+    let clusters = Clusters::load_of(store, &ids).await?;
     let mut members = Vec::new();
-    for view in &views {
-        if let Some(id) = view.record_id() {
-            members.extend(clusters.members(id).iter().map(ToString::to_string));
-        }
+    for id in &ids {
+        members.extend(clusters.members(*id).iter().map(ToString::to_string));
     }
     if !members.is_empty() {
         views.extend(V::by_ids(store, &members).await?);
     }
-    Ok(views)
+    Ok((clusters, views))
 }
 
 /// The projections of every record in `ids`, skipping any not found.
@@ -925,13 +945,52 @@ pub(crate) async fn views<I: ClusterId>(store: &Store, ids: &[I]) -> Result<Vec<
     Ok(views)
 }
 
+/// The records `ids` names and their cluster roots, with the clusters holding them: what a lookup reads
+/// to resolve a reference, a member's reference reading as its root's (ADR 0039 §5).
+///
+/// # Errors
+///
+/// A store error.
+pub(crate) async fn referenced<I: ClusterId>(
+    store: &Store,
+    ids: &BTreeSet<I>,
+) -> Result<(Clusters<I>, Vec<I::View>), AppError> {
+    let clusters = Clusters::load_of(store, ids).await?;
+    let mut read = BTreeSet::new();
+    for &id in ids {
+        read.insert(id.to_string());
+        read.insert(clusters.root(id).to_string());
+    }
+    let read: Vec<String> = read.into_iter().collect();
+    Ok((clusters, I::View::by_ids(store, &read).await?))
+}
+
+/// Every record of each cluster holding one of `ids`, with those clusters: what a lookup reads to fold a
+/// referenced record's cluster into one entry (ADR 0039 §5).
+///
+/// # Errors
+///
+/// A store error.
+pub(crate) async fn clustered<I: ClusterId>(
+    store: &Store,
+    ids: &BTreeSet<I>,
+) -> Result<(Clusters<I>, Vec<I::View>), AppError> {
+    let clusters = Clusters::load_of(store, ids).await?;
+    let mut read = BTreeSet::new();
+    for &id in ids {
+        read.extend(clusters.cluster(clusters.root(id)).iter().map(ToString::to_string));
+    }
+    let read: Vec<String> = read.into_iter().collect();
+    Ok((clusters, I::View::by_ids(store, &read).await?))
+}
+
 /// Every record of `id`'s cluster, its root first.
 ///
 /// # Errors
 ///
 /// A store error.
 pub(crate) async fn cluster_records<I: ClusterId>(store: &Store, id: I) -> Result<Vec<I::View>, AppError> {
-    let clusters = Clusters::<I>::load(store).await?;
+    let clusters = Clusters::<I>::load_of(store, &BTreeSet::from([id])).await?;
     views(store, &clusters.cluster(clusters.root(id))).await
 }
 
@@ -1002,6 +1061,23 @@ impl<I: ClusterId> References<I> {
             clusters: Clusters::load(store).await?,
             human_ids,
         })
+    }
+
+    /// Loads the clusters holding `ids` and the `human_id`s of `ids` and their roots — enough to
+    /// [`resolve`](Self::resolve) any of `ids`.
+    ///
+    /// # Errors
+    ///
+    /// A store error.
+    pub(crate) async fn load_of(store: &Store, ids: &BTreeSet<I>) -> Result<Self, AppError> {
+        let (clusters, views) = referenced(store, ids).await?;
+        let mut human_ids = HashMap::with_capacity(views.len());
+        for view in &views {
+            if let (Some(id), Some(human_id)) = (view.record_id(), view.record_human_id()) {
+                human_ids.insert(id, human_id.as_str().to_owned());
+            }
+        }
+        Ok(Self { clusters, human_ids })
     }
 
     /// The id and `human_id` a reference to `id` names: its cluster root's.

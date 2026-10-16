@@ -614,6 +614,15 @@ impl SqliteStore {
         crate::identity_links::sqlite::links(&self.pool, kind).await
     }
 
+    /// Every member of each `kind` cluster that holds one of `ids`, with its root (ADR 0039 §4).
+    pub(crate) async fn identity_links_of(
+        &self,
+        kind: vitni_core::matching::MatchableKind,
+        ids: &[String],
+    ) -> Result<Vec<crate::store::IdentityLink>, DbError> {
+        crate::identity_links::sqlite::links_of(&self.pool, kind, ids).await
+    }
+
     /// Every place a succession names `to`, from `place_id`'s perspective as a `from` endpoint
     /// (ADR 0026 §4), via the succession cross-reference index.
     pub(crate) async fn place_successors(
@@ -1959,6 +1968,67 @@ mod tests {
         )
         .await;
         assert_eq!(person_links(&store).await, vec![(c.to_string(), b.to_string())]);
+    }
+
+    #[tokio::test]
+    async fn identity_links_of_reads_the_whole_cluster_of_each_named_record() {
+        let (store, _dir) = store().await;
+        let id = |n: u128| PersonId::from_uuid(Uuid::from_u128(n));
+        for n in 1..=6 {
+            person_command(
+                &store,
+                id(n),
+                n,
+                PersonCommand::CreatePerson {
+                    person_id: id(n),
+                    human_id: HumanId::new(format!("I000{n}")),
+                    evidence_level: EvidenceLevel::Persona,
+                    external_ids: Vec::new(),
+                },
+            )
+            .await;
+        }
+        let merge = |surviving: u128, merged: u128| PersonCommand::MergePersons {
+            surviving: id(surviving),
+            merged: id(merged),
+            assessment: None,
+        };
+        person_command(&store, id(2), 20, merge(2, 3)).await;
+        person_command(&store, id(1), 21, merge(1, 2)).await;
+        person_command(&store, id(4), 22, merge(4, 5)).await;
+
+        let kind = vitni_core::matching::MatchableKind::Person;
+        let links_of = |ns: &[u128]| {
+            let ids: Vec<String> = ns.iter().map(|n| id(*n).to_string()).collect();
+            let store = &store;
+            async move {
+                store
+                    .identity_links_of(kind, &ids)
+                    .await
+                    .unwrap()
+                    .into_iter()
+                    .map(|link| (link.member, link.root))
+                    .collect::<Vec<_>>()
+            }
+        };
+        let first = vec![
+            (id(2).to_string(), id(1).to_string()),
+            (id(3).to_string(), id(1).to_string()),
+        ];
+        assert_eq!(links_of(&[3]).await, first, "a member names its whole cluster");
+        assert_eq!(links_of(&[1]).await, first, "a root names its whole cluster");
+        assert_eq!(
+            links_of(&[5, 6]).await,
+            vec![(id(5).to_string(), id(4).to_string())],
+            "an unmerged record adds nothing"
+        );
+        assert_eq!(links_of(&[6]).await, Vec::<(String, String)>::new());
+        assert_eq!(links_of(&[]).await, Vec::<(String, String)>::new());
+        let other_kind = store
+            .identity_links_of(vitni_core::matching::MatchableKind::Event, &[id(1).to_string()])
+            .await
+            .unwrap();
+        assert_eq!(other_kind.len(), 0, "another kind's index is not read");
     }
 
     #[tokio::test]

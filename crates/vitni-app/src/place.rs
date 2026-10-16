@@ -908,22 +908,31 @@ async fn show_place_resolved(
         return Ok(None);
     };
     let views = identity::cluster_records(store, place_id).await?;
-    let lookups = PlaceLookups::load(workspace).await?;
-    let Some(mut summary) = summarize_cluster(&views.iter().collect::<Vec<_>>(), &lookups, as_of.as_ref()) else {
-        return Ok(None);
-    };
+    let mut successions = Vec::with_capacity(views.len());
+    let mut succession_places = BTreeSet::new();
     for view in &views {
         let (Some(id), Some(owner)) = (view.place_id(), view.human_id()) else {
             continue;
         };
         let id = id.to_string();
-        let predecessors = succession_refs(&store.place_predecessors(&id).await?, &lookups);
-        let successors = succession_refs(&store.place_successors(&id).await?, &lookups);
-        if owner.as_str() != summary.human_id {
+        let predecessors = store.place_predecessors(&id).await?;
+        let successors = store.place_successors(&id).await?;
+        for record in predecessors.iter().chain(&successors) {
+            succession_places.extend(uuid::Uuid::parse_str(&record.place_id).ok().map(PlaceId::from_uuid));
+        }
+        successions.push((owner.as_str().to_owned(), predecessors, successors));
+    }
+    let views: Vec<&PlaceView> = views.iter().collect();
+    let lookups = PlaceLookups::load(store, &views, succession_places).await?;
+    let Some(mut summary) = summarize_cluster(&views, &lookups, as_of.as_ref()) else {
+        return Ok(None);
+    };
+    for (owner, predecessors, successors) in successions {
+        let predecessors = succession_refs(&predecessors, &lookups);
+        let successors = succession_refs(&successors, &lookups);
+        if owner != summary.human_id {
             for row in predecessors.iter().chain(&successors) {
-                summary
-                    .claim_owners
-                    .insert(row.assertion_id.clone(), owner.as_str().to_owned());
+                summary.claim_owners.insert(row.assertion_id.clone(), owner.clone());
             }
         }
         summary.predecessors.extend(predecessors);
@@ -1019,9 +1028,8 @@ async fn list_resolved(
     page: ListPage,
 ) -> Result<Vec<PlaceSummary>, AppError> {
     let store = workspace.store();
-    let clusters = PlaceClusters::load(store).await?;
-    let views: Vec<PlaceView> = identity::listed_page(store, &clusters, page).await?;
-    let lookups = PlaceLookups::load(workspace).await?;
+    let (clusters, views) = identity::listed_page::<PlaceView>(store, page).await?;
+    let lookups = PlaceLookups::load(store, &views.iter().collect::<Vec<_>>(), BTreeSet::new()).await?;
     let mut summaries = Vec::with_capacity(views.len());
     for cluster in identity::group_clusters(&views, &clusters) {
         summaries.extend(summarize_cluster(&cluster, &lookups, as_of));
@@ -1052,13 +1060,38 @@ struct PlaceLookups {
 }
 
 impl PlaceLookups {
-    async fn load(workspace: &Workspace) -> Result<Self, AppError> {
-        let store = workspace.store();
-        let mut places = HashMap::new();
-        let mut views = HashMap::new();
-        for view in store.list_places().await? {
+    /// The lookups for summarizing `views`, each read for the records they name and no others: the
+    /// places `views` and `places` name and every place enclosing them, at any date.
+    async fn load(store: &Store, views: &[&PlaceView], mut places: BTreeSet<PlaceId>) -> Result<Self, AppError> {
+        let mut citations = BTreeSet::new();
+        let mut media = BTreeSet::new();
+        let mut notes = BTreeSet::new();
+        let mut tags = BTreeSet::new();
+        for view in views {
+            places.extend(enclosing_ids(view));
+            citations.extend(view.citations());
+            for geometry in view.geometries_with_assertions() {
+                citations.extend(geometry.value.citations.iter().filter_map(|cited| cited.as_citation()));
+            }
+            for asserted in [
+                view.asserted_code().map(|a| &a.citations),
+                view.asserted_coordinates().map(|a| &a.citations),
+            ]
+            .into_iter()
+            .flatten()
+            {
+                citations.extend(asserted.iter().filter_map(|cited| cited.as_citation()));
+            }
+            media.extend(view.media().iter().map(|media| media.media_id));
+            notes.extend(view.notes());
+            tags.extend(view.tags());
+        }
+        let (clusters, place_views) = enclosing_places(store, places).await?;
+        let mut infos = HashMap::with_capacity(place_views.len());
+        let mut by_id = HashMap::with_capacity(place_views.len());
+        for view in place_views {
             if let (Some(id), Some(human_id)) = (view.place_id(), view.human_id()) {
-                places.insert(
+                infos.insert(
                     id,
                     PlaceInfo {
                         id,
@@ -1067,23 +1100,55 @@ impl PlaceLookups {
                         place_type: view.place_type().cloned(),
                     },
                 );
-                views.insert(id, view);
+                by_id.insert(id, view);
             }
         }
         // A reference to a merged place — an enclosure, a succession — reads as its cluster's root
         // (ADR 0039 §5), and the hierarchy walk continues from the root's own enclosure.
-        let clusters = PlaceClusters::load(store).await?;
-        clusters.redirect(&mut places);
-        clusters.redirect(&mut views);
+        clusters.redirect(&mut infos);
+        clusters.redirect(&mut by_id);
         Ok(Self {
-            places,
-            views,
-            citations: citation_refs(store).await?,
-            media: media_lookups(store).await?,
-            notes: use_case::note_lookups(store).await?,
-            tags: tag_refs(store).await?,
+            places: infos,
+            views: by_id,
+            citations: citation_refs(store, &citations).await?,
+            media: media_lookups(store, &media).await?,
+            notes: use_case::note_lookups(store, &notes).await?,
+            tags: tag_refs(store, &tags).await?,
         })
     }
+}
+
+/// Every place `view` lies within, at any date.
+fn enclosing_ids(view: &PlaceView) -> impl Iterator<Item = PlaceId> + '_ {
+    view.enclosed_by_with_assertions()
+        .iter()
+        .map(|link| link.value.value.place_id)
+}
+
+/// `places`, their cluster roots and every place enclosing any of them, transitively, with the
+/// clusters holding them — the places a hierarchy walk from `places` can reach.
+async fn enclosing_places(
+    store: &Store,
+    mut places: BTreeSet<PlaceId>,
+) -> Result<(PlaceClusters, Vec<PlaceView>), AppError> {
+    let mut read = HashMap::new();
+    let mut frontier = places.clone();
+    while !frontier.is_empty() {
+        let (_, views) = identity::referenced(store, &frontier).await?;
+        frontier = BTreeSet::new();
+        for view in views {
+            let Some(id) = view.place_id() else { continue };
+            places.insert(id);
+            for enclosing in enclosing_ids(&view) {
+                if places.insert(enclosing) {
+                    frontier.insert(enclosing);
+                }
+            }
+            read.insert(id, view);
+        }
+    }
+    let clusters = PlaceClusters::load_of(store, &places).await?;
+    Ok((clusters, read.into_values().collect()))
 }
 
 /// Sets a place's privacy restrictions (GEDCOM `RESN` — data-model §6). A merged member restricted

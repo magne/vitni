@@ -698,6 +698,38 @@ impl Store {
         }
     }
 
+    /// Every member of each `kind` cluster that holds one of `ids`, as member or root, with its root,
+    /// ordered by member (ADR 0039 §4) — [`Self::identity_links`] for the clusters a page of records
+    /// reads.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read failure, or [`DbError::Unsupported`] when no backend is compiled in.
+    #[cfg_attr(
+        not(any(feature = "sqlite", feature = "postgres")),
+        expect(clippy::unused_async, reason = "neutral async API; no backend compiled in")
+    )]
+    pub async fn identity_links_of(
+        &self,
+        kind: vitni_core::matching::MatchableKind,
+        ids: &[String],
+    ) -> Result<Vec<IdentityLink>, DbError> {
+        #[cfg(any(feature = "sqlite", feature = "postgres"))]
+        {
+            match &self.backend {
+                #[cfg(feature = "sqlite")]
+                Backend::Sqlite(s) => s.identity_links_of(kind, ids).await,
+                #[cfg(feature = "postgres")]
+                Backend::Postgres(p) => p.identity_links_of(kind, ids).await,
+            }
+        }
+        #[cfg(not(any(feature = "sqlite", feature = "postgres")))]
+        {
+            let _ = (kind, ids);
+            Err(DbError::Unsupported("no backend compiled in".to_owned()))
+        }
+    }
+
     /// Every place a succession names `to`, from `place_id`'s perspective as a `from` endpoint —
     /// "what did this place become?" (ADR 0026 §4), via the cross-aggregate succession index.
     ///

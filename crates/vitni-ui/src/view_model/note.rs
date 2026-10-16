@@ -90,7 +90,7 @@ fn note_title(text: Option<&str>) -> Option<String> {
 }
 
 /// Builds a generic list row from a [`NoteSummary`](vitni_app::NoteSummary): a title from the
-/// text, a `type · language · N references` subtitle, and a 🗒 avatar.
+/// text, a `type · language` subtitle, and a 🗒 avatar.
 #[must_use]
 pub fn note_row(summary: &vitni_app::NoteSummary, loc: &Localizer) -> RowVm {
     let title = note_title(summary.text.as_deref()).unwrap_or_else(|| summary.human_id.clone());
@@ -100,9 +100,6 @@ pub fn note_row(summary: &vitni_app::NoteSummary, loc: &Localizer) -> RowVm {
     }
     if let Some(language) = &summary.language {
         parts.push(language.clone());
-    }
-    if !summary.references.is_empty() {
-        parts.push(loc.reference_count(summary.references.len()));
     }
     let subtitle = (!parts.is_empty()).then(|| parts.join(" · "));
     RowVm {
@@ -397,6 +394,35 @@ mod note_draft_tests {
         assert_eq!(edits.len(), 2);
         assert!(matches!(&edits[0], NoteEdit::SetType { .. }));
         assert!(matches!(&edits[1], NoteEdit::SetHumanId { new_human_id, .. } if new_human_id.is_none()));
+    }
+    #[test]
+    fn the_row_subtitle_reads_the_type_and_language_never_a_reference_count() {
+        let loc = crate::i18n::Localizer::for_test("en");
+        let summary = vitni_app::NoteSummary {
+            human_id: "N0001".to_owned(),
+            id: "n0001-uuid".to_owned(),
+            note_type: Some(vitni_app::NoteType::Research),
+            text: Some("Immigration research".to_owned()),
+            media_type: None,
+            language: Some("en".to_owned()),
+            translations: Vec::new(),
+            references: vec![vitni_app::UsingRecordRef {
+                kind: vitni_app::UsingKind::Person,
+                human_id: "I0001".to_owned(),
+                id: "i0001-uuid".to_owned(),
+                label: None,
+            }],
+            tags: Vec::new(),
+            restrictions: std::collections::BTreeSet::new(),
+            merged: Vec::new(),
+            claim_owners: std::collections::BTreeMap::new(),
+        };
+        let row = super::note_row(&summary, &loc);
+        assert_eq!(
+            row.subtitle.as_deref(),
+            Some("Research · en"),
+            "a listed note carries no references (#673), so the row never counts them"
+        );
     }
 }
 

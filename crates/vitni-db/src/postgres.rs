@@ -816,6 +816,15 @@ impl PostgresStore {
         crate::identity_links::postgres::links(&self.pool, kind).await
     }
 
+    /// Every member of each `kind` cluster that holds one of `ids`, with its root (ADR 0039 §4).
+    pub(crate) async fn identity_links_of(
+        &self,
+        kind: vitni_core::matching::MatchableKind,
+        ids: &[String],
+    ) -> Result<Vec<crate::store::IdentityLink>, DbError> {
+        crate::identity_links::postgres::links_of(&self.pool, kind, ids).await
+    }
+
     /// Every place with a geometry overlapping the given bounding box (ADR 0024 §3), via the GiST-backed
     /// geometry index.
     pub(crate) async fn places_in_bbox(
