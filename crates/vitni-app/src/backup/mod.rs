@@ -369,7 +369,7 @@ fn check_target_dir(dir: &Path) -> Result<(), BackupError> {
 /// Reads the manifest, puts it through the upgrade chain, and checks every member against it.
 fn check_archive(archive: &mut ArchiveReader) -> Result<CheckedArchive, BackupError> {
     let (format_version, chain, manifest) = read_backup_manifest(archive)?;
-    for name in archive.names() {
+    for name in archive.names()? {
         if name != MANIFEST && !manifest.members.contains_key(&name) {
             return Err(BackupError::UnexpectedMember(name));
         }

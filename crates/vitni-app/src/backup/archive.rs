@@ -139,8 +139,17 @@ impl ArchiveReader {
     }
 
     /// Every member name, in archive order.
-    pub(crate) fn names(&self) -> Vec<String> {
-        self.zip.file_names().map(str::to_owned).collect()
+    ///
+    /// # Errors
+    ///
+    /// [`BackupError::Archive`] if a member's name cannot be read.
+    pub(crate) fn names(&self) -> Result<Vec<String>, BackupError> {
+        let mut names = Vec::new();
+        for name in self.zip.file_names() {
+            let name = name.map_err(|e| io_error("reading the member names", &e))?;
+            names.push(name.into_owned());
+        }
+        Ok(names)
     }
 
     /// Whether the archive holds member `name`.
