@@ -43,7 +43,8 @@
 //! - `check` — run every static check above (`i18n-check`, `css-check`, `input-guard`,
 //!   `licence-check`, `icons --check`, `adr-index`, `backup-guard`, `fixture-guard`, `match-eval`) in one
 //!   pass, reporting all failures rather than stopping at the first.
-//! - `adr-index` — verify `docs/adr/README.md` has exactly one row per ADR and links no missing file.
+//! - `adr-index` — verify `docs/adr/README.md` has exactly one row per ADR, links no missing file,
+//!   and states every relation at both ends.
 //! - `labels` — reconcile GitHub's issue labels with `.github/labels.toml` (`--apply` to write).
 //! - `package` — assemble a Linux release tarball (binaries + signed plugin fleet + launcher) under
 //!   `target/dist` (Phase 11 workstream C, ADR 0014 §7).

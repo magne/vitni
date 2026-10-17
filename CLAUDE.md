@@ -29,8 +29,10 @@ These docs are the source of truth; read them before changing the core or its wi
   `DnaMatch`, `ResearchNote` (ADR 0028), and `ImportRun` (ADR 0037); `for_each_aggregate!` in
   `crates/vitni-app/src/aggregates.rs` is the registry that lists them.
 - **`docs/adr/` — architecture decisions. ADRs are immutable**: never edit an accepted ADR;
-  supersede it with a new one. Start from **`docs/adr/README.md`**, the index (one-line decision and
-  keywords per ADR); a new ADR adds its row there (`cargo xtask adr-index` checks it).
+  supersede it with a new one. Start from **`docs/adr/README.md`**, the index (one-line decision,
+  relations — which ADRs it supersedes, amends or extends, and which change it — and keywords per
+  ADR); a new ADR adds its row there, and each relation's inverse to the earlier ADR's row
+  (`cargo xtask adr-index` checks both).
 - **`docs/roadmap.md` (+ `roadmap.html`) owns phase/progress state** — read it rather than
   tracking progress here. **Open work lives in GitHub Issues**, and `docs/decisions.md` records
   deliberate non-tasks, so check there before "fixing" something. Completed work is in
