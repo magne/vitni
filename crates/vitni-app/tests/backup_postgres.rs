@@ -194,7 +194,7 @@ fn with_colliding_media(from: &Path, to: &Path) {
         let mut file = archive.by_index(index).expect("member");
         let mut bytes = Vec::new();
         file.read_to_end(&mut bytes).expect("read");
-        members.push((file.name().to_owned(), bytes));
+        members.push((file.name().expect("name").into_owned(), bytes));
     }
     let extra = [
         ("media/a".to_owned(), b"one".to_vec()),
