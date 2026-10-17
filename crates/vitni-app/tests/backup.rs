@@ -128,7 +128,7 @@ fn members(path: &Path) -> Vec<(String, Vec<u8>)> {
         let mut file = archive.by_index(index).expect("member");
         let mut bytes = Vec::new();
         file.read_to_end(&mut bytes).expect("read member");
-        out.push((file.name().to_owned(), bytes));
+        out.push((file.name().expect("member name").into_owned(), bytes));
     }
     out
 }
