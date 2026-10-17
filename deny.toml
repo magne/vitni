@@ -22,11 +22,13 @@ ignore = [
     "RUSTSEC-2024-0420",
     "RUSTSEC-2024-0436", # paste (unmaintained)
     "RUSTSEC-2025-0057", # fxhash (unmaintained)
-    # async-std (discontinued, NOT vulnerable). Pulled by `dark-light` 2.0.0, the leaf crate
-    # `vitni-ui-dioxus` uses for System theme detection; on Linux it hardcodes the
-    # `ashpd`/async-std path with no feature to swap and no maintained upgrade. Re-evaluate when
-    # `dark-light` migrates off async-std or is replaced.
-    "RUSTSEC-2025-0052", # async-std (discontinued)
+    # zvariant and its zbus_names/zvariant_derive companions (unmaintained, NOT vulnerable: merged
+    # into zbus 6 as its `wire` module). Pulled by zbus 5 through `dark-light` 3.0.0, the leaf crate
+    # `vitni-ui-dioxus` uses for System theme detection over D-Bus; its latest release requires
+    # zbus ^5.19, so there is no upgrade. Re-evaluate when `dark-light` moves to zbus 6 or is replaced.
+    "RUSTSEC-2026-0370", # zvariant
+    "RUSTSEC-2026-0371", # zbus_names
+    "RUSTSEC-2026-0372", # zvariant_derive
 ]
 
 [licenses]
