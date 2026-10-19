@@ -8,7 +8,7 @@ use vitni_app::{
     AppDefaults, AppError, DateParts, FilterOp, FilterValue, ListCell, ListFilter, ListPage, ListQuery, ListQueryError,
     ListSort, ListWindow, ListedKind, MutationMeta, NewPerson, OperatorConfig, PersonNameParts, Provenance, Session,
     SortDirection, Workspace, WorkspaceDefaults, assert_sex, create_person, create_tag, gregorian_date,
-    list_persons_page, list_places_page, query_list, record_birth, tag_person,
+    list_persons_page, list_places_page, list_tags_query, query_list, record_birth, tag_person,
 };
 use vitni_core::date::GenealogicalDate;
 use vitni_core::enums::{EvidenceLevel, Sex};
@@ -341,4 +341,35 @@ fn a_query_serializes_by_column_and_operator_name() {
     assert_eq!(serde_json::from_value::<ListQuery>(json).expect("deserialize"), query);
     let bare: ListQuery = serde_json::from_value(serde_json::json!({ "kind": "dna-test" })).expect("defaults");
     assert_eq!(bare, ListQuery::new(ListedKind::DnaTest));
+}
+
+#[tokio::test]
+async fn a_tag_query_runs_over_the_whole_vocabulary_in_its_order() {
+    let (ws, _dir) = workspace().await;
+    for name in ["Verified", "To verify", "Unsure"] {
+        create_tag(&ws, &session(), name.to_owned(), Provenance::default(), &[])
+            .await
+            .expect("tag");
+    }
+    let query = ListQuery {
+        search: "VER".to_owned(),
+        sort: Some(ListSort {
+            column: "name".to_owned(),
+            direction: SortDirection::Descending,
+        }),
+        ..ListQuery::new(ListedKind::Tag)
+    };
+
+    let names: Vec<_> = list_tags_query(&ws, &query)
+        .await
+        .expect("tags")
+        .into_iter()
+        .map(|tag| tag.name.unwrap_or_default())
+        .collect();
+
+    assert_eq!(names, ["Verified", "To verify"]);
+    assert!(matches!(
+        list_tags_query(&ws, &persons(Vec::new())).await,
+        Err(AppError::ListQuery(ListQueryError::KindMismatch { .. }))
+    ));
 }

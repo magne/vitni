@@ -262,8 +262,8 @@ pub use staging::{
     StagedSource, StagedTag, WriteScope, commit_import, plan_import,
 };
 pub use tag::{
-    TagSummary, create_tag, list_tags, rename_tag, set_restrictions as set_tag_restrictions, set_tag_color,
-    set_tag_priority, show_tag,
+    TagSummary, create_tag, list_tags, list_tags_query, rename_tag, set_restrictions as set_tag_restrictions,
+    set_tag_color, set_tag_priority, show_tag,
 };
 pub use tag_change_set::{TagChangeSet, TagTarget, commit_tag_change_set};
 pub use tag_usage::TagUsageGroup;
@@ -324,7 +324,7 @@ pub use vitni_core::temporal::resolve_as_of;
 pub use vitni_core::text::{Attribute, ExternalId, Rect, Url};
 pub use vitni_db::{
     ColumnType, DbError, ListCell, ListColumn, ListCursor, ListPage, ListResult, ListRow, ListWindow, ListedKind,
-    SortDirection, SortKey, UnreadableEvent,
+    SortDirection, SortKey, UnreadableEvent, choice_name,
 };
 pub use workspace::{
     BackupSettings, IdFormatLayers, LayerKind, LocaleOverrides, OperatorRecord, PluginPreferences, PreferenceLayers,
