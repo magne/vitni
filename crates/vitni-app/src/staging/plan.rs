@@ -32,7 +32,7 @@ use crate::dto::AggRef;
 use crate::error::AppError;
 use crate::identity::PersonClusters;
 use crate::origin_gate::DryRun;
-use crate::person::{build_name, render_name};
+use crate::person::build_name;
 use crate::session::Session;
 use crate::similar::SimilarRecord;
 use crate::staging::candidates;
@@ -1204,7 +1204,7 @@ pub(crate) fn staged_label(fields: &EntityFields) -> String {
         EntityFields::Person(person) => person
             .names
             .first()
-            .map(|name| render_name(&build_name(name.clone())))
+            .map(|name| build_name(name.clone()).display())
             .unwrap_or_default(),
         EntityFields::Place(place) => place.name.clone(),
         EntityFields::Source(source) => source.title.clone().unwrap_or_default(),

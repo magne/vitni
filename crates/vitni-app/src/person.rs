@@ -1860,7 +1860,7 @@ struct PrimaryNameFields {
 fn primary_name_fields(primary: Option<&PersonName>) -> PrimaryNameFields {
     let primary_surname = primary.and_then(|name| name.surnames.first());
     PrimaryNameFields {
-        display_name: primary.map(render_name),
+        display_name: primary.map(PersonName::display),
         given: primary.and_then(|name| name.given.clone()),
         surname: primary_surname.map(|element| element.surname.clone()),
         surname_prefix: primary_surname.and_then(|element| element.prefix.clone()),
@@ -1967,16 +1967,4 @@ fn person_attachments(
         })
         .collect();
     (citations, media, notes)
-}
-
-/// Renders a name as `given primary-surname(s)` for display.
-pub(crate) fn render_name(name: &PersonName) -> String {
-    let mut parts: Vec<&str> = Vec::new();
-    if let Some(given) = name.given.as_deref() {
-        parts.push(given);
-    }
-    for surname in &name.surnames {
-        parts.push(&surname.surname);
-    }
-    parts.join(" ")
 }

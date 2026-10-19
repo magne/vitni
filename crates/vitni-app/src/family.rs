@@ -27,7 +27,6 @@ use crate::dto::{AggRef, AttachedRef, CitationRef, MediaLookup, MediaRefSummary}
 use crate::error::AppError;
 use crate::event::EventSummary;
 use crate::identity::{self, EventClusters, FamilyClusters, IdentityDecision, PairDecision, PersonClusters};
-use crate::person::render_name;
 use crate::session::Session;
 use crate::use_case::{self, MediaRefInput, MutationMeta, Provenance, resolve_media_id, resolve_note_id};
 use crate::workspace::Workspace;
@@ -987,7 +986,7 @@ pub async fn list_family_rows(workspace: &Workspace) -> Result<Vec<FamilyRow>, A
                 id,
                 FamilyPartnerRow {
                     human_id: human_id.as_str().to_owned(),
-                    name: view.names().first().copied().map(render_name),
+                    name: view.names().first().map(|name| name.display()),
                 },
             );
         }
