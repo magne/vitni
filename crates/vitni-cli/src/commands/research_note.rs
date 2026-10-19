@@ -68,7 +68,8 @@ pub enum ResearchNoteCmd {
         /// The research note's human id (e.g. `A0001`).
         human_id: String,
     },
-    /// List the research notes by human id, all of them or one window.
+    /// List the research notes, narrowed by `--search` and `--filter`, ordered by `--sort` or else by human id;
+    /// all of them or one window.
     List(ListArgs),
 }
 

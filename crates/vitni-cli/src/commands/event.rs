@@ -115,7 +115,8 @@ pub enum EventCmd {
         /// The event's human id (e.g. `E0001`).
         human_id: String,
     },
-    /// List the events by human id, all of them or one window.
+    /// List the events, narrowed by `--search` and `--filter`, ordered by `--sort` or else by human id;
+    /// all of them or one window.
     List(ListArgs),
 }
 

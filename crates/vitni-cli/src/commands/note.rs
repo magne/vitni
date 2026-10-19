@@ -66,7 +66,8 @@ pub enum NoteCmd {
         /// The note's human id (e.g. `N0001`).
         human_id: String,
     },
-    /// List the notes by human id, all of them or one window.
+    /// List the notes, narrowed by `--search` and `--filter`, ordered by `--sort` or else by human id;
+    /// all of them or one window.
     List(ListArgs),
 }
 

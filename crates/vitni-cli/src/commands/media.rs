@@ -112,7 +112,8 @@ pub enum MediaCmd {
         /// The media's human id (e.g. `O0001`).
         human_id: String,
     },
-    /// List the media objects by human id, all of them or one window.
+    /// List the media objects, narrowed by `--search` and `--filter`, ordered by `--sort` or else by human id;
+    /// all of them or one window.
     List(ListArgs),
 }
 

@@ -3,7 +3,7 @@
 list-no-match = Nothing matches the query.
 
 ## ListQueryError (wrapped via AppError::ListQuery)
-err-list-unknown-column = the { $kind } list has no column `{ $column }`
+err-list-unknown-column = the { $kind } list has no column `{ $column }` (its columns: { $columns })
 err-list-unknown-operator = the `{ $column }` filter names no operator `{ $op }`
 err-list-unsupported-operator = the `{ $column }` column takes no `{ $op }` filter
 err-list-wrong-value = the `{ $column }:{ $op }` filter needs a value of another kind

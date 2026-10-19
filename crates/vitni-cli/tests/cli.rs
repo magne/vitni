@@ -1596,7 +1596,10 @@ fn a_list_filter_the_catalogue_cannot_evaluate_fails_naming_the_clause() {
     let dir = TempDir::new().unwrap();
     init(dir.path());
     for (filter, named) in [
-        ("nickname:is:x", "nickname"),
+        (
+            "nickname:is:x",
+            "its columns: name, given, surname, sex, birth, death, tags",
+        ),
         ("birth:contains:17", "contains"),
         ("birth:near:1800", "near"),
         ("birth:before:soon", "before"),

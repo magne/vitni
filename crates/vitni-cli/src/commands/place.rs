@@ -153,7 +153,8 @@ pub enum PlaceCmd {
         /// The place's human id (e.g. `P0001`).
         human_id: String,
     },
-    /// List the places by human id, all of them or one window.
+    /// List the places, narrowed by `--search` and `--filter`, ordered by `--sort` or else by human id;
+    /// all of them or one window.
     List(ListArgs),
 }
 

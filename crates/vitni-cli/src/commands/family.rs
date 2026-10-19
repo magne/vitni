@@ -59,7 +59,8 @@ pub enum FamilyCmd {
         /// The family's human id (e.g. `F0001`).
         human_id: String,
     },
-    /// List the families by human id, all of them or one window.
+    /// List the families, narrowed by `--search` and `--filter`, ordered by `--sort` or else by human id;
+    /// all of them or one window.
     List(ListArgs),
 }
 

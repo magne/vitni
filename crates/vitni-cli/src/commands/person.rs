@@ -149,7 +149,8 @@ pub enum PersonCmd {
         /// The person's human id (e.g. `I0001`).
         human_id: String,
     },
-    /// List the persons by human id, all of them or one window.
+    /// List the persons, narrowed by `--search` and `--filter`, ordered by `--sort` or else by human id;
+    /// all of them or one window.
     List(ListArgs),
 }
 

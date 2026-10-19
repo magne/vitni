@@ -6,12 +6,16 @@ use super::{ListQueryError, Localizer, fl};
 impl Localizer {
     pub(super) fn list_query_error(&self, error: &ListQueryError) -> String {
         match error {
-            ListQueryError::UnknownColumn { kind, column } => fl!(
-                self.loader,
-                "err-list-unknown-column",
-                kind = kind.as_str(),
-                column = column.clone()
-            ),
+            ListQueryError::UnknownColumn { kind, column } => {
+                let columns: Vec<&str> = kind.columns().iter().map(|column| column.id).collect();
+                fl!(
+                    self.loader,
+                    "err-list-unknown-column",
+                    kind = kind.as_str(),
+                    column = column.clone(),
+                    columns = columns.join(", ")
+                )
+            }
             ListQueryError::UnknownOperator { column, op } => fl!(
                 self.loader,
                 "err-list-unknown-operator",

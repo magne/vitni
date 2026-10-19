@@ -126,7 +126,8 @@ pub enum CitationCmd {
         /// The citation's human id (e.g. `C0001`).
         human_id: String,
     },
-    /// List the citations by human id, all of them or one window.
+    /// List the citations, narrowed by `--search` and `--filter`, ordered by `--sort` or else by human id;
+    /// all of them or one window.
     List(ListArgs),
 }
 

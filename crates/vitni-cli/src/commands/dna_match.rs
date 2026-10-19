@@ -126,7 +126,8 @@ pub enum DnaMatchCmd {
         /// The match's human id (e.g. `X0001`).
         human_id: String,
     },
-    /// List the DNA matches by human id, all of them or one window.
+    /// List the DNA matches, narrowed by `--search` and `--filter`, ordered by `--sort` or else by human id;
+    /// all of them or one window.
     List(ListArgs),
 }
 

@@ -125,7 +125,8 @@ pub enum SourceCmd {
         /// The source's human id (e.g. `S0001`).
         human_id: String,
     },
-    /// List the sources by human id, all of them or one window.
+    /// List the sources, narrowed by `--search` and `--filter`, ordered by `--sort` or else by human id;
+    /// all of them or one window.
     List(ListArgs),
 }
 

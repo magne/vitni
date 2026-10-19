@@ -108,7 +108,8 @@ pub enum RepositoryCmd {
         /// The repository's human id (e.g. `R0001`).
         human_id: String,
     },
-    /// List the repositories by human id, all of them or one window.
+    /// List the repositories, narrowed by `--search` and `--filter`, ordered by `--sort` or else by human id;
+    /// all of them or one window.
     List(ListArgs),
 }
 

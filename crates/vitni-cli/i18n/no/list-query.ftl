@@ -3,7 +3,7 @@
 list-no-match = Ingenting passer søket.
 
 ## ListQueryError (wrapped via AppError::ListQuery)
-err-list-unknown-column = { $kind }-lista har ingen kolonne `{ $column }`
+err-list-unknown-column = { $kind }-lista har ingen kolonne `{ $column }` (kolonnene: { $columns })
 err-list-unknown-operator = filteret på `{ $column }` har ingen operator `{ $op }`
 err-list-unsupported-operator = kolonnen `{ $column }` tar ikke filteret `{ $op }`
 err-list-wrong-value = filteret `{ $column }:{ $op }` trenger en annen slags verdi
