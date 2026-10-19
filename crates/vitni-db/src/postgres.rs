@@ -146,15 +146,39 @@ macro_rules! postgres_side_indexes {
         $queries.push(Box::new(crate::identity_links::postgres::IdentityLinksQuery::<
             vitni_core::repository::RepositoryView,
         >::new($pool.clone())));
+        $queries.push(Box::new(crate::record_links::postgres::RecordLinksQuery::<
+            vitni_core::repository::RepositoryView,
+        >::new($pool.clone())));
     };
     (note, $pool:expr, $queries:ident) => {
         $queries.push(Box::new(crate::identity_links::postgres::IdentityLinksQuery::<
+            vitni_core::note::NoteView,
+        >::new($pool.clone())));
+        $queries.push(Box::new(crate::record_links::postgres::RecordLinksQuery::<
             vitni_core::note::NoteView,
         >::new($pool.clone())));
     };
     (media, $pool:expr, $queries:ident) => {
         $queries.push(Box::new(crate::identity_links::postgres::IdentityLinksQuery::<
             vitni_core::media::MediaView,
+        >::new($pool.clone())));
+        $queries.push(Box::new(crate::record_links::postgres::RecordLinksQuery::<
+            vitni_core::media::MediaView,
+        >::new($pool.clone())));
+    };
+    (dna_test, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::record_links::postgres::RecordLinksQuery::<
+            vitni_core::dna_test::DnaTestView,
+        >::new($pool.clone())));
+    };
+    (dna_match, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::record_links::postgres::RecordLinksQuery::<
+            vitni_core::dna_match::DnaMatchView,
+        >::new($pool.clone())));
+    };
+    (research_note, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::record_links::postgres::RecordLinksQuery::<
+            vitni_core::research_note::ResearchNoteView,
         >::new($pool.clone())));
     };
     ($other:ident, $pool:expr, $queries:ident) => {};

@@ -8,10 +8,16 @@ use async_trait::async_trait;
 use cqrs_es::{EventEnvelope, Query};
 use sqlx::{Pool, Row, Sqlite};
 use vitni_core::citation::CitationView;
+use vitni_core::dna_match::DnaMatchView;
+use vitni_core::dna_test::DnaTestView;
 use vitni_core::event::EventView;
 use vitni_core::family::FamilyView;
+use vitni_core::media::MediaView;
+use vitni_core::note::NoteView;
 use vitni_core::person::PersonView;
 use vitni_core::place::PlaceView;
+use vitni_core::repository::RepositoryView;
+use vitni_core::research_note::ResearchNoteView;
 use vitni_core::source::SourceView;
 
 use super::{LinkingRecord, RECORD_LINKS_TABLE, RecordLink};
@@ -51,13 +57,7 @@ pub(crate) async fn create_filled(pool: &Pool<Sqlite>) -> Result<(), DbError> {
     if existed {
         return Ok(());
     }
-    let mut links = Vec::new();
-    links.extend(links_of::<PersonView>(pool).await?);
-    links.extend(links_of::<FamilyView>(pool).await?);
-    links.extend(links_of::<EventView>(pool).await?);
-    links.extend(links_of::<PlaceView>(pool).await?);
-    links.extend(links_of::<SourceView>(pool).await?);
-    links.extend(links_of::<CitationView>(pool).await?);
+    let links = all_links(pool).await?;
     let mut tx = pool
         .begin()
         .await
@@ -72,6 +72,24 @@ pub(crate) async fn create_filled(pool: &Pool<Sqlite>) -> Result<(), DbError> {
         insert_link(&mut tx, *relation, source, target).await?;
     }
     tx.commit().await.map_err(backend("committing the record links"))
+}
+
+/// Every `(relation, source, target)` the projections of every linking kind hold.
+async fn all_links(pool: &Pool<Sqlite>) -> Result<Vec<(RecordLink, String, String)>, DbError> {
+    let mut links = Vec::new();
+    links.extend(links_of::<PersonView>(pool).await?);
+    links.extend(links_of::<FamilyView>(pool).await?);
+    links.extend(links_of::<EventView>(pool).await?);
+    links.extend(links_of::<PlaceView>(pool).await?);
+    links.extend(links_of::<SourceView>(pool).await?);
+    links.extend(links_of::<CitationView>(pool).await?);
+    links.extend(links_of::<RepositoryView>(pool).await?);
+    links.extend(links_of::<NoteView>(pool).await?);
+    links.extend(links_of::<MediaView>(pool).await?);
+    links.extend(links_of::<ResearchNoteView>(pool).await?);
+    links.extend(links_of::<DnaTestView>(pool).await?);
+    links.extend(links_of::<DnaMatchView>(pool).await?);
+    Ok(links)
 }
 
 /// Every `(relation, source, target)` the projections of one kind hold.
@@ -145,7 +163,10 @@ async fn reindex_source<V: LinkingRecord>(pool: &Pool<Sqlite>, source: &str) -> 
         insert_links(&mut tx, source, &view).await?;
     }
     for (relation, target) in &dropped {
-        crate::match_keys::sqlite::mark_dirty(&mut tx, relation.target_kind(), target).await?;
+        let Some(kind) = relation.rematched_kind() else {
+            continue;
+        };
+        crate::match_keys::sqlite::mark_dirty(&mut tx, kind, target).await?;
     }
     tx.commit().await.map_err(backend("committing the record links"))
 }
@@ -182,37 +203,24 @@ async fn insert_link(
 }
 
 /// Rebuilds the whole index from the (already-rebuilt) projections — the maintenance path
-/// `Store::rebuild_projections` drives (ADR 0010), through the same inserts as the live path.
+/// `Store::rebuild_projections` drives (ADR 0010), through the same inserts as the live path. The table
+/// is cleared whole, not per relation: a `tagged` row may come from any of the tag-bearing kinds.
 ///
 /// # Errors
 ///
 /// A [`DbError`] if reading a projection or writing the index fails.
 pub(crate) async fn rebuild_index(pool: &Pool<Sqlite>) -> Result<(), DbError> {
-    rebuild_kind::<PersonView>(pool).await?;
-    rebuild_kind::<FamilyView>(pool).await?;
-    rebuild_kind::<EventView>(pool).await?;
-    rebuild_kind::<PlaceView>(pool).await?;
-    rebuild_kind::<SourceView>(pool).await?;
-    rebuild_kind::<CitationView>(pool).await
-}
-
-/// Rebuilds one kind's references from its projection.
-async fn rebuild_kind<V: LinkingRecord>(pool: &Pool<Sqlite>) -> Result<(), DbError> {
-    let views: Vec<V> = sqlite_query::list_views(pool, V::VIEW_TABLE).await?;
+    let links = all_links(pool).await?;
     let mut tx = pool
         .begin()
         .await
         .map_err(backend("opening a record links transaction"))?;
-    for relation in V::RELATIONS {
-        sqlx::query(&format!("DELETE FROM {RECORD_LINKS_TABLE} WHERE relation = ?"))
-            .bind(relation.as_str())
-            .execute(&mut *tx)
-            .await
-            .map_err(backend("clearing the record links"))?;
-    }
-    for view in &views {
-        let Some(source) = view.linking_id() else { continue };
-        insert_links(&mut tx, &source, view).await?;
+    sqlx::query(&format!("DELETE FROM {RECORD_LINKS_TABLE}"))
+        .execute(&mut *tx)
+        .await
+        .map_err(backend("clearing the record links"))?;
+    for (relation, source, target) in &links {
+        insert_link(&mut tx, *relation, source, target).await?;
     }
     tx.commit().await.map_err(backend("committing the record links"))
 }

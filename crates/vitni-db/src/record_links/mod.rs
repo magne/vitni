@@ -19,16 +19,25 @@ pub(crate) mod sqlite;
 use cqrs_es::Aggregate;
 use serde::de::DeserializeOwned;
 use vitni_core::citation::{CitationEvent, CitationEventBody, CitationState, CitationView};
+use vitni_core::dna_match::{DnaMatchEvent, DnaMatchEventBody, DnaMatchState, DnaMatchView};
+use vitni_core::dna_test::{DnaTestEvent, DnaTestEventBody, DnaTestState, DnaTestView};
 use vitni_core::event::{EventEvent, EventEventBody, EventState, EventView};
 use vitni_core::family::{FamilyEvent, FamilyEventBody, FamilyState, FamilyView};
+use vitni_core::ids::TagId;
 use vitni_core::matching::MatchableKind;
+use vitni_core::media::{MediaEvent, MediaEventBody, MediaState, MediaView};
+use vitni_core::note::{NoteEvent, NoteEventBody, NoteState, NoteView};
 use vitni_core::person::event::{PersonEvent, PersonEventBody};
 use vitni_core::person::{PersonState, PersonView};
 use vitni_core::place::{PlaceEvent, PlaceEventBody, PlaceState, PlaceView};
+use vitni_core::repository::{RepositoryEvent, RepositoryEventBody, RepositoryState, RepositoryView};
+use vitni_core::research_note::{ResearchNoteEvent, ResearchNoteEventBody, ResearchNoteState, ResearchNoteView};
 use vitni_core::source::{SourceEvent, SourceEventBody, SourceState, SourceView};
 
 use crate::tables::{
-    CITATION_VIEW_TABLE, EVENT_VIEW_TABLE, FAMILY_VIEW_TABLE, PERSON_VIEW_TABLE, PLACE_VIEW_TABLE, SOURCE_VIEW_TABLE,
+    CITATION_VIEW_TABLE, DNA_MATCH_VIEW_TABLE, DNA_TEST_VIEW_TABLE, EVENT_VIEW_TABLE, FAMILY_VIEW_TABLE,
+    MEDIA_VIEW_TABLE, NOTE_VIEW_TABLE, PERSON_VIEW_TABLE, PLACE_VIEW_TABLE, REPOSITORY_VIEW_TABLE,
+    RESEARCH_NOTE_VIEW_TABLE, SOURCE_VIEW_TABLE,
 };
 
 /// The index table.
@@ -53,17 +62,25 @@ pub enum RecordLink {
     SourceRepository,
     /// A citation (source) points into the source (target).
     CitationSource,
+    /// A record of any tag-bearing kind (source) carries the tag (target) — ADR 0052 §6.
+    Tagged,
+    /// A DNA test (source) was taken by the person (target).
+    DnaTestPerson,
+    /// A DNA match (source) compares the DNA test (target), one of its two.
+    DnaMatchTest,
 }
 
 impl RecordLink {
-    /// The kind of record the relation points at.
-    pub(crate) const fn target_kind(self) -> MatchableKind {
+    /// The matchable kind whose match profile reads the relation from its target's side, so a dropped
+    /// reference marks the target for rematching; `None` where no target profile reads it.
+    pub(crate) const fn rematched_kind(self) -> Option<MatchableKind> {
         match self {
-            Self::FamilyPartner | Self::FamilyChild => MatchableKind::Person,
-            Self::FamilyEvent | Self::Participation => MatchableKind::Event,
-            Self::EventPlace | Self::PlaceEnclosure => MatchableKind::Place,
-            Self::SourceRepository => MatchableKind::Repository,
-            Self::CitationSource => MatchableKind::Source,
+            Self::FamilyPartner | Self::FamilyChild => Some(MatchableKind::Person),
+            Self::FamilyEvent | Self::Participation => Some(MatchableKind::Event),
+            Self::EventPlace | Self::PlaceEnclosure => Some(MatchableKind::Place),
+            Self::SourceRepository => Some(MatchableKind::Repository),
+            Self::CitationSource => Some(MatchableKind::Source),
+            Self::Tagged | Self::DnaTestPerson | Self::DnaMatchTest => None,
         }
     }
 
@@ -78,6 +95,9 @@ impl RecordLink {
             Self::PlaceEnclosure => "place-enclosure",
             Self::SourceRepository => "source-repository",
             Self::CitationSource => "citation-source",
+            Self::Tagged => "tagged",
+            Self::DnaTestPerson => "dna-test-person",
+            Self::DnaMatchTest => "dna-match-test",
         }
     }
 }
@@ -104,11 +124,16 @@ pub(crate) trait LinkingRecord: DeserializeOwned + Send + Sync + 'static {
     fn changes_links(event: &<Self::State as Aggregate>::Event) -> bool;
 }
 
+/// The `tagged` references of a record carrying `tags`.
+fn tag_links(tags: Vec<TagId>) -> impl Iterator<Item = (RecordLink, String)> {
+    tags.into_iter().map(|tag| (RecordLink::Tagged, tag.to_string()))
+}
+
 impl LinkingRecord for PersonView {
     type State = PersonState;
 
     const VIEW_TABLE: &'static str = PERSON_VIEW_TABLE;
-    const RELATIONS: &'static [RecordLink] = &[RecordLink::Participation];
+    const RELATIONS: &'static [RecordLink] = &[RecordLink::Participation, RecordLink::Tagged];
 
     fn linking_id(&self) -> Option<String> {
         self.person_id().map(|id| id.to_string())
@@ -119,6 +144,7 @@ impl LinkingRecord for PersonView {
         for participation in self.participations() {
             links.push((RecordLink::Participation, participation.event_id.to_string()));
         }
+        links.extend(tag_links(self.tags()));
         links
     }
 
@@ -126,7 +152,9 @@ impl LinkingRecord for PersonView {
         match &event.body {
             PersonEventBody::ParticipationAsserted { .. }
             | PersonEventBody::AssertionRetracted { .. }
-            | PersonEventBody::AssertionSuperseded { .. } => true,
+            | PersonEventBody::AssertionSuperseded { .. }
+            | PersonEventBody::Tagged { .. }
+            | PersonEventBody::Untagged { .. } => true,
             PersonEventBody::PersonCreated { .. }
             | PersonEventBody::NameAsserted { .. }
             | PersonEventBody::SexAsserted { .. }
@@ -136,8 +164,6 @@ impl LinkingRecord for PersonView {
             | PersonEventBody::NoteAttached { .. }
             | PersonEventBody::CitationAdded { .. }
             | PersonEventBody::ExternalIdAdded { .. }
-            | PersonEventBody::Tagged { .. }
-            | PersonEventBody::Untagged { .. }
             | PersonEventBody::RestrictionsChanged { .. }
             | PersonEventBody::HumanIdChanged { .. }
             | PersonEventBody::PersonsMerged { .. }
@@ -154,6 +180,7 @@ impl LinkingRecord for FamilyView {
         RecordLink::FamilyPartner,
         RecordLink::FamilyChild,
         RecordLink::FamilyEvent,
+        RecordLink::Tagged,
     ];
 
     fn linking_id(&self) -> Option<String> {
@@ -171,6 +198,7 @@ impl LinkingRecord for FamilyView {
         for event in self.linked_events() {
             links.push((RecordLink::FamilyEvent, event.to_string()));
         }
+        links.extend(tag_links(self.tags()));
         links
     }
 
@@ -182,15 +210,15 @@ impl LinkingRecord for FamilyView {
             | FamilyEventBody::ChildRemoved { .. }
             | FamilyEventBody::FamilyEventLinked { .. }
             | FamilyEventBody::AssertionRetracted { .. }
-            | FamilyEventBody::AssertionSuperseded { .. } => true,
+            | FamilyEventBody::AssertionSuperseded { .. }
+            | FamilyEventBody::Tagged { .. }
+            | FamilyEventBody::Untagged { .. } => true,
             FamilyEventBody::FamilyCreated { .. }
             | FamilyEventBody::ChildRelationshipAsserted { .. }
             | FamilyEventBody::RestrictionsChanged { .. }
             | FamilyEventBody::CitationAdded { .. }
             | FamilyEventBody::MediaAttached { .. }
             | FamilyEventBody::NoteAttached { .. }
-            | FamilyEventBody::Tagged { .. }
-            | FamilyEventBody::Untagged { .. }
             | FamilyEventBody::ExternalIdAdded { .. }
             | FamilyEventBody::HumanIdChanged { .. }
             | FamilyEventBody::FamiliesMerged { .. }
@@ -203,24 +231,28 @@ impl LinkingRecord for EventView {
     type State = EventState;
 
     const VIEW_TABLE: &'static str = EVENT_VIEW_TABLE;
-    const RELATIONS: &'static [RecordLink] = &[RecordLink::EventPlace];
+    const RELATIONS: &'static [RecordLink] = &[RecordLink::EventPlace, RecordLink::Tagged];
 
     fn linking_id(&self) -> Option<String> {
         self.event_id().map(|id| id.to_string())
     }
 
     fn links(&self) -> Vec<(RecordLink, String)> {
-        self.place_id()
-            .map(|place| (RecordLink::EventPlace, place.to_string()))
-            .into_iter()
-            .collect()
+        let mut links = Vec::new();
+        if let Some(place) = self.place_id() {
+            links.push((RecordLink::EventPlace, place.to_string()));
+        }
+        links.extend(tag_links(self.tags()));
+        links
     }
 
     fn changes_links(event: &EventEvent) -> bool {
         match &event.body {
             EventEventBody::PlaceLinked { .. }
             | EventEventBody::AssertionRetracted { .. }
-            | EventEventBody::AssertionSuperseded { .. } => true,
+            | EventEventBody::AssertionSuperseded { .. }
+            | EventEventBody::Tagged { .. }
+            | EventEventBody::Untagged { .. } => true,
             EventEventBody::EventCreated { .. }
             | EventEventBody::EventTypeSet { .. }
             | EventEventBody::DateAsserted { .. }
@@ -229,8 +261,6 @@ impl LinkingRecord for EventView {
             | EventEventBody::CitationAdded { .. }
             | EventEventBody::MediaAttached { .. }
             | EventEventBody::NoteAttached { .. }
-            | EventEventBody::Tagged { .. }
-            | EventEventBody::Untagged { .. }
             | EventEventBody::RestrictionsChanged { .. }
             | EventEventBody::HumanIdChanged { .. }
             | EventEventBody::EventsMerged { .. }
@@ -243,7 +273,7 @@ impl LinkingRecord for PlaceView {
     type State = PlaceState;
 
     const VIEW_TABLE: &'static str = PLACE_VIEW_TABLE;
-    const RELATIONS: &'static [RecordLink] = &[RecordLink::PlaceEnclosure];
+    const RELATIONS: &'static [RecordLink] = &[RecordLink::PlaceEnclosure, RecordLink::Tagged];
 
     fn linking_id(&self) -> Option<String> {
         self.place_id().map(|id| id.to_string())
@@ -254,6 +284,7 @@ impl LinkingRecord for PlaceView {
         for enclosing in self.enclosed_by() {
             links.push((RecordLink::PlaceEnclosure, enclosing.place_id.to_string()));
         }
+        links.extend(tag_links(self.tags()));
         links
     }
 
@@ -261,7 +292,9 @@ impl LinkingRecord for PlaceView {
         match &event.body {
             PlaceEventBody::EnclosedByAsserted { .. }
             | PlaceEventBody::AssertionRetracted { .. }
-            | PlaceEventBody::AssertionSuperseded { .. } => true,
+            | PlaceEventBody::AssertionSuperseded { .. }
+            | PlaceEventBody::Tagged { .. }
+            | PlaceEventBody::Untagged { .. } => true,
             PlaceEventBody::PlaceCreated { .. }
             | PlaceEventBody::PlaceTypeSet { .. }
             | PlaceEventBody::NameAsserted { .. }
@@ -272,8 +305,6 @@ impl LinkingRecord for PlaceView {
             | PlaceEventBody::CitationAdded { .. }
             | PlaceEventBody::MediaAttached { .. }
             | PlaceEventBody::NoteAttached { .. }
-            | PlaceEventBody::Tagged { .. }
-            | PlaceEventBody::Untagged { .. }
             | PlaceEventBody::RestrictionsChanged { .. }
             | PlaceEventBody::HumanIdChanged { .. }
             | PlaceEventBody::PlacesMerged { .. }
@@ -286,7 +317,7 @@ impl LinkingRecord for SourceView {
     type State = SourceState;
 
     const VIEW_TABLE: &'static str = SOURCE_VIEW_TABLE;
-    const RELATIONS: &'static [RecordLink] = &[RecordLink::SourceRepository];
+    const RELATIONS: &'static [RecordLink] = &[RecordLink::SourceRepository, RecordLink::Tagged];
 
     fn linking_id(&self) -> Option<String> {
         self.source_id().map(|id| id.to_string())
@@ -297,6 +328,7 @@ impl LinkingRecord for SourceView {
         for held in self.repositories() {
             links.push((RecordLink::SourceRepository, held.repository_id.to_string()));
         }
+        links.extend(tag_links(self.tags()));
         links
     }
 
@@ -304,7 +336,9 @@ impl LinkingRecord for SourceView {
         match &event.body {
             SourceEventBody::RepositoryLinked { .. }
             | SourceEventBody::AssertionRetracted { .. }
-            | SourceEventBody::AssertionSuperseded { .. } => true,
+            | SourceEventBody::AssertionSuperseded { .. }
+            | SourceEventBody::Tagged { .. }
+            | SourceEventBody::Untagged { .. } => true,
             SourceEventBody::SourceCreated { .. }
             | SourceEventBody::TitleSet { .. }
             | SourceEventBody::AuthorSet { .. }
@@ -313,8 +347,6 @@ impl LinkingRecord for SourceView {
             | SourceEventBody::AttributeAdded { .. }
             | SourceEventBody::MediaAttached { .. }
             | SourceEventBody::NoteAttached { .. }
-            | SourceEventBody::Tagged { .. }
-            | SourceEventBody::Untagged { .. }
             | SourceEventBody::RestrictionsChanged { .. }
             | SourceEventBody::HumanIdChanged { .. }
             | SourceEventBody::SourcesMerged { .. }
@@ -327,24 +359,28 @@ impl LinkingRecord for CitationView {
     type State = CitationState;
 
     const VIEW_TABLE: &'static str = CITATION_VIEW_TABLE;
-    const RELATIONS: &'static [RecordLink] = &[RecordLink::CitationSource];
+    const RELATIONS: &'static [RecordLink] = &[RecordLink::CitationSource, RecordLink::Tagged];
 
     fn linking_id(&self) -> Option<String> {
         self.citation_id().map(|id| id.to_string())
     }
 
     fn links(&self) -> Vec<(RecordLink, String)> {
-        self.source_id()
-            .map(|source| (RecordLink::CitationSource, source.to_string()))
-            .into_iter()
-            .collect()
+        let mut links = Vec::new();
+        if let Some(source) = self.source_id() {
+            links.push((RecordLink::CitationSource, source.to_string()));
+        }
+        links.extend(tag_links(self.tags()));
+        links
     }
 
     fn changes_links(event: &CitationEvent) -> bool {
         match &event.body {
             CitationEventBody::CitationCreated { .. }
             | CitationEventBody::AssertionRetracted { .. }
-            | CitationEventBody::AssertionSuperseded { .. } => true,
+            | CitationEventBody::AssertionSuperseded { .. }
+            | CitationEventBody::Tagged { .. }
+            | CitationEventBody::Untagged { .. } => true,
             CitationEventBody::PageSet { .. }
             | CitationEventBody::DateAsserted { .. }
             | CitationEventBody::ConfidenceSet { .. }
@@ -352,12 +388,215 @@ impl LinkingRecord for CitationView {
             | CitationEventBody::AttributeAdded { .. }
             | CitationEventBody::MediaAttached { .. }
             | CitationEventBody::NoteAttached { .. }
-            | CitationEventBody::Tagged { .. }
-            | CitationEventBody::Untagged { .. }
             | CitationEventBody::RestrictionsChanged { .. }
             | CitationEventBody::HumanIdChanged { .. }
             | CitationEventBody::CitationsMerged { .. }
             | CitationEventBody::CitationsDistinguished { .. } => false,
+        }
+    }
+}
+
+impl LinkingRecord for RepositoryView {
+    type State = RepositoryState;
+
+    const VIEW_TABLE: &'static str = REPOSITORY_VIEW_TABLE;
+    const RELATIONS: &'static [RecordLink] = &[RecordLink::Tagged];
+
+    fn linking_id(&self) -> Option<String> {
+        self.repository_id().map(|id| id.to_string())
+    }
+
+    fn links(&self) -> Vec<(RecordLink, String)> {
+        tag_links(self.tags()).collect()
+    }
+
+    fn changes_links(event: &RepositoryEvent) -> bool {
+        match &event.body {
+            RepositoryEventBody::Tagged { .. }
+            | RepositoryEventBody::Untagged { .. }
+            | RepositoryEventBody::AssertionRetracted { .. }
+            | RepositoryEventBody::AssertionSuperseded { .. } => true,
+            RepositoryEventBody::RepositoryCreated { .. }
+            | RepositoryEventBody::RepositoryTypeSet { .. }
+            | RepositoryEventBody::NameSet { .. }
+            | RepositoryEventBody::AddressAdded { .. }
+            | RepositoryEventBody::UrlAdded { .. }
+            | RepositoryEventBody::NoteAttached { .. }
+            | RepositoryEventBody::RestrictionsChanged { .. }
+            | RepositoryEventBody::HumanIdChanged { .. }
+            | RepositoryEventBody::RepositoriesMerged { .. }
+            | RepositoryEventBody::RepositoriesDistinguished { .. } => false,
+        }
+    }
+}
+
+impl LinkingRecord for NoteView {
+    type State = NoteState;
+
+    const VIEW_TABLE: &'static str = NOTE_VIEW_TABLE;
+    const RELATIONS: &'static [RecordLink] = &[RecordLink::Tagged];
+
+    fn linking_id(&self) -> Option<String> {
+        self.note_id().map(|id| id.to_string())
+    }
+
+    fn links(&self) -> Vec<(RecordLink, String)> {
+        tag_links(self.tags()).collect()
+    }
+
+    fn changes_links(event: &NoteEvent) -> bool {
+        match &event.body {
+            NoteEventBody::Tagged { .. }
+            | NoteEventBody::Untagged { .. }
+            | NoteEventBody::AssertionRetracted { .. }
+            | NoteEventBody::AssertionSuperseded { .. } => true,
+            NoteEventBody::NoteCreated { .. }
+            | NoteEventBody::NoteTypeSet { .. }
+            | NoteEventBody::RichTextSet { .. }
+            | NoteEventBody::RestrictionsChanged { .. }
+            | NoteEventBody::HumanIdChanged { .. }
+            | NoteEventBody::NotesMerged { .. }
+            | NoteEventBody::NotesDistinguished { .. } => false,
+        }
+    }
+}
+
+impl LinkingRecord for MediaView {
+    type State = MediaState;
+
+    const VIEW_TABLE: &'static str = MEDIA_VIEW_TABLE;
+    const RELATIONS: &'static [RecordLink] = &[RecordLink::Tagged];
+
+    fn linking_id(&self) -> Option<String> {
+        self.media_id().map(|id| id.to_string())
+    }
+
+    fn links(&self) -> Vec<(RecordLink, String)> {
+        tag_links(self.tags()).collect()
+    }
+
+    fn changes_links(event: &MediaEvent) -> bool {
+        match &event.body {
+            MediaEventBody::Tagged { .. }
+            | MediaEventBody::Untagged { .. }
+            | MediaEventBody::AssertionRetracted { .. }
+            | MediaEventBody::AssertionSuperseded { .. } => true,
+            MediaEventBody::MediaCreated { .. }
+            | MediaEventBody::PathSet { .. }
+            | MediaEventBody::ChecksumSet { .. }
+            | MediaEventBody::MimeSet { .. }
+            | MediaEventBody::DateAsserted { .. }
+            | MediaEventBody::AttributeAdded { .. }
+            | MediaEventBody::CitationAdded { .. }
+            | MediaEventBody::NoteAttached { .. }
+            | MediaEventBody::RestrictionsChanged { .. }
+            | MediaEventBody::HumanIdChanged { .. }
+            | MediaEventBody::MediaMerged { .. }
+            | MediaEventBody::MediaDistinguished { .. } => false,
+        }
+    }
+}
+
+impl LinkingRecord for ResearchNoteView {
+    type State = ResearchNoteState;
+
+    const VIEW_TABLE: &'static str = RESEARCH_NOTE_VIEW_TABLE;
+    const RELATIONS: &'static [RecordLink] = &[RecordLink::Tagged];
+
+    fn linking_id(&self) -> Option<String> {
+        self.research_note_id().map(|id| id.to_string())
+    }
+
+    fn links(&self) -> Vec<(RecordLink, String)> {
+        tag_links(self.tags()).collect()
+    }
+
+    fn changes_links(event: &ResearchNoteEvent) -> bool {
+        match &event.body {
+            ResearchNoteEventBody::Tagged { .. }
+            | ResearchNoteEventBody::Untagged { .. }
+            | ResearchNoteEventBody::AssertionRetracted { .. }
+            | ResearchNoteEventBody::AssertionSuperseded { .. } => true,
+            ResearchNoteEventBody::ResearchNoteCreated { .. }
+            | ResearchNoteEventBody::SubjectAdded { .. }
+            | ResearchNoteEventBody::SubjectRemoved { .. }
+            | ResearchNoteEventBody::RichTextSet { .. }
+            | ResearchNoteEventBody::RestrictionsChanged { .. } => false,
+        }
+    }
+}
+
+impl LinkingRecord for DnaTestView {
+    type State = DnaTestState;
+
+    const VIEW_TABLE: &'static str = DNA_TEST_VIEW_TABLE;
+    const RELATIONS: &'static [RecordLink] = &[RecordLink::DnaTestPerson, RecordLink::Tagged];
+
+    fn linking_id(&self) -> Option<String> {
+        self.dna_test_id().map(|id| id.to_string())
+    }
+
+    fn links(&self) -> Vec<(RecordLink, String)> {
+        let mut links = Vec::new();
+        if let Some(person) = self.person_id() {
+            links.push((RecordLink::DnaTestPerson, person.to_string()));
+        }
+        links.extend(tag_links(self.tags()));
+        links
+    }
+
+    fn changes_links(event: &DnaTestEvent) -> bool {
+        match &event.body {
+            DnaTestEventBody::DnaTestCreated { .. }
+            | DnaTestEventBody::Tagged { .. }
+            | DnaTestEventBody::Untagged { .. }
+            | DnaTestEventBody::AssertionRetracted { .. }
+            | DnaTestEventBody::AssertionSuperseded { .. } => true,
+            DnaTestEventBody::ProviderSet { .. }
+            | DnaTestEventBody::KitIdSet { .. }
+            | DnaTestEventBody::TestTypeSet { .. }
+            | DnaTestEventBody::GenomeBuildSet { .. }
+            | DnaTestEventBody::HaplogroupAsserted { .. }
+            | DnaTestEventBody::NoteAttached { .. }
+            | DnaTestEventBody::RestrictionsChanged { .. }
+            | DnaTestEventBody::HumanIdChanged { .. } => false,
+        }
+    }
+}
+
+impl LinkingRecord for DnaMatchView {
+    type State = DnaMatchState;
+
+    const VIEW_TABLE: &'static str = DNA_MATCH_VIEW_TABLE;
+    const RELATIONS: &'static [RecordLink] = &[RecordLink::DnaMatchTest, RecordLink::Tagged];
+
+    fn linking_id(&self) -> Option<String> {
+        self.dna_match_id().map(|id| id.to_string())
+    }
+
+    fn links(&self) -> Vec<(RecordLink, String)> {
+        let mut links = Vec::new();
+        for test in [self.test_a(), self.test_b()].into_iter().flatten() {
+            links.push((RecordLink::DnaMatchTest, test.to_string()));
+        }
+        links.extend(tag_links(self.tags()));
+        links
+    }
+
+    fn changes_links(event: &DnaMatchEvent) -> bool {
+        match &event.body {
+            DnaMatchEventBody::DnaMatchObserved { .. }
+            | DnaMatchEventBody::Tagged { .. }
+            | DnaMatchEventBody::Untagged { .. }
+            | DnaMatchEventBody::AssertionRetracted { .. }
+            | DnaMatchEventBody::AssertionSuperseded { .. } => true,
+            DnaMatchEventBody::SegmentAdded { .. }
+            | DnaMatchEventBody::SharedAncestorAsserted { .. }
+            | DnaMatchEventBody::MatchConfirmed { .. }
+            | DnaMatchEventBody::MatchRejected { .. }
+            | DnaMatchEventBody::NoteAttached { .. }
+            | DnaMatchEventBody::RestrictionsChanged { .. }
+            | DnaMatchEventBody::HumanIdChanged { .. } => false,
         }
     }
 }
