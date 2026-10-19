@@ -244,6 +244,7 @@ impl Localizer {
             UsingKind::Note => fl!(self.loader, "using-kind-note"),
             UsingKind::DnaTest => fl!(self.loader, "using-kind-dna-test"),
             UsingKind::DnaMatch => fl!(self.loader, "using-kind-dna-match"),
+            UsingKind::ResearchNote => fl!(self.loader, "using-kind-research-note"),
         }
     }
 

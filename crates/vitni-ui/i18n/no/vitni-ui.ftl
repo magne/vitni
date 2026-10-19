@@ -952,6 +952,7 @@ using-kind-media = Medie
 using-kind-note = Notat
 using-kind-dna-test = DNA-test
 using-kind-dna-match = DNA-treff
+using-kind-research-note = Forskningsnotat
 
 # Detail tabs (PR 11)
 tab-usage = Bruk

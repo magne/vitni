@@ -311,6 +311,50 @@ pub(crate) async fn query(pool: &Pool<Postgres>, spec: &ListSpec) -> Result<List
     })
 }
 
+/// The records carrying `tag`, each as its cluster's root, by kind in [`ListedKind::ALL`] order, then
+/// `human_id`.
+///
+/// # Errors
+///
+/// A [`DbError`] if the query fails.
+pub(crate) async fn tag_uses(pool: &Pool<Postgres>, tag: &str) -> Result<Vec<(ListedKind, String)>, DbError> {
+    let statement = sql::tag_uses(DIALECT, sql::TagUses::Of(tag));
+    let rows = bind_all(sqlx::query(&statement.sql), &statement.binds)
+        .fetch_all(pool)
+        .await
+        .map_err(backend("reading a tag's uses"))?;
+    let mut uses = Vec::with_capacity(rows.len());
+    for row in &rows {
+        let index: i64 = row.get("k");
+        let kind = usize::try_from(index)
+            .ok()
+            .and_then(|index| ListedKind::ALL.get(index))
+            .ok_or_else(|| DbError::Backend(format!("a tag use of no listed kind ({index})")))?;
+        uses.push((*kind, row.get("record")));
+    }
+    Ok(uses)
+}
+
+/// How many records carry each tag in use, a cluster counted once.
+///
+/// # Errors
+///
+/// A [`DbError`] if the query fails.
+pub(crate) async fn tag_use_counts(pool: &Pool<Postgres>) -> Result<Vec<(String, u64)>, DbError> {
+    let statement = sql::tag_uses(DIALECT, sql::TagUses::Counted);
+    let rows = bind_all(sqlx::query(&statement.sql), &statement.binds)
+        .fetch_all(pool)
+        .await
+        .map_err(backend("counting tag uses"))?;
+    Ok(rows
+        .iter()
+        .map(|row| {
+            let uses: i64 = row.get("uses");
+            (row.get("tag"), u64::try_from(uses).unwrap_or_default())
+        })
+        .collect())
+}
+
 fn read_row(row: &PgRow, cells: &[CellRead], sort: Option<SortRead>) -> Result<ListRow, DbError> {
     let id: String = row.get("view_id");
     let human_id: Option<String> = row.get("human_id");

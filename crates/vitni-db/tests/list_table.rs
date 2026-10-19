@@ -652,6 +652,42 @@ async fn every_kind_lists_with_every_column(store: &Store) {
     assert_eq!(run(store, &spec(ListedKind::Event)).await.total, 5);
 }
 
+async fn a_tags_uses_are_read_through_its_links_a_cluster_once(store: &Store) {
+    five_people(store).await;
+    create_tag(store, 70).await;
+    create_place(store, 30, "Fana").await;
+    for n in [1, 3, 5] {
+        tag_person(store, n, 70).await;
+    }
+    let tag_place = PlaceCommand::Tag {
+        place_id: PlaceId::from_uuid(id(30)),
+        tag_id: TagId::from_uuid(id(70)),
+    };
+    place(store, 30, 3_070, tag_place).await;
+    let merge = PersonCommand::MergePersons {
+        surviving: person_id(1),
+        merged: person_id(3),
+        assessment: None,
+    };
+    person(store, 1, 199, merge).await;
+
+    let tag = id(70).to_string();
+    assert_eq!(
+        store.tag_uses(&tag).await.unwrap(),
+        [
+            (ListedKind::Person, id(1).to_string()),
+            (ListedKind::Person, id(5).to_string()),
+            (ListedKind::Place, id(30).to_string()),
+        ],
+        "by kind, then human_id; the merged I0003 read as its root I0001, once"
+    );
+    assert_eq!(store.tag_use_counts().await.unwrap(), [(tag, 3)]);
+    assert!(
+        store.tag_uses(&id(71).to_string()).await.unwrap().is_empty(),
+        "an unused tag"
+    );
+}
+
 #[cfg(feature = "sqlite")]
 mod sqlite {
     use vitni_db::{ListTest, ListedKind, RecordLink, Store};
@@ -675,6 +711,7 @@ mod sqlite {
     }
 
     sqlite_tests!(
+        a_tags_uses_are_read_through_its_links_a_cluster_once,
         a_query_pages_the_listed_records_with_their_total,
         a_row_carries_typed_cells_for_the_requested_columns,
         text_filters_fold_case_and_search_spans_the_text_columns,
@@ -751,6 +788,7 @@ mod postgres {
     }
 
     postgres_tests!(
+        a_tags_uses_are_read_through_its_links_a_cluster_once,
         a_query_pages_the_listed_records_with_their_total,
         a_row_carries_typed_cells_for_the_requested_columns,
         text_filters_fold_case_and_search_spans_the_text_columns,

@@ -15,7 +15,7 @@ use vitni_db::Store;
 
 use crate::error::AppError;
 use crate::session::Session;
-use crate::tag_usage::{TagUsage, TagUsageGroup};
+use crate::tag_usage::{self, TagUsageGroup};
 use crate::use_case::{self, Provenance};
 use crate::workspace::Workspace;
 
@@ -189,10 +189,7 @@ pub async fn show_tag(workspace: &Workspace, id: &str) -> Result<Option<TagSumma
         return Ok(None);
     };
     let (usage, usage_count) = match view.tag_id() {
-        Some(tag_id) => {
-            let index = TagUsage::load(workspace).await?;
-            (index.groups(tag_id), index.count(tag_id))
-        }
+        Some(tag_id) => tag_usage::usage(workspace, tag_id).await?,
         None => (Vec::new(), 0),
     };
     Ok(Some(summarize(&view, usage, usage_count)))
@@ -205,10 +202,14 @@ pub async fn show_tag(workspace: &Workspace, id: &str) -> Result<Option<TagSumma
 /// A store/read-model error.
 pub async fn list_tags(workspace: &Workspace) -> Result<Vec<TagSummary>, AppError> {
     let views = workspace.store().list_tags().await?;
-    let index = TagUsage::load(workspace).await?;
+    let counts = tag_usage::use_counts(workspace).await?;
     let mut summaries = Vec::with_capacity(views.len());
     for view in &views {
-        let usage_count = view.tag_id().map_or(0, |tag_id| index.count(tag_id));
+        let usage_count = view
+            .tag_id()
+            .and_then(|tag_id| counts.get(&tag_id.to_string()))
+            .copied()
+            .unwrap_or(0);
         summaries.push(summarize(view, Vec::new(), usage_count));
     }
     Ok(summaries)

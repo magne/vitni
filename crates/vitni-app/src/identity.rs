@@ -1049,10 +1049,6 @@ pub(crate) type SourceReferences = References<SourceId>;
 pub(crate) type CitationReferences = References<CitationId>;
 /// How a reference names each repository.
 pub(crate) type RepositoryReferences = References<RepositoryId>;
-/// How a reference names each note.
-pub(crate) type NoteReferences = References<NoteId>;
-/// How a reference names each media object.
-pub(crate) type MediaReferences = References<MediaId>;
 
 impl<I: ClusterId> References<I> {
     /// Loads the clusters and every record's `human_id`.

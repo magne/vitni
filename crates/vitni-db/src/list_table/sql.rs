@@ -557,6 +557,58 @@ pub(crate) fn select(dialect: Dialect, spec: &ListSpec) -> Result<Select, DbErro
     })
 }
 
+/// Which tag uses a statement reads: one tag's records, or every tag's count.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum TagUses<'a> {
+    Of(&'a str),
+    Counted,
+}
+
+/// The records carrying tags through the `tagged` links, each read as its cluster's root (ADR 0039
+/// §5) so a cluster whose records share a tag is one use: `TagUses::Of` reads one tag's as `(k, record)` in
+/// group order — `k` the kind's index in [`ListedKind::ALL`] — then `human_id`;
+/// `TagUses::Counted` reads `(tag, uses)` for every tag in use.
+pub(crate) fn tag_uses(dialect: Dialect, uses: TagUses<'_>) -> Statement {
+    let mut binder = Binder::new(dialect);
+    let mut branches = Vec::new();
+    for (index, kind) in ListedKind::ALL.iter().enumerate() {
+        if kind.columns().iter().all(|column| column.ty != ColumnType::Tags) {
+            continue;
+        }
+        let (merge, record) = match kind.merged_kind() {
+            Some(merged) => (
+                format!(
+                    "LEFT JOIN identity_links m ON m.kind = {} AND m.member = l.source",
+                    binder.text(merged.as_str())
+                ),
+                "COALESCE(m.root, l.source)",
+            ),
+            None => (String::new(), "l.source"),
+        };
+        let of = match uses {
+            TagUses::Of(tag) => format!(" AND l.target = {}", binder.text(tag)),
+            TagUses::Counted => String::new(),
+        };
+        branches.push(format!(
+            "SELECT CAST({index} AS BIGINT) AS k, {record} AS record, r.human_id AS human_id, l.target AS tag \
+             FROM record_links l {merge} JOIN {table} r ON r.view_id = {record} \
+             WHERE l.relation = 'tagged'{of}",
+            table = kind.table()
+        ));
+    }
+    let union = branches.join(" UNION ALL ");
+    let sql = match uses {
+        TagUses::Of(_) => format!(
+            "SELECT k, record FROM (SELECT DISTINCT k, record, human_id FROM ({union}) u) d ORDER BY k, {}, record",
+            dialect.bytewise("COALESCE(d.human_id, '')")
+        ),
+        TagUses::Counted => format!(
+            "SELECT tag, COUNT(*) AS uses FROM (SELECT DISTINCT k, record, tag FROM ({union}) u) d GROUP BY tag"
+        ),
+    };
+    binder.finish(sql)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{Dialect, create_table, upsert};

@@ -791,6 +791,16 @@ impl SqliteStore {
         crate::list_table::sqlite::query(&self.pool, spec).await
     }
 
+    /// The records carrying `tag`, as cluster roots (ADR 0052 §6).
+    pub(crate) async fn tag_uses(&self, tag: &str) -> Result<Vec<(crate::list_table::ListedKind, String)>, DbError> {
+        crate::list_table::sqlite::tag_uses(&self.pool, tag).await
+    }
+
+    /// How many records carry each tag in use.
+    pub(crate) async fn tag_use_counts(&self) -> Result<Vec<(String, u64)>, DbError> {
+        crate::list_table::sqlite::tag_use_counts(&self.pool).await
+    }
+
     /// The creating origin of every imported aggregate of `kind` (ADR 0037 §4).
     pub(crate) async fn created_origins(
         &self,
