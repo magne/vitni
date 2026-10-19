@@ -225,6 +225,53 @@ The app page is now flat in workspace size: the 250 µs page read plus a handful
 50 persons' births, their places, and the clusters holding them. `show_*` still reads whole projections
 for the reverse-usage fields it fills.
 
+## List queries (#677, 2026-10-19)
+
+A list query (ADR 0052 §4) filters, sorts and pages one kind's list table (§5) in SQL. The bench
+`cargo bench -p vitni-app --bench similar -- 'person_list|person_query'` runs, over the same seeded
+workspace, a query for the persons born before 1900 — every seeded person, so the filter narrows
+nothing and the count spans the whole list — sorted by birth, newest first, with the name and birth
+cells, in pages of 50: its first page, the page halfway through its matches by offset, and that page by
+keyset (after the row before it).
+
+| read (mean)                                          | 10 000 persons | 100 000 persons |
+| ---------------------------------------------------- | -------------: | --------------: |
+| first page, no index                                 |        8.25 ms |          112 ms |
+| first page, sort indexes                             |        1.29 ms |         28.2 ms |
+| halfway page by offset, sort indexes                 |        1.90 ms |         53.9 ms |
+| halfway page by keyset, sort indexes                 |         553 µs |         4.69 ms |
+| `vitni_app::list_persons_page`, first page, no query |         848 µs |         1.63 ms |
+
+- **A sort needs an index per column and direction.** Without one, every match is read and sorted
+  before the page is taken. Each sortable column now has two, ordered as the query orders — rows with
+  a value first, then the value ascending or descending, then `human_id` and id — so a page walks the
+  index and stops.
+- **The first page pays for the count.** Counting 100 000 matches is most of its 28 ms; the rows
+  themselves come off the index. A keyset read continues a query whose first page counted, so it does
+  not count again (`ListResult::total` is `None` there), and stays fast deep in the list where an
+  offset steps over every row before it.
+- **The plain paged list keeps its shape.** Without a search or filter the total is the table's row
+  count less its merged records, two counts that probe no row, and the default order walks a
+  `(human_id, id)` index: 1.6 ms at 100 000 against 640 µs before, the difference the count.
+
+The write side, from `cargo bench -p vitni-db --features sqlite -- 'rebuild|write'`, with the list
+tables and with their query step and rebuild taken out (`write` asserts a name on a family partner, so
+the family's row is recomputed too):
+
+| events | rebuild, without | rebuild, with | write, without | write, with |
+| -----: | ---------------: | ------------: | -------------: | ----------: |
+| 10 530 |           672 ms |        747 ms |         566 µs |      886 µs |
+| 52 650 |          3.91 s |        4.34 s |         519 µs |      762 µs |
+
+- **A write costs about a quarter of a millisecond more,** flat in workspace size: the record's row
+  and the rows of the records reading it (here the partner's family), each with its indexes.
+- **That flatness needed one fix in `record_links`.** Reading a record's dependents
+  (`record_links::linking`) left SQLite to walk the covering primary key over every link of the
+  relation, so each write grew with the workspace (1.45 ms at 52 650 events). It now names the
+  by-target index and sorts in Rust.
+- **A rebuild costs about a tenth more,** the list tables filled after the projections. A workspace
+  that predates them pays the same fill once, on its first open.
+
 ## Reproducing
 
 ```bash
