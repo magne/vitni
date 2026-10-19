@@ -23,6 +23,8 @@ mod geo_index;
 #[cfg(any(feature = "sqlite", feature = "postgres"))]
 mod identity_links;
 #[cfg(any(feature = "sqlite", feature = "postgres"))]
+mod list_table;
+#[cfg(any(feature = "sqlite", feature = "postgres"))]
 mod match_keys;
 #[cfg(any(feature = "sqlite", feature = "postgres"))]
 mod match_pairs;
@@ -54,6 +56,11 @@ mod store;
 #[cfg(any(feature = "sqlite", feature = "postgres"))]
 mod tables;
 
+#[cfg(any(feature = "sqlite", feature = "postgres"))]
+pub use list_table::{
+    ColumnType, ListCell, ListColumn, ListCursor, ListPredicate, ListResult, ListRow, ListSort, ListSpec, ListTest,
+    ListWindow, ListedKind, SortDirection, SortKey,
+};
 #[cfg(any(feature = "sqlite", feature = "postgres"))]
 pub use match_keys::{DirtyRecord, KeyedRecord};
 #[cfg(any(feature = "sqlite", feature = "postgres"))]

@@ -870,6 +870,27 @@ impl Store {
         }
     }
 
+    /// Evaluates a list query (ADR 0052 §4): the matching records of its kind, filtered, sorted and
+    /// windowed in SQL, with typed cells for the requested columns and the total match count. A record
+    /// merged into another (ADR 0039 §5) is left out of the rows and the count.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError::Malformed`] for a column or filter the kind's catalogue does not take, or a
+    /// [`DbError`] on a read failure.
+    #[cfg(any(feature = "sqlite", feature = "postgres"))]
+    pub async fn list_query(
+        &self,
+        spec: &crate::list_table::ListSpec,
+    ) -> Result<crate::list_table::ListResult, DbError> {
+        match &self.backend {
+            #[cfg(feature = "sqlite")]
+            Backend::Sqlite(s) => s.list_query(spec).await,
+            #[cfg(feature = "postgres")]
+            Backend::Postgres(p) => p.list_query(spec).await,
+        }
+    }
+
     /// The origin of the creating event of each of the aggregates `ids` of `kind` that an import made,
     /// as `(aggregate_id, origin)`, oldest first (ADR 0037 §4) — [`Self::created_origins`] for named
     /// aggregates. The origins carry no content digest.

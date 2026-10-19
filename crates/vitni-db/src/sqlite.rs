@@ -56,6 +56,7 @@ macro_rules! sqlite_queries {
                 $upcasters
             }))];
         sqlite_side_indexes!($snake, $pool, queries);
+        sqlite_list_table!($snake, $pool, queries);
         queries.push(Box::new(crate::record_origins::sqlite::RecordOriginsQuery::new(
             $pool.clone(),
             $table_const,
@@ -63,6 +64,78 @@ macro_rules! sqlite_queries {
         queries.push(Box::new(crate::match_keys::sqlite::MatchDirtyQuery::new($pool.clone())));
         queries
     }};
+}
+
+/// Pushes the list table query (ADR 0052 §5) onto the queries of every listed aggregate — after its
+/// side indexes, so the record links its dependents are found through are current. `import_run` is not
+/// listed.
+macro_rules! sqlite_list_table {
+    (person, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::list_table::sqlite::ListTableQuery::<
+            vitni_core::person::PersonView,
+        >::new($pool.clone())));
+    };
+    (family, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::list_table::sqlite::ListTableQuery::<
+            vitni_core::family::FamilyView,
+        >::new($pool.clone())));
+    };
+    (place, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::list_table::sqlite::ListTableQuery::<
+            vitni_core::place::PlaceView,
+        >::new($pool.clone())));
+    };
+    (source, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::list_table::sqlite::ListTableQuery::<
+            vitni_core::source::SourceView,
+        >::new($pool.clone())));
+    };
+    (citation, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::list_table::sqlite::ListTableQuery::<
+            vitni_core::citation::CitationView,
+        >::new($pool.clone())));
+    };
+    (event, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::list_table::sqlite::ListTableQuery::<
+            vitni_core::event::EventView,
+        >::new($pool.clone())));
+    };
+    (dna_test, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::list_table::sqlite::ListTableQuery::<
+            vitni_core::dna_test::DnaTestView,
+        >::new($pool.clone())));
+    };
+    (dna_match, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::list_table::sqlite::ListTableQuery::<
+            vitni_core::dna_match::DnaMatchView,
+        >::new($pool.clone())));
+    };
+    (repository, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::list_table::sqlite::ListTableQuery::<
+            vitni_core::repository::RepositoryView,
+        >::new($pool.clone())));
+    };
+    (note, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::list_table::sqlite::ListTableQuery::<
+            vitni_core::note::NoteView,
+        >::new($pool.clone())));
+    };
+    (media, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::list_table::sqlite::ListTableQuery::<
+            vitni_core::media::MediaView,
+        >::new($pool.clone())));
+    };
+    (research_note, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::list_table::sqlite::ListTableQuery::<
+            vitni_core::research_note::ResearchNoteView,
+        >::new($pool.clone())));
+    };
+    (tag, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::list_table::sqlite::ListTableQuery::<
+            vitni_core::tag::TagView,
+        >::new($pool.clone())));
+    };
+    ($other:ident, $pool:expr, $queries:ident) => {};
 }
 
 /// Pushes the derived side indexes onto the queries of the one aggregate each is fed by: the identity
@@ -281,6 +354,9 @@ macro_rules! sqlite_store {
                 // citation projections hold; its `Query` is appended to those frameworks above, and a
                 // workspace that predates it gets it created and filled from the open projections.
                 crate::record_links::sqlite::create_filled(&pool).await?;
+                // The list tables (ADR 0052 §5) are derived from the projections and the record links; a
+                // workspace that predates one gets it created and filled, its tag links with it.
+                crate::list_table::sqlite::create_filled(&pool).await?;
                 Ok(Self { $($snake,)+ pool, unreadable })
             }
 
@@ -369,6 +445,8 @@ macro_rules! sqlite_store {
                 // The record links (ADR 0047) are derived from the rebuilt person, family, event and
                 // citation projections.
                 crate::record_links::sqlite::rebuild_index(pool).await?;
+                // The list tables read the rebuilt projections.
+                crate::list_table::sqlite::rebuild(pool).await?;
                 // The match keys need the name-culture packs, which only the app layer has: forgetting
                 // what the index was built under makes it rebuild on next use.
                 crate::match_keys::sqlite::clear_state(pool).await?;
@@ -703,6 +781,14 @@ impl SqliteStore {
         targets: &[String],
     ) -> Result<Vec<(String, String)>, DbError> {
         crate::record_links::sqlite::linking(&self.pool, relation, targets).await
+    }
+
+    /// Evaluates a list query over its kind's list table (ADR 0052 §4).
+    pub(crate) async fn list_query(
+        &self,
+        spec: &crate::list_table::ListSpec,
+    ) -> Result<crate::list_table::ListResult, DbError> {
+        crate::list_table::sqlite::query(&self.pool, spec).await
     }
 
     /// The creating origin of every imported aggregate of `kind` (ADR 0037 §4).

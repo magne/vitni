@@ -30,11 +30,12 @@ sqlx = { workspace = true, optional = true }
 # WKB + R*Tree spatial index over Place geometry (ADR 0024 §3), sqlite backend only for now.
 geo-types = { workspace = true, optional = true }
 geozero = { workspace = true, optional = true }
+# Parses the tag ids a list query reads back from `record_links` (ADR 0052 §6).
+uuid = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true }
 tempfile = { workspace = true }
-uuid = { workspace = true }
 time = { workspace = true }
 # Postgres-backed tests (feature = "postgres"): reuses one container per process, isolating each
 # test in a fresh randomly-named database dropped on Drop.
