@@ -212,6 +212,13 @@ pub fn Chip(
     /// An optional already-localized hover tooltip for the delete control.
     #[props(default)]
     delete_title: Option<String>,
+    /// When set, the label is a button that fires this (a filter chip reopens its clause).
+    /// `activate_label` is then its accessible name.
+    #[props(default)]
+    onactivate: Option<EventHandler<()>>,
+    /// The already-localized accessible name for the label button (used only with `onactivate`).
+    #[props(default)]
+    activate_label: Option<String>,
 ) -> Element {
     rsx! {
         span { class: "chip",
@@ -220,7 +227,17 @@ pub fn Chip(
             } else if let Some(icon) = icon {
                 span { class: "chip-icon", aria_hidden: "true", "{icon}" }
             }
-            "{label}"
+            if let Some(onactivate) = onactivate {
+                button {
+                    class: "chip-label",
+                    r#type: "button",
+                    aria_label: activate_label,
+                    onclick: move |_| onactivate.call(()),
+                    "{label}"
+                }
+            } else {
+                "{label}"
+            }
             if let Some(id_label) = id_label {
                 span { class: "row-id", "{id_label}" }
             }

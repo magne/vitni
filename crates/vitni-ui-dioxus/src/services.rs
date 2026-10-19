@@ -19,11 +19,11 @@ use tokio::sync::{mpsc, oneshot};
 use unic_langid::LanguageIdentifier;
 use vitni_app::{
     AiConfig, BackupReport, BackupRequest, Confidence, Config, ConfigStore, DatasetChoice, DatasetProposal,
-    DatasetScope, FileConfigStore, FileDate, IdFormats, ImportRunId, ImportRunSummary, LocaleDefaults, MapConfig,
-    MapProvider, MapSource, MatchQuestion, MatchReply, PlanReply, PlanSummary, PluginTrust, PluginTrustConfig,
-    PreferenceLayers, ReplaceReport, ReplaceRequest, ResolvedLocale, RestoreReport, RestoreRequest, Session,
-    ShortcutConfig, SuretyLabelOverrides, TagSummary, Workspace, WorkspaceCounts, WorkspaceSummary, config, list_tags,
-    list_workspaces, read_preference_layers, read_resolved_locale, read_resolved_surety_labels,
+    DatasetScope, FileConfigStore, FileDate, IdFormats, ImportRunId, ImportRunSummary, ListQuery, ListedKind,
+    LocaleDefaults, MapConfig, MapProvider, MapSource, MatchQuestion, MatchReply, PlanReply, PlanSummary, PluginTrust,
+    PluginTrustConfig, PreferenceLayers, ReplaceReport, ReplaceRequest, ResolvedLocale, RestoreReport, RestoreRequest,
+    Session, ShortcutConfig, SuretyLabelOverrides, TagSummary, Workspace, WorkspaceCounts, WorkspaceSummary, config,
+    list_tags, list_workspaces, read_preference_layers, read_resolved_locale, read_resolved_surety_labels,
     read_surety_label_overrides, workspace_counts,
 };
 use vitni_plugin_host::{
@@ -32,12 +32,12 @@ use vitni_plugin_host::{
     ResourceBudget, ReviewRequest, RunDataset, TrustRoots, TrustTier, channel_reviewer, resolve_trust_roots,
 };
 use vitni_ui::{
-    Category, CitationChangeSetRequest, DataQualityVm, DecideMatch, DnaMatchChangeSetRequest, DnaTestChangeSetRequest,
-    EventChangeSetRequest, FamilyChangeSetRequest, HistoryEntryVm, ImportTargetChoice, Intent, IntentOutcome,
-    Localizer, MediaChangeSetRequest, MergeFailure, NewRecordRequest, NoteChangeSetRequest, Panel,
+    ActiveFilter, Category, CitationChangeSetRequest, DataQualityVm, DecideMatch, DnaMatchChangeSetRequest,
+    DnaTestChangeSetRequest, EventChangeSetRequest, FamilyChangeSetRequest, HistoryEntryVm, ImportTargetChoice, Intent,
+    IntentOutcome, Localizer, MediaChangeSetRequest, MergeFailure, NewRecordRequest, NoteChangeSetRequest, Panel,
     PersonChangeSetRequest, PickerHit, PlaceChangeSetRequest, ProvenanceDraft, RepositoryChangeSetRequest,
-    ResearchNoteChangeSetRequest, RowVm, RunRecordVm, RunRecordsVm, SimilarHitVm, SourceChangeSetRequest, SubmitResult,
-    TagChangeSetRequest, list_intent, query_draft,
+    ResearchNoteChangeSetRequest, RowVm, RowsPage, RunRecordVm, RunRecordsVm, SimilarHitVm, SourceChangeSetRequest,
+    SubmitResult, TagChangeSetRequest, list_intent, query_draft,
 };
 
 use crate::detail_aggregates::for_each_detail_aggregate;
@@ -526,6 +526,29 @@ pub async fn load_palette_rows(services: Services) -> Vec<(Category, Vec<RowVm>)
         }
     }
     groups
+}
+
+/// Loads page `page` of the rows `query` lists, evaluated by the store (ADR 0052 §4): what the Explorer
+/// reads as its list scrolls.
+pub async fn load_list_page(services: Services, query: ListQuery, page: usize) -> Result<RowsPage, String> {
+    let loc = services.localizer();
+    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
+    vitni_ui::list_page(&workspace, &loc, &query, page)
+        .await
+        .map_err(|error| loc.error(&error))
+}
+
+/// Resolves the record a filter clause over `kind` names to the id the query holds.
+pub async fn resolve_list_filter(
+    services: Services,
+    kind: ListedKind,
+    active: ActiveFilter,
+) -> Result<ActiveFilter, String> {
+    let loc = services.localizer();
+    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
+    vitni_ui::resolve_filter(&workspace, kind, active)
+        .await
+        .map_err(|error| loc.error(&error))
 }
 
 /// Loads the first `pages` pages of the records the import run `run` changed, as one list: what an

@@ -188,10 +188,93 @@ impl Chrome {
     pub fn sort_label(&self, sort: RowSort) -> String {
         match sort {
             RowSort::IdAsc => fl!(self.loader, "sort-id-asc"),
-            RowSort::IdDesc => fl!(self.loader, "sort-id-desc"),
             RowSort::TitleAsc => fl!(self.loader, "sort-name-asc"),
             RowSort::TitleDesc => fl!(self.loader, "sort-name-desc"),
         }
+    }
+
+    /// The empty message of a list whose search or filters match nothing.
+    #[must_use]
+    pub fn list_no_match(&self) -> String {
+        fl!(self.loader, "list-no-match")
+    }
+
+    /// The list toolbar's *Filters* button label.
+    #[must_use]
+    pub fn list_filters(&self) -> String {
+        fl!(self.loader, "list-filters")
+    }
+
+    /// The *Filters* button's `title`.
+    #[must_use]
+    pub fn list_filters_title(&self) -> String {
+        fl!(self.loader, "list-filters-title")
+    }
+
+    /// The filter editor's accessible name.
+    #[must_use]
+    pub fn filter_editor(&self) -> String {
+        fl!(self.loader, "filter-editor")
+    }
+
+    /// The filter editor's column select label.
+    #[must_use]
+    pub fn filter_column(&self) -> String {
+        fl!(self.loader, "filter-column")
+    }
+
+    /// The filter editor's operator select label.
+    #[must_use]
+    pub fn filter_op(&self) -> String {
+        fl!(self.loader, "filter-op")
+    }
+
+    /// The filter editor's value label.
+    #[must_use]
+    pub fn filter_value(&self) -> String {
+        fl!(self.loader, "filter-value")
+    }
+
+    /// The label of a *between* range's start.
+    #[must_use]
+    pub fn filter_from(&self) -> String {
+        fl!(self.loader, "filter-from")
+    }
+
+    /// The label of a *between* range's end.
+    #[must_use]
+    pub fn filter_to(&self) -> String {
+        fl!(self.loader, "filter-to")
+    }
+
+    /// The filter editor's *Apply* button.
+    #[must_use]
+    pub fn filter_apply(&self) -> String {
+        fl!(self.loader, "filter-apply")
+    }
+
+    /// The filter editor's *Remove* button.
+    #[must_use]
+    pub fn filter_remove(&self) -> String {
+        fl!(self.loader, "filter-remove")
+    }
+
+    /// The filter editor's *Cancel* button.
+    #[must_use]
+    pub fn filter_cancel(&self) -> String {
+        fl!(self.loader, "filter-cancel")
+    }
+
+    /// A filter chip's accessible name for reopening it in the editor.
+    #[must_use]
+    pub fn filter_edit(&self, filter: &str) -> String {
+        fl!(self.loader, "filter-edit", filter = filter)
+    }
+
+    /// A filter chip's accessible name for its remove control.
+    #[must_use]
+    pub fn filter_delete(&self, filter: &str) -> String {
+        fl!(self.loader, "filter-delete", filter = filter)
     }
 
     /// The "New" button label for a list.

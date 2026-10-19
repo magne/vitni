@@ -1,8 +1,8 @@
 use vitni_app::Rect;
 use vitni_ui::{
-    AttachSaveAction, CropCorner, EVIDENCE_KINDS, EvidenceAxis, INFORMATION_KINDS, MediaRefVm, NewRecordDraft,
-    OriginVm, PickerState, ProvenanceDraft, SOURCE_QUALITIES, link_is_savable, rect_css, resolve_attach_save,
-    tab_label,
+    AttachSaveAction, CropCorner, EVIDENCE_KINDS, EvidenceAxis, INFORMATION_KINDS, ListedRows, MediaRefVm,
+    NewRecordDraft, OriginVm, PAGE_ROWS, PickerState, ProvenanceDraft, SOURCE_QUALITIES, link_is_savable, rect_css,
+    resolve_attach_save, tab_label,
 };
 
 use super::prelude::*;
@@ -91,40 +91,47 @@ fn database_url_field(_chrome: &Chrome, _database_url: Signal<String>, _id_prefi
     rsx! {}
 }
 
-/// Wires the `[`/`]` prev/next-record navigation into a master-detail screen: observes
+/// Wires the `[`/`]` prev/next-record navigation into the Explorer: observes
 /// [`NavState::pending_step`] and, when the keyboard dispatcher arms a step, opens the neighbouring
-/// record in the list's current (filtered + sorted) order via [`vitni_ui::step_row`].
+/// record in the store's searched, filtered and sorted result ([`ListedRows::step`]). A neighbour whose
+/// page is not read yet is asked of `fetch` and opened once it arrives.
 ///
 /// Only the Explorer runs this effect (its one caller — `shell/explorer.rs`), and the Explorer is a
 /// single shell-level list, never duplicated by a detail split, so the step always targets the screen
-/// the operator is looking at regardless of whether a record is docked. Call it beside the screen's
-/// `pending_create` effect, passing the screen's `category`,
-/// its loaded `list` resource, and its `query`/`selected` signals. A no-op until the list has loaded.
+/// the operator is looking at regardless of whether a record is docked. A no-op until the list has
+/// loaded.
 pub fn use_record_step(
     mut nav: NavState,
     category: Category,
-    list: Resource<ScreenData>,
-    query: Signal<vitni_ui::ListQuery>,
+    rows: Signal<ListedRows>,
     selected: Signal<Option<String>>,
+    fetch: Callback<Vec<usize>>,
 ) {
+    let mut waiting = use_signal(|| None::<usize>);
     use_effect(move || {
         let Some(delta) = *nav.pending_step.read() else {
             return;
         };
         nav.pending_step.set(None);
-        let rows = match &*list.read_unchecked() {
-            Some(ScreenData::Loaded(IntentOutcome::List(rows))) => rows.clone(),
-            _ => return,
-        };
         let current = selected.peek().clone();
-        let target = vitni_ui::step_row(&rows, &query.peek(), current.as_deref(), isize::from(delta));
-        if let Some(row) = target {
-            nav.open_record(RecordRef {
-                category,
-                human_id: row.id,
-                label: row.title,
-            });
+        if let Some(target) = rows.peek().step(current.as_deref(), isize::from(delta)) {
+            waiting.set(Some(target));
         }
+    });
+    use_effect(move || {
+        let Some(target) = *waiting.read() else {
+            return;
+        };
+        let Some(row) = rows.read().row(target).cloned() else {
+            fetch.call(vec![target / PAGE_ROWS]);
+            return;
+        };
+        waiting.set(None);
+        nav.open_record(RecordRef {
+            category,
+            human_id: row.id,
+            label: row.title,
+        });
     });
 }
 

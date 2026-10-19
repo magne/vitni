@@ -9,13 +9,17 @@
 //! records open beside it (the VS Code model). Mounted by [`Shell`](crate::shell::root::Shell) only
 //! when [`entity_category`] is `Some`, so a tool/Dashboard/Help destination shows no list at all.
 
+use std::collections::BTreeSet;
+
 use dioxus::prelude::*;
-use vitni_ui::{Category, Intent, IntentOutcome, ListQuery, RecordRef, RowVm};
+use vitni_app::ListQuery;
+use vitni_ui::{ActiveFilter, Category, ListedRows, RecordRef, RowSort, RowVm, listed_kind};
 
 use crate::app::AppCtx;
 use crate::master_detail::{ListChrome, ListPane, SortChrome};
-use crate::screens::{DetailState, detail_state, use_record_step};
-use crate::services::load_screen;
+use crate::screens::use_record_step;
+use crate::services::load_list_page;
+use crate::shell::list_filters::{FilterBar, FilterEditing, FiltersButton};
 use crate::shell::nav_state::{NavState, entity_category};
 
 /// The Explorer column. Renders the active entity category's list, or nothing when the active
@@ -40,14 +44,20 @@ pub fn Explorer() -> Element {
     }
 }
 
-/// The list for one entity `category`: owns its `use_resource`, `selected`/`query` signals, wires
-/// selection to [`NavState::open_record`], keeps the row highlight in sync with the active record
-/// tab (only when it belongs to this category), and installs `[`/`]` stepping. The resource also
-/// reads [`NavState::data_version`] (the rail-count idiom in `shell/root.rs`), so a create/edit/undo
-/// elsewhere in this category refetches the list without a category switch.
+/// The list for one entity `category`, read from the store a page at a time (ADR 0052 §4): owns the
+/// search, sort and filter signals that make up its [`ListQuery`], the [`ListedRows`] read so far, and
+/// the `selected` signal. The first page is a resource over the query and
+/// [`NavState::data_version`] (the rail-count idiom in `shell/root.rs`), so a new search, sort or
+/// filter, or a create/edit/undo elsewhere, reads the list again from the top; the pages after it are
+/// read as the window scrolls to them, and for a `[`/`]` step onto one. Selecting a row opens it in
+/// [`NavState::open_record`], and the row highlight follows the active record tab (only when it
+/// belongs to this category).
 #[component]
 fn ExplorerList(category: Category) -> Element {
     let AppCtx::Ready(state) = use_context::<AppCtx>() else {
+        return rsx! {};
+    };
+    let Some(kind) = listed_kind(category) else {
         return rsx! {};
     };
     let mut nav = use_context::<NavState>();
@@ -60,6 +70,7 @@ fn ExplorerList(category: Category) -> Element {
         list_label: entity.clone(),
         filter_placeholder: chrome.list_filter(&entity),
         empty: list_empty(loc, category),
+        no_match: chrome.list_no_match(),
         sort: SortChrome::resolve(chrome),
     };
     let mut selected = use_signal(|| None::<String>);
@@ -72,58 +83,91 @@ fn ExplorerList(category: Category) -> Element {
                 .map(|record| record.human_id),
         );
     });
-    let query = use_signal(ListQuery::default);
-    let intent = list_intent(category);
-    let list = use_resource(move || {
-        let services = services.clone();
-        let intent = intent.clone();
-        let _ = nav.data_version.read();
-        async move { load_screen(services, intent).await }
+    let search = use_signal(String::new);
+    let sort = use_signal(RowSort::default);
+    let filters = use_signal(Vec::<ActiveFilter>::new);
+    let editing = use_signal(|| None::<FilterEditing>);
+    let query = use_memo(move || ListQuery {
+        search: search(),
+        filters: filters.read().iter().map(|active| active.filter.clone()).collect(),
+        sort: sort().query_sort(kind),
+        ..ListQuery::new(kind)
     });
-    use_record_step(nav, category, list, query, selected);
-    match detail_state(list.read_unchecked().as_ref(), |outcome| {
-        if let IntentOutcome::List(rows) = outcome {
-            Some(rows)
-        } else {
-            None
+    let mut rows = use_signal(ListedRows::default);
+    // Bumped whenever the list is read again from the top, so a later page read for the result it
+    // replaced is dropped rather than mixed in.
+    let mut generation = use_signal(|| 0_u64);
+    let mut requested = use_signal(BTreeSet::<usize>::new);
+    let first_services = services.clone();
+    let first = use_resource(move || {
+        let services = first_services.clone();
+        let query = query();
+        let _ = nav.data_version.read();
+        async move { load_list_page(services, query, 0).await }
+    });
+    use_effect(move || {
+        if let Some(Ok(page)) = &*first.read() {
+            let mut listed = ListedRows::default();
+            listed.insert(page);
+            *generation.write() += 1;
+            requested.write().clear();
+            rows.set(listed);
         }
-    }) {
-        DetailState::Loading => rsx! { p { class: "loading", "{loading}" } },
-        DetailState::Error(message) => rsx! { p { class: "empty", "{message}" } },
-        DetailState::Ready(rows) => rsx! {
+    });
+    let fetch = use_callback(move |pages: Vec<usize>| {
+        let reading = *generation.peek();
+        for page in pages {
+            if !requested.write().insert(page) {
+                continue;
+            }
+            let services = services.clone();
+            let query = query.peek().clone();
+            spawn(async move {
+                let loaded = load_list_page(services, query, page).await;
+                if *generation.peek() != reading {
+                    return;
+                }
+                requested.write().remove(&page);
+                match loaded {
+                    Ok(page) => rows.write().insert(&page),
+                    Err(error) => tracing::warn!(%error, page, "could not read a list page"),
+                }
+            });
+        }
+    });
+    use_record_step(nav, category, rows, selected, fetch);
+    let narrowed = !search.read().is_empty() || !filters.read().is_empty();
+    let state = match &*first.read() {
+        None if *generation.read() == 0 => Err(loading),
+        Some(Err(message)) => Err(message.clone()),
+        None | Some(Ok(_)) => Ok(()),
+    };
+    match state {
+        Err(message) => rsx! {
+            div { class: "list-toolbar",
+                FiltersButton { count: filters.read().len(), editing }
+            }
+            FilterBar { kind, filters, editing }
+            p { class: "empty", "{message}" }
+        },
+        Ok(()) => rsx! {
             ListPane {
-                rows: rows.clone(),
-                query,
+                rows,
+                search,
+                sort,
                 selected,
                 chrome: list_chrome.clone(),
+                narrowed,
                 onselect: move |row: RowVm| nav.open_record(RecordRef {
                     category,
                     human_id: row.id,
                     label: row.title,
                 }),
+                onmissing: fetch,
+                tools: rsx! { FiltersButton { count: filters.read().len(), editing } },
+                bar: rsx! { FilterBar { kind, filters, editing } },
             }
         },
-        DetailState::NotFound(_) | DetailState::Other => rsx! {},
-    }
-}
-
-/// The list-loading [`Intent`] for an entity category (`Dashboard` has no list — it is not an entity
-/// destination and the Explorer is never mounted for it).
-fn list_intent(category: Category) -> Intent {
-    match category {
-        Category::People | Category::Dashboard => Intent::ShowList,
-        Category::Families => Intent::ShowFamilyList,
-        Category::Events => Intent::ShowEventList,
-        Category::Places => Intent::ShowPlaceList,
-        Category::Sources => Intent::ShowSourceList,
-        Category::Citations => Intent::ShowCitationList,
-        Category::Repositories => Intent::ShowRepositoryList,
-        Category::Media => Intent::ShowMediaList,
-        Category::Notes => Intent::ShowNoteList,
-        Category::ResearchNotes => Intent::ShowResearchNoteList,
-        Category::Tags => Intent::ShowTagList,
-        Category::DnaTests => Intent::ShowDnaTestList,
-        Category::DnaMatches => Intent::ShowDnaMatchList,
     }
 }
 

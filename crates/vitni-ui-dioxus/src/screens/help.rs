@@ -9,7 +9,8 @@
 
 use super::prelude::*;
 use vitni_ui::{
-    Cell, EvidenceAxis, HelpBlock, HelpDoc, HelpTopicId, ListQuery, Run, SpecimenKind, help_doc, help_topics,
+    Cell, EvidenceAxis, HelpBlock, HelpDoc, HelpTopicId, ListedRows, RowQuery, RowSort, Run, SpecimenKind, help_doc,
+    help_topics, visible_rows,
 };
 
 use crate::i18n::Chrome;
@@ -38,14 +39,22 @@ pub fn HelpScreen(topic: Option<HelpTopicId>) -> Element {
             ..RowVm::default()
         })
         .collect();
-    let query = use_signal(ListQuery::default);
+    let search = use_signal(String::new);
+    let sort = use_signal(RowSort::default);
     let selected = use_signal(move || Some(active.id().to_owned()));
+    let query = RowQuery {
+        query: search(),
+        sort: sort(),
+    };
+    let rows = ListedRows::whole(visible_rows(&rows, &query));
 
     let list = rsx! {
         ListPane {
             rows,
-            query,
+            search,
+            sort,
             selected,
+            narrowed: !query.query.is_empty(),
             chrome: help_list_chrome(&chrome.0),
             onselect: move |row: RowVm| nav.go_to(Destination::Help { topic: HelpTopicId::from_id(&row.id) }),
         }
@@ -68,6 +77,7 @@ fn help_list_chrome(chrome: &Chrome) -> ListChrome {
         list_label: chrome.help_index_label(),
         filter_placeholder: chrome.help_filter(),
         empty: chrome.help_empty(),
+        no_match: chrome.help_empty(),
         sort: SortChrome::resolve(chrome),
     }
 }

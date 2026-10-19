@@ -25,9 +25,24 @@ tab-empty = Nothing here yet.
 # List toolbar sort control (PR39)
 sort-order-title = Change sort order
 sort-id-asc = Sort: ID ↑
-sort-id-desc = Sort: ID ↓
 sort-name-asc = Sort: Name ↑
 sort-name-desc = Sort: Name ↓
+
+# Explorer filter bar (ADR 0052 §2–4, #678)
+list-no-match = No records match.
+list-filters = Filters
+list-filters-title = Filter the list by its columns
+filter-editor = Filter
+filter-column = Column
+filter-op = Condition
+filter-value = Value
+filter-from = From
+filter-to = To
+filter-apply = Apply
+filter-remove = Remove
+filter-cancel = Cancel
+filter-edit = Edit filter: { $filter }
+filter-delete = Remove filter: { $filter }
 
 # Component chrome (icon-button accessible names, skip link)
 skip-to-content = Skip to content

@@ -1,0 +1,248 @@
+# #678: the Explorer's search box and filter bar narrow the list through the store's list query. SSR
+# renders the button, chips and editor but cannot prove a typed search or an applied clause reaches the
+# store and comes back as fewer rows: this searches the People list for a surname, adds a *Given name
+# contains* clause through the editor, and removes it again by its chip.
+#
+# The fixture seeds no persons, so the scenario creates Berit Olsen, Anne Olsen and Per Hansen first.
+description = "The Explorer search and filter bar narrow the list through the store (#678)"
+
+[[step]]
+do = "click"
+at = { role = "listitem", text = "People" }
+label = "rail: People"
+
+[[step]]
+do = "key"
+chord = "ctrl+n"
+label = "⌘N: a new Person draft"
+
+[[step]]
+do = "click"
+at = { id = "given" }
+label = "field: Given name"
+
+[[step]]
+do = "text"
+text = "Berit"
+label = "type: Berit"
+
+[[step]]
+do = "click"
+at = { id = "surname" }
+label = "field: Surname"
+
+[[step]]
+do = "text"
+text = "Olsen"
+label = "type: Olsen"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Save" }
+label = "New person: Save"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Create a new record" }
+label = "tabstrip: +"
+
+[[step]]
+do = "click"
+at = { role = "menuitem", text = "New person" }
+label = "menu: New person"
+
+[[step]]
+do = "click"
+at = { id = "given" }
+label = "field: Given name"
+
+[[step]]
+do = "text"
+text = "Anne"
+label = "type: Anne"
+
+[[step]]
+do = "click"
+at = { id = "surname" }
+label = "field: Surname"
+
+[[step]]
+do = "text"
+text = "Olsen"
+label = "type: Olsen"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Save" }
+label = "New person: Save"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Create a new record" }
+label = "tabstrip: +"
+
+[[step]]
+do = "click"
+at = { role = "menuitem", text = "New person" }
+label = "menu: New person"
+
+[[step]]
+do = "click"
+at = { id = "given" }
+label = "field: Given name"
+
+[[step]]
+do = "text"
+text = "Per"
+label = "type: Per"
+
+[[step]]
+do = "click"
+at = { id = "surname" }
+label = "field: Surname"
+
+[[step]]
+do = "text"
+text = "Hansen"
+label = "type: Hansen"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Save" }
+label = "New person: Save"
+
+[[step]]
+do = "shot"
+name = "everyone"
+
+[[step]]
+do = "click"
+at = { role = "searchbox", within = "explorer" }
+label = "the Explorer search box"
+
+[[step]]
+do = "text"
+text = "olsen"
+label = "type: olsen"
+
+[[step]]
+do = "shot"
+name = "searched"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Filters", within = "explorer" }
+label = "toolbar: Filters"
+
+[[step]]
+do = "click"
+at = { id = "filter-column" }
+label = "editor: Column"
+
+[[step]]
+do = "key"
+chord = "Down"
+label = "Down: Given name"
+
+[[step]]
+do = "key"
+chord = "Return"
+label = "Return: choose it"
+
+[[step]]
+do = "click"
+at = { id = "filter-first" }
+label = "editor: Value"
+
+[[step]]
+do = "text"
+text = "anne"
+label = "type: anne"
+
+[[step]]
+do = "shot"
+name = "editing"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Apply", within = "explorer" }
+label = "editor: Apply"
+
+[[step]]
+do = "shot"
+name = "filtered"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Remove filter", within = "explorer" }
+label = "chip: ×"
+
+[[step]]
+do = "shot"
+name = "unfiltered"
+
+[[assert]]
+kind = "present"
+shot = "everyone"
+element = { role = "option", text = "Per Hansen", within = "explorer" }
+because = "every person is listed before the search"
+
+[[assert]]
+kind = "present"
+shot = "searched"
+element = { role = "option", text = "Berit Olsen", within = "explorer" }
+because = "the search matches the surname column"
+
+[[assert]]
+kind = "present"
+shot = "searched"
+element = { role = "option", text = "Anne Olsen", within = "explorer" }
+because = "the search matches the surname column"
+
+[[assert]]
+kind = "absent"
+shot = "searched"
+element = { role = "option", text = "Per Hansen", within = "explorer" }
+because = "the store leaves out a person the search does not match"
+
+[[assert]]
+kind = "present"
+shot = "editing"
+element = { id = "filter-editor" }
+because = "Filters opens the clause editor under the toolbar"
+
+[[assert]]
+kind = "present"
+shot = "filtered"
+element = { role = "button", text = "Edit filter: Given name contains anne", within = "explorer" }
+because = "the applied clause shows as a chip"
+
+[[assert]]
+kind = "absent"
+shot = "filtered"
+element = { id = "filter-editor" }
+because = "Apply closes the editor"
+
+[[assert]]
+kind = "present"
+shot = "filtered"
+element = { role = "option", text = "Anne Olsen", within = "explorer" }
+because = "the clause and the search both hold for Anne Olsen"
+
+[[assert]]
+kind = "absent"
+shot = "filtered"
+element = { role = "option", text = "Berit Olsen", within = "explorer" }
+because = "the clause narrows the searched list: filters and search combine with AND"
+
+[[assert]]
+kind = "present"
+shot = "unfiltered"
+element = { role = "option", text = "Berit Olsen", within = "explorer" }
+because = "removing the chip drops the clause, and the search alone lists Berit again"
+
+[[assert]]
+kind = "absent"
+shot = "unfiltered"
+element = { role = "option", text = "Per Hansen", within = "explorer" }
+because = "the search still holds after the clause is gone"

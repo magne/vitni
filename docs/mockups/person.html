@@ -15,8 +15,53 @@
     <section class="list">
       <div class="list-toolbar">
         <input class="filter" placeholder="Filter people…">
+        <button class="btn sm" title="Filter the list by its columns" aria-expanded="true" aria-controls="filter-editor">Filters<span class="badge">1</span></button>
         <button class="btn sm" title="Change sort order">Sort: ID ↑</button>
         <button class="btn sm primary" title="New person">+ New</button>
+      </div>
+      <!-- Filter bar (ADR 0052 §2–3, #678). The search box matches the kind's text columns and the ID;
+           *Filters* adds a typed clause, and every clause narrows the list (AND). The editor sits in the
+           column's flow under the toolbar: Column (the kind's catalogue), Condition (the operators the
+           column's type takes) and the value — a text field for text, dates and numbers (From/To for
+           *between*), a checkbox per value for a choice or the workspace's tags, a record picker for a
+           record. Apply adds the clause (or replaces the one reopened); Remove drops a reopened clause;
+           Cancel or Esc closes it. Applied clauses show as chips: the label reopens the clause, × removes
+           it. Search, filters and sort are evaluated by the store, which reads the list a page at a time;
+           a search or filter matching nothing says "No records match." -->
+      <section class="filter-editor" id="filter-editor" role="group" aria-label="Filter">
+        <div class="field">
+          <label for="filter-column">Column</label>
+          <select class="in" id="filter-column">
+            <option value="name">Name</option>
+            <option value="given">Given name</option>
+            <option value="surname">Surname</option>
+            <option value="sex">Sex</option>
+            <option value="birth" selected>Birth</option>
+            <option value="death">Death</option>
+            <option value="tags">Tags</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="filter-op">Condition</label>
+          <select class="in" id="filter-op">
+            <option value="before">before</option>
+            <option value="after" selected>after</option>
+            <option value="between">between</option>
+            <option value="is-empty">is empty</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="filter-first">Value</label>
+          <input class="in" id="filter-first" value="1800">
+        </div>
+        <div class="filter-actions">
+          <button class="btn sm primary" type="button">Apply</button>
+          <button class="btn sm" type="button">Remove</button>
+          <button class="btn sm ghost" type="button">Cancel</button>
+        </div>
+      </section>
+      <div class="list-filters" role="group" aria-label="Filters">
+        <span class="chip"><button class="chip-label" type="button" aria-label="Edit filter: Birth after 1800">Birth after 1800</button><button class="chip-delete" type="button" aria-label="Remove filter: Birth after 1800">×</button></span>
       </div>
       <!-- Windowed (#590): the listbox is as tall as the whole list (--list-row-h per row) and mounts
            only a window of rows around the scroll offset, plus the roving tab stop — each row at its

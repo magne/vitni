@@ -5,7 +5,7 @@
 //! the same pattern as `components.rs`.
 
 use dioxus::prelude::*;
-use vitni_ui::{ListQuery, RowVm};
+use vitni_ui::{ListedRows, RowSort, RowVm, RowsPage};
 use vitni_ui_dioxus::components::{BadgeSpec, TabItem};
 use vitni_ui_dioxus::master_detail::{DetailContainer, ListChrome, ListPane, MasterDetail, SortChrome};
 
@@ -13,7 +13,6 @@ fn sort_chrome() -> SortChrome {
     SortChrome {
         title: "Change sort order".to_owned(),
         id_asc: "Sort: ID ↑".to_owned(),
-        id_desc: "Sort: ID ↓".to_owned(),
         name_asc: "Sort: Name ↑".to_owned(),
         name_desc: "Sort: Name ↓".to_owned(),
     }
@@ -38,22 +37,31 @@ fn rows() -> Vec<RowVm> {
     ]
 }
 
+fn chrome() -> ListChrome {
+    ListChrome {
+        list_label: "People".to_owned(),
+        filter_placeholder: "Filter people…".to_owned(),
+        empty: "No persons yet.".to_owned(),
+        no_match: "No records match.".to_owned(),
+        sort: sort_chrome(),
+    }
+}
+
 /// A master-detail screen with the second row selected and the second tab active.
 fn screen() -> Element {
-    let query = use_signal(ListQuery::default);
+    let search = use_signal(String::new);
+    let sort = use_signal(RowSort::default);
     let selected = use_signal(|| Some("I0002".to_owned()));
     let active = use_signal(|| 1_usize);
     rsx! {
         ListPane {
-            rows: rows(),
-            query,
+            rows: ListedRows::whole(rows()),
+            search,
+            sort,
             selected,
-            chrome: ListChrome {
-                list_label: "People".to_owned(),
-                filter_placeholder: "Filter people…".to_owned(),
-                empty: "No persons yet.".to_owned(),
-                sort: sort_chrome(),
-            },
+            chrome: chrome(),
+            tools: rsx! { button { class: "btn sm", "Filters" } },
+            bar: rsx! { div { class: "list-filters", "Birth before 1800" } },
         }
         MasterDetail {
             detail: rsx! {
@@ -173,27 +181,37 @@ fn many_rows(count: usize) -> Vec<RowVm> {
     rows
 }
 
+/// A list of `total` rows of which the first `fetched` are read, as the Explorer holds a store query's
+/// first page.
 #[component]
-fn LongList(count: usize) -> Element {
-    let query = use_signal(ListQuery::default);
+fn LongList(total: usize, fetched: usize, narrowed: bool) -> Element {
+    let search = use_signal(String::new);
+    let sort = use_signal(RowSort::default);
     let selected = use_signal(|| None::<String>);
+    let mut rows = ListedRows::default();
+    rows.insert(&RowsPage {
+        offset: 0,
+        total,
+        rows: many_rows(fetched),
+    });
     rsx! {
-        ListPane {
-            rows: many_rows(count),
-            query,
-            selected,
-            chrome: ListChrome {
-                list_label: "People".to_owned(),
-                filter_placeholder: "Filter people…".to_owned(),
-                empty: "No persons yet.".to_owned(),
-                sort: sort_chrome(),
-            },
-        }
+        ListPane { rows, search, sort, selected, chrome: chrome(), narrowed }
     }
 }
 
 fn render_long(count: usize) -> String {
-    let mut vdom = VirtualDom::new_with_props(LongList, LongListProps { count });
+    render_list(count, vitni_ui::PAGE_ROWS, false)
+}
+
+fn render_list(total: usize, fetched: usize, narrowed: bool) -> String {
+    let mut vdom = VirtualDom::new_with_props(
+        LongList,
+        LongListProps {
+            total,
+            fetched,
+            narrowed,
+        },
+    );
     vdom.rebuild_in_place();
     dioxus_ssr::render(&vdom)
 }
@@ -230,5 +248,44 @@ fn a_windowed_row_announces_its_place_in_the_whole_list() {
         html.matches(r#"tabindex="0""#).count(),
         1,
         "the list keeps one roving tab stop"
+    );
+}
+
+#[test]
+fn a_row_not_fetched_yet_holds_its_place_busy() {
+    let html = render_list(100, 0, false);
+
+    assert_eq!(
+        html.matches(r#"aria-busy="true""#).count(),
+        vitni_ui::WINDOW_ROWS,
+        "every mounted row waits for its page:\n{html}"
+    );
+    assert!(
+        html.contains("height:calc(100 * var(--list-row-h))"),
+        "the box spans the total"
+    );
+    assert!(
+        html.contains("aria-setsize=100"),
+        "a waiting row still announces its place"
+    );
+}
+
+#[test]
+fn an_empty_result_says_whether_the_list_is_empty_or_narrowed() {
+    assert!(render_list(0, 0, false).contains("No persons yet."));
+    assert!(render_list(0, 0, true).contains("No records match."));
+}
+
+#[test]
+fn the_toolbar_carries_the_callers_tools_and_bar() {
+    let html = render();
+    let toolbar = html.find(r#"class="list-toolbar""#).expect("toolbar");
+    let tools = html.find(">Filters<").expect("tools slot");
+    let bar = html.find(r#"class="list-filters""#).expect("bar slot");
+    let listbox = html.find(r#"role="listbox""#).expect("listbox");
+
+    assert!(
+        toolbar < tools && tools < bar && bar < listbox,
+        "toolbar, tools, bar, rows:\n{html}"
     );
 }
