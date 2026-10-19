@@ -12,6 +12,10 @@ use crate::store::DbError;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Dialect {
     Sqlite,
+    #[cfg_attr(
+        not(any(feature = "postgres", test)),
+        expect(dead_code, reason = "a SQLite-only build writes no Postgres statement")
+    )]
     Postgres,
 }
 
@@ -300,7 +304,8 @@ pub(crate) enum SortRead {
 #[derive(Debug)]
 pub(crate) struct Select {
     pub(crate) rows: Statement,
-    pub(crate) count: Statement,
+    /// The count, for an offset window.
+    pub(crate) count: Option<Statement>,
     pub(crate) cells: Vec<CellRead>,
     pub(crate) sort: Option<SortRead>,
 }
@@ -310,19 +315,67 @@ fn column_of(kind: ListedKind, id: &str) -> Result<ListColumn, DbError> {
         .ok_or_else(|| DbError::Malformed(format!("the {kind:?} list has no column `{id}`")))
 }
 
-/// The expression a column sorts by, and how its key is read back.
-fn sort_expression(dialect: Dialect, column: &ListColumn) -> Result<(String, SortRead), DbError> {
+/// The stored column a column sorts by, and how its key is read back; `None` for the tag column.
+fn sort_column(column: &ListColumn) -> Option<(String, SortRead)> {
     let stem = stem(column);
     match column.ty {
-        ColumnType::Text | ColumnType::Record => Ok((dialect.bytewise(&format!("t.{stem}_fold")), SortRead::Text)),
-        ColumnType::Date => Ok((format!("t.{stem}_key"), SortRead::Int)),
-        ColumnType::Number => Ok((format!("t.{stem}"), SortRead::Real)),
-        ColumnType::Choice => Ok((dialect.bytewise(&format!("t.{stem}")), SortRead::Text)),
-        ColumnType::Tags => Err(DbError::Malformed(format!(
-            "the `{}` column cannot be sorted",
-            column.id
-        ))),
+        ColumnType::Text | ColumnType::Record => Some((format!("{stem}_fold"), SortRead::Text)),
+        ColumnType::Date => Some((format!("{stem}_key"), SortRead::Int)),
+        ColumnType::Number => Some((stem, SortRead::Real)),
+        ColumnType::Choice => Some((stem, SortRead::Text)),
+        ColumnType::Tags => None,
     }
+}
+
+/// `stored` as the order compares it: text bytewise, so both engines agree.
+fn sort_key(dialect: Dialect, stored: &str, read: SortRead) -> String {
+    match read {
+        SortRead::Text => dialect.bytewise(stored),
+        SortRead::Int | SortRead::Real => stored.to_owned(),
+    }
+}
+
+/// How a query sorts by one column.
+struct SortPlan {
+    /// The value compared.
+    expression: String,
+    /// Whether the row has no value — the order's first key, in the form [`sort_indexes`] index.
+    empty: String,
+    read: SortRead,
+    direction: SortDirection,
+}
+
+/// The plan for sorting by `column` in `direction`.
+fn sort_plan(dialect: Dialect, column: &ListColumn, direction: SortDirection) -> Result<SortPlan, DbError> {
+    let (stored, read) = sort_column(column)
+        .ok_or_else(|| DbError::Malformed(format!("the `{}` column cannot be sorted", column.id)))?;
+    Ok(SortPlan {
+        expression: sort_key(dialect, &format!("t.{stored}"), read),
+        empty: format!("(t.{stored} IS NULL)"),
+        read,
+        direction,
+    })
+}
+
+/// The indexes a sorted page walks instead of sorting every match (ADR 0052 §5): per sortable column,
+/// one per direction, in the query's order — rows with a value first, then the value, then the
+/// ascending `human_id` and id that break ties.
+pub(crate) fn sort_indexes(dialect: Dialect, kind: ListedKind) -> Vec<String> {
+    let table = kind.table();
+    let tie = format!("{}, {}", dialect.bytewise("human_id"), dialect.bytewise("view_id"));
+    let mut indexes = Vec::new();
+    for column in kind.columns() {
+        let Some((stored, read)) = sort_column(column) else {
+            continue;
+        };
+        let key = sort_key(dialect, &stored, read);
+        for (suffix, direction) in [("asc", "ASC"), ("desc", "DESC")] {
+            indexes.push(format!(
+                "CREATE INDEX IF NOT EXISTS {table}_{stored}_{suffix} ON {table} (({stored} IS NULL), {key} {direction}, {tie})"
+            ));
+        }
+    }
+    indexes
 }
 
 /// The SQL test one filter makes.
@@ -464,23 +517,60 @@ fn tie_after(binder: &mut Binder, cursor: &super::ListCursor, tie: (&str, &str))
     format!("({human_id} > {after} OR ({human_id} = {same} AND {view_id} > {id}))")
 }
 
+/// The index the default order — `human_id`, then id — and every keyset read in it walk.
+pub(crate) fn order_index(dialect: Dialect, kind: ListedKind) -> String {
+    format!(
+        "CREATE INDEX IF NOT EXISTS {table}_order ON {table} ({}, {})",
+        dialect.bytewise("human_id"),
+        dialect.bytewise("view_id"),
+        table = kind.table()
+    )
+}
+
+/// How many records match `spec`. With no search or filter that is every row but the merged ones that
+/// have a row — a merge edge may name a record that was never created — two counts that need no
+/// per-row probe of the identity index.
+fn count(dialect: Dialect, spec: &ListSpec) -> Result<Statement, DbError> {
+    let mut binder = Binder::new(dialect);
+    let table = spec.kind.table();
+    let unnarrowed = spec.filters.is_empty() && spec.search.as_deref().is_none_or(|search| search.trim().is_empty());
+    if unnarrowed {
+        let sql = match spec.kind.merged_kind() {
+            Some(merged) => format!(
+                "SELECT (SELECT COUNT(*) FROM {table}) - (SELECT COUNT(*) FROM identity_links m WHERE m.kind = {} \
+                 AND EXISTS (SELECT 1 FROM {table} t WHERE t.view_id = m.member)) AS total",
+                binder.text(merged.as_str())
+            ),
+            None => format!("SELECT COUNT(*) AS total FROM {table}"),
+        };
+        return Ok(binder.finish(sql));
+    }
+    let conditions = conditions(&mut binder, spec)?;
+    let sql = format!("SELECT COUNT(*) AS total FROM {table} t {}", where_clause(&conditions));
+    Ok(binder.finish(sql))
+}
+
 /// The list query for `spec`.
 pub(crate) fn select(dialect: Dialect, spec: &ListSpec) -> Result<Select, DbError> {
     let kind = spec.kind;
-    let human_id = dialect.bytewise("COALESCE(t.human_id, '')");
+    // A tag has no `human_id`: a NULL would neither order nor compare, so it reads as empty there. Every
+    // other kind orders by the column itself, which `order_index` serves.
+    let human_id = match kind {
+        ListedKind::Tag => dialect.bytewise("COALESCE(t.human_id, '')"),
+        _ => dialect.bytewise("t.human_id"),
+    };
     let view_id = dialect.bytewise("t.view_id");
 
     let sort = match &spec.sort {
         Some(sort) => {
             let column = column_of(kind, &sort.column)?;
-            let (expression, read) = sort_expression(dialect, &column)?;
-            Some((expression, read, sort.direction))
+            Some(sort_plan(dialect, &column, sort.direction)?)
         }
         None => None,
     };
 
     let mut fields = vec!["t.view_id".to_owned(), "t.human_id".to_owned()];
-    if let Some((expression, _, _)) = &sort {
+    if let Some(SortPlan { expression, .. }) = &sort {
         fields.push(format!("{expression} AS sort_key"));
     }
     let mut cells = Vec::with_capacity(spec.columns.len());
@@ -506,33 +596,34 @@ pub(crate) fn select(dialect: Dialect, spec: &ListSpec) -> Result<Select, DbErro
         cells.push(read);
     }
 
-    let mut count = Binder::new(dialect);
-    let count_conditions = conditions(&mut count, spec)?;
-    let count = count.finish(format!(
-        "SELECT COUNT(*) AS total FROM {} t {}",
-        kind.table(),
-        where_clause(&count_conditions)
-    ));
+    let count = match spec.window {
+        ListWindow::Offset { .. } => Some(count(dialect, spec)?),
+        ListWindow::After { .. } => None,
+    };
 
     let mut rows = Binder::new(dialect);
     let mut row_conditions = conditions(&mut rows, spec)?;
     let (offset, limit) = match &spec.window {
         ListWindow::Offset { offset, limit } => (*offset, *limit),
         ListWindow::After { cursor, limit } => {
-            let sorted = sort
-                .as_ref()
-                .map(|(expression, _, direction)| (expression.as_str(), *direction));
+            let sorted = sort.as_ref().map(|plan| (plan.expression.as_str(), plan.direction));
             row_conditions.push(keyset(&mut rows, sorted, cursor, (&human_id, &view_id)));
             (0, *limit)
         }
     };
     let mut order = Vec::new();
-    if let Some((expression, _, direction)) = &sort {
+    if let Some(SortPlan {
+        expression,
+        empty,
+        direction,
+        ..
+    }) = &sort
+    {
         let direction = match direction {
             SortDirection::Ascending => "ASC",
             SortDirection::Descending => "DESC",
         };
-        order.push(format!("{expression} {direction} NULLS LAST"));
+        order.push(format!("{empty} ASC, {expression} {direction}"));
     }
     order.push(format!("{human_id} ASC"));
     order.push(format!("{view_id} ASC"));
@@ -553,7 +644,7 @@ pub(crate) fn select(dialect: Dialect, spec: &ListSpec) -> Result<Select, DbErro
         rows: rows.finish(sql),
         count,
         cells,
-        sort: sort.map(|(_, read, _)| read),
+        sort: sort.map(|plan| plan.read),
     })
 }
 

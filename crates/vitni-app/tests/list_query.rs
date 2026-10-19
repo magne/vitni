@@ -303,7 +303,7 @@ async fn a_query_returns_typed_cells_for_its_columns() {
     };
     let window = ListWindow::Offset { offset: 0, limit: None };
     let result = query_list(&ws, &query, window).await.expect("query");
-    assert_eq!(result.total, 1);
+    assert_eq!(result.total, Some(1));
     assert_eq!(result.rows[0].cells[0], Some(ListCell::Text("Ola Olsen".to_owned())));
     assert!(
         matches!(&result.rows[0].cells[1], Some(ListCell::Date(date)) if date.sort_value == 17_900_000),

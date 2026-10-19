@@ -75,12 +75,21 @@ pub(crate) async fn create_filled(pool: &Pool<Sqlite>) -> Result<(), DbError> {
             stale.push(*kind);
         }
     }
-    if stale.is_empty() {
-        return Ok(());
+    if !stale.is_empty() {
+        crate::record_links::sqlite::rebuild_index(pool).await?;
+        for kind in stale {
+            refill(pool, kind, true).await?;
+        }
     }
-    crate::record_links::sqlite::rebuild_index(pool).await?;
-    for kind in stale {
-        refill(pool, kind, true).await?;
+    for kind in ListedKind::ALL {
+        let mut indexes = vec![sql::order_index(DIALECT, *kind)];
+        indexes.extend(sql::sort_indexes(DIALECT, *kind));
+        for index in indexes {
+            sqlx::query(&index)
+                .execute(pool)
+                .await
+                .map_err(backend("indexing a list table"))?;
+        }
     }
     Ok(())
 }
@@ -289,11 +298,17 @@ async fn relist<V: ListedRecord>(pool: &Pool<Sqlite>, id: &str) -> Result<(), Db
 /// the query fails.
 pub(crate) async fn query(pool: &Pool<Sqlite>, spec: &ListSpec) -> Result<ListResult, DbError> {
     let select = sql::select(DIALECT, spec)?;
-    let total: i64 = bind_all(sqlx::query(&select.count.sql), &select.count.binds)
-        .fetch_one(pool)
-        .await
-        .map_err(backend("counting a list"))?
-        .get("total");
+    let total = match &select.count {
+        Some(count) => {
+            let total: i64 = bind_all(sqlx::query(&count.sql), &count.binds)
+                .fetch_one(pool)
+                .await
+                .map_err(backend("counting a list"))?
+                .get("total");
+            Some(u64::try_from(total).unwrap_or_default())
+        }
+        None => None,
+    };
     let found = bind_all(sqlx::query(&select.rows.sql), &select.rows.binds)
         .fetch_all(pool)
         .await
@@ -302,10 +317,7 @@ pub(crate) async fn query(pool: &Pool<Sqlite>, spec: &ListSpec) -> Result<ListRe
     for row in &found {
         rows.push(read_row(row, &select.cells, select.sort)?);
     }
-    Ok(ListResult {
-        rows,
-        total: u64::try_from(total).unwrap_or_default(),
-    })
+    Ok(ListResult { rows, total })
 }
 
 /// The records carrying `tag`, each as its cluster's root, by kind in [`ListedKind::ALL`] order, then

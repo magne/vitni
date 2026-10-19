@@ -441,8 +441,10 @@ pub struct ListRow {
 pub struct ListResult {
     /// The rows in the window.
     pub rows: Vec<ListRow>,
-    /// Every record matching the query, the window aside.
-    pub total: u64,
+    /// Every record matching the query, the window aside — counted for an offset window, `None` for a
+    /// keyset read: it continues a query whose first page counted, and the count is the cost of a page
+    /// whose filter matches most of a large list.
+    pub total: Option<u64>,
 }
 
 /// The tag ids of a comma-joined `tagged` list, in id order.

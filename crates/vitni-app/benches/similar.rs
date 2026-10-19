@@ -740,7 +740,8 @@ fn bench_person_query(c: &mut Criterion, rt: &tokio::runtime::Runtime, dataset: 
     let matches = rt
         .block_on(query_list(&dataset.workspace, &born_before, window(0)))
         .expect("query")
-        .total;
+        .total
+        .expect("an offset window counts");
     let deep = u32::try_from(matches / 2).expect("matches fit u32");
     let held = rt
         .block_on(query_list(

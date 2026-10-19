@@ -412,7 +412,7 @@ pub(crate) async fn select(
     };
     let result = query_list(workspace, &bare, window).await?;
     let ids = result.rows.into_iter().map(|row| row.id).collect();
-    Ok((Selection::Ids(ids), result.total))
+    Ok((Selection::Ids(ids), result.total.unwrap_or_default()))
 }
 
 /// `views` in the order of `ids`, the ones not named dropped.

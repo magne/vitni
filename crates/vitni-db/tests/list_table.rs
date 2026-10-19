@@ -266,7 +266,7 @@ async fn a_query_pages_the_listed_records_with_their_total(store: &Store) {
     person(store, 1, 199, merge).await;
 
     let all = run(store, &spec(ListedKind::Person)).await;
-    assert_eq!(all.total, 4, "a merged record is not counted");
+    assert_eq!(all.total, Some(4), "a merged record is not counted");
     let window = ListSpec {
         window: ListWindow::Offset {
             offset: 1,
@@ -275,7 +275,7 @@ async fn a_query_pages_the_listed_records_with_their_total(store: &Store) {
         ..spec(ListedKind::Person)
     };
     let page = run(store, &window).await;
-    assert_eq!(page.total, 4, "the total counts every match, not the page");
+    assert_eq!(page.total, Some(4), "the total counts every match, not the page");
     assert_eq!(
         page.rows
             .iter()
@@ -293,7 +293,7 @@ async fn a_query_pages_the_listed_records_with_their_total(store: &Store) {
     };
     let past = run(store, &past).await;
     assert!(past.rows.is_empty(), "no rows past the end");
-    assert_eq!(past.total, 4, "a window past the end still counts the matches");
+    assert_eq!(past.total, Some(4), "a window past the end still counts the matches");
 }
 
 async fn a_row_carries_typed_cells_for_the_requested_columns(store: &Store) {
@@ -467,6 +467,11 @@ async fn a_keyset_walk_reads_the_same_rows_as_offset_pages(store: &Store) {
                 )
                 .await;
                 let Some(last) = page.rows.last() else { break };
+                assert_eq!(
+                    page.total.is_some(),
+                    matches!(window, ListWindow::Offset { .. }),
+                    "only an offset window counts"
+                );
                 window = ListWindow::After {
                     cursor: last.cursor.clone(),
                     limit: Some(2),
@@ -647,9 +652,9 @@ async fn every_kind_lists_with_every_column(store: &Store) {
             assert_eq!(row.cells.len(), kind.columns().len(), "{kind:?}");
         }
     }
-    assert_eq!(run(store, &spec(ListedKind::Tag)).await.total, 1);
-    assert_eq!(run(store, &spec(ListedKind::Place)).await.total, 1);
-    assert_eq!(run(store, &spec(ListedKind::Event)).await.total, 5);
+    assert_eq!(run(store, &spec(ListedKind::Tag)).await.total, Some(1));
+    assert_eq!(run(store, &spec(ListedKind::Place)).await.total, Some(1));
+    assert_eq!(run(store, &spec(ListedKind::Event)).await.total, Some(5));
 }
 
 async fn a_tags_uses_are_read_through_its_links_a_cluster_once(store: &Store) {

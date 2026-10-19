@@ -41,6 +41,8 @@ const SOURCE_BASE: u128 = 0x0000_0004_0000_0000;
 const CITATION_BASE: u128 = 0x0000_0005_0000_0000;
 const RESEARCH_NOTE_BASE: u128 = 0x0000_0006_0000_0000;
 const ASSERTION_BASE: u128 = 0x9000_0000_0000_0000;
+/// The assertion ids the write benchmark mints, clear of every dataset's.
+const WRITE_ASSERTION_BASE: u128 = 0xA000_0000_0000_0000;
 
 /// Person counts driving each dataset size; the emitted event totals land near 1k / 10k / 50k and
 /// are reported verbatim as the benchmark parameter. The top size is capped so a full `cargo bench`
@@ -411,7 +413,35 @@ fn bench_queries(c: &mut Criterion, rt: &tokio::runtime::Runtime, datasets: &[Da
     group.finish();
 }
 
-/// Builds each dataset once (kept alive for both benchmark groups), then runs the rebuild and query
+/// The live write path: one name assertion on a person — its projection, the side indexes and its
+/// list row, then the rows of the families that read its name (ADR 0052 §5). Each iteration names the
+/// next person, so no one stream grows long enough to slow its own replay.
+fn bench_write(c: &mut Criterion, rt: &tokio::runtime::Runtime, datasets: &[Dataset]) {
+    let mut counter = WRITE_ASSERTION_BASE;
+    let mut group = c.benchmark_group("write");
+    for dataset in datasets {
+        let events = &dataset.events;
+        let mut next = 0;
+        group.bench_with_input(BenchmarkId::new("assert_person_name", events), events, |b, _| {
+            b.iter(|| {
+                let person_id = PersonId::from_uuid(Uuid::from_u128(PERSON_BASE + (next % dataset.persons) as u128));
+                next += 1;
+                let envelope = PersonCommandEnvelope {
+                    meta: next_meta(&mut counter),
+                    command: PersonCommand::AssertName {
+                        person_id,
+                        name: person_name(next),
+                    },
+                };
+                rt.block_on(dataset.store.execute_person(&person_id.to_string(), envelope))
+                    .expect("assert a name");
+            });
+        });
+    }
+    group.finish();
+}
+
+/// Builds each dataset once (kept alive for every benchmark group), then runs the rebuild and query
 /// benchmarks against the shared stores.
 fn benches(c: &mut Criterion) {
     let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
@@ -428,6 +458,7 @@ fn benches(c: &mut Criterion) {
     }
     bench_rebuild(c, &rt, &datasets);
     bench_queries(c, &rt, &datasets);
+    bench_write(c, &rt, &datasets);
 }
 
 criterion_group!(store_benches, benches);
