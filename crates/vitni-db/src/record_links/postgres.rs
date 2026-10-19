@@ -240,12 +240,15 @@ pub(crate) async fn linking(
     }
     let rows = sqlx::query(&format!(
         "SELECT source, target FROM {RECORD_LINKS_TABLE} \
-         WHERE relation = $1 AND target = ANY($2) ORDER BY source, target"
+         WHERE relation = $1 AND target = ANY($2)"
     ))
     .bind(relation.as_str())
     .bind(targets)
     .fetch_all(pool)
     .await
     .map_err(backend("reading the record links"))?;
-    Ok(rows.iter().map(|row| (row.get("source"), row.get("target"))).collect())
+    // Sorted here, as the SQLite twin sorts.
+    let mut links: Vec<(String, String)> = rows.iter().map(|row| (row.get("source"), row.get("target"))).collect();
+    links.sort_unstable();
+    Ok(links)
 }

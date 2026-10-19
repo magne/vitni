@@ -240,13 +240,17 @@ pub(crate) async fn linking(
     }
     let targets = serde_json::to_string(targets).map_err(|e| DbError::Backend(e.to_string()))?;
     let rows = sqlx::query(&format!(
-        "SELECT source, target FROM {RECORD_LINKS_TABLE} \
-         WHERE relation = ? AND target IN (SELECT value FROM json_each(?)) ORDER BY source, target"
+        "SELECT source, target FROM {RECORD_LINKS_TABLE} INDEXED BY record_links_by_target \
+         WHERE relation = ? AND target IN (SELECT value FROM json_each(?))"
     ))
     .bind(relation.as_str())
     .bind(targets)
     .fetch_all(pool)
     .await
     .map_err(backend("reading the record links"))?;
-    Ok(rows.iter().map(|row| (row.get("source"), row.get("target"))).collect())
+    // Sorted here, and the by-target index named: left to itself SQLite walks the covering primary key
+    // over every link of the relation instead of seeking the targets.
+    let mut links: Vec<(String, String)> = rows.iter().map(|row| (row.get("source"), row.get("target"))).collect();
+    links.sort_unstable();
+    Ok(links)
 }
