@@ -37,6 +37,8 @@ use vitni_core::repository::{RepositoryCommand, RepositoryError, RepositoryView}
 use vitni_core::source::{SourceCommand, SourceError, SourceView};
 use vitni_db::{DbError, ListPage, Store};
 
+use crate::list_query::{Selection, in_order};
+
 use crate::error::AppError;
 use crate::session::Session;
 use crate::use_case::Provenance;
@@ -903,7 +905,8 @@ pub(crate) fn group_clusters<'a, V: ClusterView>(views: &'a [V], clusters: &Clus
     groups
 }
 
-/// One page of the records of `V`'s kind a list shows, followed by the members of their clusters, so
+/// The records of `V`'s kind a list shows — a page, or the ids a query picked, in its order — followed
+/// by the members of their clusters, so
 /// [`group_clusters`] folds each root on the page with every record merged into it — with the clusters
 /// of the page's records, and no others.
 ///
@@ -912,9 +915,14 @@ pub(crate) fn group_clusters<'a, V: ClusterView>(views: &'a [V], clusters: &Clus
 /// A store error.
 pub(crate) async fn listed_page<V: ClusterView>(
     store: &Store,
-    page: ListPage,
+    selection: &Selection,
 ) -> Result<(Clusters<V::Id>, Vec<V>), AppError> {
-    let mut views = V::list_page(store, page).await?;
+    let mut views = match selection {
+        Selection::Page(page) => V::list_page(store, *page).await?,
+        Selection::Ids(ids) => in_order(V::by_ids(store, ids).await?, ids, |view| {
+            view.record_id().map(|id| id.to_string())
+        }),
+    };
     let ids: BTreeSet<V::Id> = views.iter().filter_map(ClusterRecord::record_id).collect();
     let clusters = Clusters::load_of(store, &ids).await?;
     let mut members = Vec::new();
@@ -1041,10 +1049,6 @@ pub(crate) type SourceReferences = References<SourceId>;
 pub(crate) type CitationReferences = References<CitationId>;
 /// How a reference names each repository.
 pub(crate) type RepositoryReferences = References<RepositoryId>;
-/// How a reference names each note.
-pub(crate) type NoteReferences = References<NoteId>;
-/// How a reference names each media object.
-pub(crate) type MediaReferences = References<MediaId>;
 
 impl<I: ClusterId> References<I> {
     /// Loads the clusters and every record's `human_id`.

@@ -301,6 +301,7 @@ impl Category {
             UsingKind::Note => Self::Notes,
             UsingKind::DnaTest => Self::DnaTests,
             UsingKind::DnaMatch => Self::DnaMatches,
+            UsingKind::ResearchNote => Self::ResearchNotes,
         }
     }
 

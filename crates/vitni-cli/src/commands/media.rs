@@ -3,7 +3,7 @@
 use clap::Subcommand;
 use uuid::Uuid;
 use vitni_app::{
-    AppError, DateParts, ListPage, MatchableKind, MutationMeta, NewMedia, Provenance, Session, Workspace,
+    AppError, DateParts, ListedKind, MatchableKind, MutationMeta, NewMedia, Provenance, Session, Workspace,
     add_media_attribute, add_media_citation, assert_media_date, attach_media_note, create_media, list_media_page,
     set_media_checksum, set_media_file_path, set_media_restrictions, set_media_web_path, show_media, tag_media,
 };
@@ -112,7 +112,8 @@ pub enum MediaCmd {
         /// The media's human id (e.g. `O0001`).
         human_id: String,
     },
-    /// List the media objects by human id, all of them or one window.
+    /// List the media objects, narrowed by `--search` and `--filter`, ordered by `--sort` or else by human id;
+    /// all of them or one window.
     List(ListArgs),
 }
 
@@ -196,7 +197,7 @@ pub async fn run(
             restrict(workspace, session, &human_id, restrictions, localizer).await
         }
         MediaCmd::Show { human_id } => show(workspace, &human_id, localizer).await,
-        MediaCmd::List(window) => list(workspace, window.page(), localizer).await,
+        MediaCmd::List(window) => list(workspace, &window, localizer).await,
     }
 }
 
@@ -232,10 +233,15 @@ async fn show(workspace: &Workspace, human_id: &str, localizer: &Localizer) -> R
 }
 
 /// Renders the `page` of media object records, ordered by human id.
-async fn list(workspace: &Workspace, page: ListPage, localizer: &Localizer) -> Result<(), AppError> {
-    let media = list_media_page(workspace, page).await?;
+async fn list(workspace: &Workspace, window: &ListArgs, localizer: &Localizer) -> Result<(), AppError> {
+    let query = window.query(workspace, ListedKind::Media).await?;
+    let page = window.page();
+    let media = list_media_page(workspace, &query, page).await?.items;
     if media.is_empty() {
-        println!("{}", localizer.empty_page(page, localizer.media_list_empty()));
+        println!(
+            "{}",
+            localizer.empty_page(page, window.narrows(), localizer.media_list_empty())
+        );
         return Ok(());
     }
     for summary in &media {

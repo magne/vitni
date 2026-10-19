@@ -249,6 +249,8 @@ pub enum UsingKind {
     DnaTest,
     /// A DNA match record.
     DnaMatch,
+    /// A research note record.
+    ResearchNote,
 }
 
 /// A record that references a media object or note — one row on the Media "Used by" card or the Note

@@ -2,7 +2,7 @@
 
 use clap::Subcommand;
 use vitni_app::{
-    AppError, DateParts, EvidenceAnalysis, ListPage, MatchableKind, MediaRefInput, MutationMeta, NewCitation,
+    AppError, DateParts, EvidenceAnalysis, ListedKind, MatchableKind, MediaRefInput, MutationMeta, NewCitation,
     Provenance, Session, Workspace, add_citation_attribute, assert_citation_date, attach_citation_media,
     attach_citation_note, create_citation, list_citations_page, set_citation_confidence,
     set_citation_evidence_analysis, set_citation_restrictions, set_page, show_citation, tag_citation,
@@ -126,7 +126,8 @@ pub enum CitationCmd {
         /// The citation's human id (e.g. `C0001`).
         human_id: String,
     },
-    /// List the citations by human id, all of them or one window.
+    /// List the citations, narrowed by `--search` and `--filter`, ordered by `--sort` or else by human id;
+    /// all of them or one window.
     List(ListArgs),
 }
 
@@ -229,7 +230,7 @@ pub async fn run(
             restrict(workspace, session, &human_id, restrictions, localizer).await
         }
         CitationCmd::Show { human_id } => show(workspace, &human_id, localizer).await,
-        CitationCmd::List(window) => list(workspace, window.page(), localizer).await,
+        CitationCmd::List(window) => list(workspace, &window, localizer).await,
     }
 }
 
@@ -265,10 +266,15 @@ async fn show(workspace: &Workspace, human_id: &str, localizer: &Localizer) -> R
 }
 
 /// Renders the `page` of citation records, ordered by human id.
-async fn list(workspace: &Workspace, page: ListPage, localizer: &Localizer) -> Result<(), AppError> {
-    let citations = list_citations_page(workspace, page).await?;
+async fn list(workspace: &Workspace, window: &ListArgs, localizer: &Localizer) -> Result<(), AppError> {
+    let query = window.query(workspace, ListedKind::Citation).await?;
+    let page = window.page();
+    let citations = list_citations_page(workspace, &query, page).await?.items;
     if citations.is_empty() {
-        println!("{}", localizer.empty_page(page, localizer.citation_list_empty()));
+        println!(
+            "{}",
+            localizer.empty_page(page, window.narrows(), localizer.citation_list_empty())
+        );
         return Ok(());
     }
     for summary in &citations {

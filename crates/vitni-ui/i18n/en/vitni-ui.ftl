@@ -795,6 +795,14 @@ err-config = configuration error: { $detail }
 err-workspace = workspace error: { $detail }
 err-not-found = { $id } not found
 err-domain = invalid operation
+err-list-unknown-column = the { $kind } list has no column `{ $column }`
+err-list-unknown-operator = the `{ $column }` filter names no operator `{ $op }`
+err-list-unsupported-operator = the `{ $column }` column takes no `{ $op }` filter
+err-list-wrong-value = the `{ $column }:{ $op }` filter needs a value of another kind
+err-list-unknown-choice = `{ $value }` is not a value of the `{ $column }` column
+err-list-unknown-reference = the `{ $column }` filter names `{ $value }`, which does not exist
+err-list-unsortable = the `{ $column }` column cannot be sorted
+err-list-kind-mismatch = a { $found } query cannot list { $expected } records
 err-plugin = plugin error: { $detail }
 err-db-unsupported = unsupported: { $detail }
 err-db-backend = database error: { $detail }
@@ -954,6 +962,7 @@ using-kind-media = Media
 using-kind-note = Note
 using-kind-dna-test = DNA test
 using-kind-dna-match = DNA match
+using-kind-research-note = Research note
 
 # Detail tabs (PR 11)
 tab-usage = Usage

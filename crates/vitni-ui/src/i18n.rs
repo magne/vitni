@@ -24,8 +24,8 @@ use vitni_app::{
     ActivityDetail, Age, AgeBound, AppError, AssociationRole, BackupError, Calendar, ChangeLogEntry, ChangeValue,
     ChildParentRelationship, ChromosomeSide, CitingContext, DatasetError, DateModifier, DatePoint, DateQuality,
     DbError, DnaGenomeBuild, DnaProvider, DnaTestType, EvidenceKind, EvidenceLevel, FactType, GenealogicalDate,
-    GenealogicalDateBody, InformationKind, Kinship, MatchBand, MatchDataError, MatchStatus, NameType, NoteType,
-    OperatorKind, PackError, ParticipantRole, RecordRole, RecordValue, RepositoryType, Sex, SourceMediaType,
+    GenealogicalDateBody, InformationKind, Kinship, ListQueryError, MatchBand, MatchDataError, MatchStatus, NameType,
+    NoteType, OperatorKind, PackError, ParticipantRole, RecordRole, RecordValue, RepositoryType, Sex, SourceMediaType,
     SourceQuality, SuretyLabelOverrides, UsingKind, config,
 };
 
@@ -244,6 +244,7 @@ impl Localizer {
             UsingKind::Note => fl!(self.loader, "using-kind-note"),
             UsingKind::DnaTest => fl!(self.loader, "using-kind-dna-test"),
             UsingKind::DnaMatch => fl!(self.loader, "using-kind-dna-match"),
+            UsingKind::ResearchNote => fl!(self.loader, "using-kind-research-note"),
         }
     }
 
@@ -2929,7 +2930,56 @@ impl Localizer {
             AppError::Backup(backup) => self.backup_error(backup),
             AppError::Dataset(dataset) => self.dataset_error(dataset),
             AppError::MatchData(data) => self.match_data_error(data),
+            AppError::ListQuery(query) => self.list_query_error(query),
             AppError::Db(db) => self.db_error(db),
+        }
+    }
+
+    fn list_query_error(&self, error: &ListQueryError) -> String {
+        match error {
+            ListQueryError::UnknownColumn { kind, column } => fl!(
+                self.loader,
+                "err-list-unknown-column",
+                kind = kind.as_str(),
+                column = column.clone()
+            ),
+            ListQueryError::UnknownOperator { column, op } => fl!(
+                self.loader,
+                "err-list-unknown-operator",
+                column = column.clone(),
+                op = op.clone()
+            ),
+            ListQueryError::UnsupportedOperator { column, op } => fl!(
+                self.loader,
+                "err-list-unsupported-operator",
+                column = column.clone(),
+                op = op.as_str()
+            ),
+            ListQueryError::WrongValue { column, op } => fl!(
+                self.loader,
+                "err-list-wrong-value",
+                column = column.clone(),
+                op = op.as_str()
+            ),
+            ListQueryError::UnknownChoice { column, value } => fl!(
+                self.loader,
+                "err-list-unknown-choice",
+                column = column.clone(),
+                value = value.clone()
+            ),
+            ListQueryError::UnknownReference { column, value } => fl!(
+                self.loader,
+                "err-list-unknown-reference",
+                column = column.clone(),
+                value = value.clone()
+            ),
+            ListQueryError::Unsortable { column } => fl!(self.loader, "err-list-unsortable", column = column.clone()),
+            ListQueryError::KindMismatch { expected, found } => fl!(
+                self.loader,
+                "err-list-kind-mismatch",
+                expected = expected.as_str(),
+                found = found.as_str()
+            ),
         }
     }
 

@@ -15,10 +15,12 @@ use crate::citation::TagRef;
 use crate::dto::{AggRef, UsingRecordRef, tag_refs};
 use crate::error::AppError;
 use crate::identity::{self, IdentityDecision, PairDecision};
+use crate::list_query::{ListQuery, ListedPage, Selection};
 use crate::note_usage::NoteUsage;
 use crate::session::Session;
 use crate::use_case::{self, MutationMeta, Provenance, resolve_note_id};
 use crate::workspace::Workspace;
+use vitni_db::ListedKind;
 
 /// A frontend-neutral summary of a note (the DTO the CLI renders), carrying its stable id and the
 /// joined views the detail tabs render (the cross-aggregate-joins dependency note).
@@ -444,15 +446,28 @@ pub async fn show_note(workspace: &Workspace, human_id: &str) -> Result<Option<N
 ///
 /// A store/read-model error.
 pub async fn list_notes(workspace: &Workspace) -> Result<Vec<NoteSummary>, AppError> {
-    list_notes_page(workspace, ListPage::ALL).await
+    list_notes_selected(workspace, &Selection::ALL).await
 }
 
-/// One `page` of [`list_notes`]: a window over the records it lists, a merged record taking no slot.
+/// One `page` of the records `query` lists, in its order, with the total it matches (ADR 0052 §4): a
+/// merged record takes no slot, and a cluster root on the page reads with its members' data.
 ///
 /// # Errors
 ///
-/// A store/read-model error.
-pub async fn list_notes_page(workspace: &Workspace, page: ListPage) -> Result<Vec<NoteSummary>, AppError> {
+/// [`AppError::ListQuery`] for a query of another kind or one the catalogue cannot evaluate, or a
+/// store/read-model error.
+pub async fn list_notes_page(
+    workspace: &Workspace,
+    query: &ListQuery,
+    page: ListPage,
+) -> Result<ListedPage<NoteSummary>, AppError> {
+    let (selection, total) = crate::list_query::select(workspace, query, ListedKind::Note, page).await?;
+    let items = list_notes_selected(workspace, &selection).await?;
+    Ok(ListedPage { items, total })
+}
+
+/// The summaries of the records `page` selects, in its order.
+async fn list_notes_selected(workspace: &Workspace, page: &Selection) -> Result<Vec<NoteSummary>, AppError> {
     let store = workspace.store();
     let (clusters, views) = identity::listed_page::<NoteView>(store, page).await?;
     let lookups = NoteLookups::load(store, &views.iter().collect::<Vec<_>>()).await?;

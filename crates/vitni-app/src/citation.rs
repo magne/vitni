@@ -26,9 +26,11 @@ use crate::dto::{AggRef, AttachedRef, MediaLookup, MediaRefSummary};
 use crate::error::AppError;
 use crate::event::{DateParts, gregorian_date};
 use crate::identity::{self, IdentityDecision, PairDecision};
+use crate::list_query::{ListQuery, ListedPage, Selection};
 use crate::session::Session;
 use crate::use_case::{self, MediaRefInput, MutationMeta, Provenance, resolve_media_id, resolve_note_id};
 use crate::workspace::Workspace;
+use vitni_db::ListedKind;
 
 /// An applied tag. The user only ever sees the name, colour, and priority; the `id` is carried for
 /// the detach command but is never rendered (data-model §9).
@@ -685,15 +687,28 @@ pub async fn show_citation(workspace: &Workspace, human_id: &str) -> Result<Opti
 ///
 /// A store/read-model error.
 pub async fn list_citations(workspace: &Workspace) -> Result<Vec<CitationSummary>, AppError> {
-    list_citations_page(workspace, ListPage::ALL).await
+    list_citations_selected(workspace, &Selection::ALL).await
 }
 
-/// One `page` of [`list_citations`]: a window over the records it lists, a merged record taking no slot.
+/// One `page` of the records `query` lists, in its order, with the total it matches (ADR 0052 §4): a
+/// merged record takes no slot, and a cluster root on the page reads with its members' data.
 ///
 /// # Errors
 ///
-/// A store/read-model error.
-pub async fn list_citations_page(workspace: &Workspace, page: ListPage) -> Result<Vec<CitationSummary>, AppError> {
+/// [`AppError::ListQuery`] for a query of another kind or one the catalogue cannot evaluate, or a
+/// store/read-model error.
+pub async fn list_citations_page(
+    workspace: &Workspace,
+    query: &ListQuery,
+    page: ListPage,
+) -> Result<ListedPage<CitationSummary>, AppError> {
+    let (selection, total) = crate::list_query::select(workspace, query, ListedKind::Citation, page).await?;
+    let items = list_citations_selected(workspace, &selection).await?;
+    Ok(ListedPage { items, total })
+}
+
+/// The summaries of the records `page` selects, in its order.
+async fn list_citations_selected(workspace: &Workspace, page: &Selection) -> Result<Vec<CitationSummary>, AppError> {
     let store = workspace.store();
     let (clusters, views) = identity::listed_page::<CitationView>(store, page).await?;
     let lookups = Lookups::load(store, &views.iter().collect::<Vec<_>>()).await?;

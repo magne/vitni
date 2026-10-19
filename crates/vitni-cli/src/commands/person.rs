@@ -2,7 +2,7 @@
 
 use clap::Subcommand;
 use vitni_app::{
-    Age, AppError, Attribute, DateParts, ListPage, MatchableKind, MutationMeta, NewParticipation, NewPerson,
+    Age, AppError, Attribute, DateParts, ListedKind, MatchableKind, MutationMeta, NewParticipation, NewPerson,
     PersonNameParts, Provenance, Session, Workspace, add_name, assert_participation, create_person, list_persons_page,
     record_birth, set_restrictions, show_person,
 };
@@ -25,7 +25,7 @@ fn parse_attribute(raw: &str) -> Result<Attribute, String> {
 
 /// Parses a `--born YYYY[-MM[-DD]]` argument into a Gregorian [`DateParts`]. A month outside 1–12, a
 /// day outside 1–31 or anything else is an error. Used as a clap `value_parser`.
-fn parse_born(raw: &str) -> Result<DateParts, String> {
+pub(crate) fn parse_born(raw: &str) -> Result<DateParts, String> {
     let invalid = || format!("expected YYYY, YYYY-MM or YYYY-MM-DD, got `{raw}`");
     let mut fields = raw.trim().split('-');
     let year = fields
@@ -149,7 +149,8 @@ pub enum PersonCmd {
         /// The person's human id (e.g. `I0001`).
         human_id: String,
     },
-    /// List the persons by human id, all of them or one window.
+    /// List the persons, narrowed by `--search` and `--filter`, ordered by `--sort` or else by human id;
+    /// all of them or one window.
     List(ListArgs),
 }
 
@@ -250,7 +251,7 @@ pub async fn run(
             restrict(workspace, session, &human_id, restrictions, localizer).await
         }
         PersonCmd::Show { human_id } => show(workspace, &human_id, localizer).await,
-        PersonCmd::List(window) => list(workspace, window.page(), localizer).await,
+        PersonCmd::List(window) => list(workspace, &window, localizer).await,
     }
 }
 
@@ -286,10 +287,15 @@ async fn show(workspace: &Workspace, human_id: &str, localizer: &Localizer) -> R
 }
 
 /// Renders the `page` of person records, ordered by human id.
-async fn list(workspace: &Workspace, page: ListPage, localizer: &Localizer) -> Result<(), AppError> {
-    let people = list_persons_page(workspace, page).await?;
+async fn list(workspace: &Workspace, window: &ListArgs, localizer: &Localizer) -> Result<(), AppError> {
+    let query = window.query(workspace, ListedKind::Person).await?;
+    let page = window.page();
+    let people = list_persons_page(workspace, &query, page).await?.items;
     if people.is_empty() {
-        println!("{}", localizer.empty_page(page, localizer.list_empty()));
+        println!(
+            "{}",
+            localizer.empty_page(page, window.narrows(), localizer.list_empty())
+        );
         return Ok(());
     }
     for summary in &people {

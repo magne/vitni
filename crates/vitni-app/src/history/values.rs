@@ -149,7 +149,7 @@ fn decode<T: serde::de::DeserializeOwned>(event: &StoredEvent) -> Option<T> {
 
 fn person_value(body: PersonEventBody) -> Option<ChangeValue> {
     match body {
-        PersonEventBody::NameAsserted { name, .. } => text(crate::person::render_name(&name)),
+        PersonEventBody::NameAsserted { name, .. } => text(name.display()),
         PersonEventBody::SexAsserted { sex, .. } => Some(ChangeValue::Sex(sex)),
         PersonEventBody::FactAsserted { fact, .. } => fact
             .value

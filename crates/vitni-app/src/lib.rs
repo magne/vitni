@@ -48,6 +48,7 @@ mod identity;
 pub mod import;
 pub mod import_run;
 mod linked_records;
+pub mod list_query;
 pub mod map_source;
 pub mod match_queue;
 pub mod matching;
@@ -171,6 +172,9 @@ pub use import_run::{
     finish_import_run, list_datasets, list_import_runs, propose_dataset, start_import_run,
 };
 pub use linked_records::{LinkedRecord, LinkedRecords, OriginRef, linked_records, record_url, unlink_person};
+pub use list_query::{
+    FilterOp, FilterValue, ListFilter, ListQuery, ListQueryError, ListSort, ListedPage, query_list, reference_id,
+};
 pub use map_source::{MapBasemap, MapSource, google_viewport_copyright, refresh_map_attribution, resolve_map_source};
 pub use match_queue::{
     DecidableKind, IdentityRefusal, MatchQueue, MatchQueueFilter, MatchVerdict, QueuedMatch, decide_match,
@@ -318,7 +322,10 @@ pub use vitni_core::source::SourceError;
 pub use vitni_core::tag::TagError;
 pub use vitni_core::temporal::resolve_as_of;
 pub use vitni_core::text::{Attribute, ExternalId, Rect, Url};
-pub use vitni_db::{DbError, ListPage, UnreadableEvent};
+pub use vitni_db::{
+    ColumnType, DbError, ListCell, ListColumn, ListCursor, ListPage, ListResult, ListRow, ListWindow, ListedKind,
+    SortDirection, SortKey, UnreadableEvent,
+};
 pub use workspace::{
     BackupSettings, IdFormatLayers, LayerKind, LocaleOverrides, OperatorRecord, PluginPreferences, PreferenceLayers,
     RECENT_LIMIT, RecentItem, ResolvedLocale, ResolvedUiPreferences, SuretyLayers, ThemeLayers, UiPreferences,

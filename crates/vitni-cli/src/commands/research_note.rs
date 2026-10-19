@@ -2,7 +2,7 @@
 
 use clap::Subcommand;
 use vitni_app::{
-    AppError, ListPage, MutationMeta, NewResearchNote, NewResearchNoteSubject, Provenance, Session, Workspace,
+    AppError, ListedKind, MutationMeta, NewResearchNote, NewResearchNoteSubject, Provenance, Session, Workspace,
     add_subject_to_research_note, create_research_note, list_research_notes_page, remove_subject_from_research_note,
     set_research_note_body, set_research_note_restrictions, show_research_note,
 };
@@ -68,7 +68,8 @@ pub enum ResearchNoteCmd {
         /// The research note's human id (e.g. `A0001`).
         human_id: String,
     },
-    /// List the research notes by human id, all of them or one window.
+    /// List the research notes, narrowed by `--search` and `--filter`, ordered by `--sort` or else by human id;
+    /// all of them or one window.
     List(ListArgs),
 }
 
@@ -154,7 +155,7 @@ pub async fn run(
             restrict(workspace, session, &human_id, restrictions, localizer).await
         }
         ResearchNoteCmd::Show { human_id } => show(workspace, &human_id, localizer).await,
-        ResearchNoteCmd::List(window) => list(workspace, window.page(), localizer).await,
+        ResearchNoteCmd::List(window) => list(workspace, &window, localizer).await,
     }
 }
 
@@ -190,10 +191,15 @@ async fn show(workspace: &Workspace, human_id: &str, localizer: &Localizer) -> R
 }
 
 /// Renders the `page` of research note records, ordered by human id.
-async fn list(workspace: &Workspace, page: ListPage, localizer: &Localizer) -> Result<(), AppError> {
-    let notes = list_research_notes_page(workspace, page).await?;
+async fn list(workspace: &Workspace, window: &ListArgs, localizer: &Localizer) -> Result<(), AppError> {
+    let query = window.query(workspace, ListedKind::ResearchNote).await?;
+    let page = window.page();
+    let notes = list_research_notes_page(workspace, &query, page).await?.items;
     if notes.is_empty() {
-        println!("{}", localizer.empty_page(page, localizer.research_note_list_empty()));
+        println!(
+            "{}",
+            localizer.empty_page(page, window.narrows(), localizer.research_note_list_empty())
+        );
         return Ok(());
     }
     for summary in &notes {

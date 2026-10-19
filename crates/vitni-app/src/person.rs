@@ -27,9 +27,11 @@ use crate::dto::{AggRef, AttachedRef, MediaLookup, MediaRefSummary};
 use crate::error::AppError;
 use crate::event::{DateParts, NewEvent, assert_event_date, create_event};
 use crate::identity::{self, IdentityDecision, PairDecision, PersonClusters};
+use crate::list_query::{ListQuery, ListedPage, Selection};
 use crate::session::Session;
 use crate::use_case::{self, MediaRefInput, MutationMeta, Provenance, resolve_media_id, resolve_note_id};
 use crate::workspace::Workspace;
+use vitni_db::ListedKind;
 
 /// A frontend-neutral summary of a person (the DTO the CLI renders).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1036,15 +1038,28 @@ pub async fn show_person(workspace: &Workspace, human_id: &str) -> Result<Option
 ///
 /// A store/read-model error.
 pub async fn list_persons(workspace: &Workspace) -> Result<Vec<PersonSummary>, AppError> {
-    list_persons_page(workspace, ListPage::ALL).await
+    list_persons_selected(workspace, &Selection::ALL).await
 }
 
-/// One `page` of [`list_persons`]: a window over the records it lists, a merged record taking no slot.
+/// One `page` of the records `query` lists, in its order, with the total it matches (ADR 0052 §4): a
+/// merged record takes no slot, and a cluster root on the page reads with its members' data.
 ///
 /// # Errors
 ///
-/// A store/read-model error.
-pub async fn list_persons_page(workspace: &Workspace, page: ListPage) -> Result<Vec<PersonSummary>, AppError> {
+/// [`AppError::ListQuery`] for a query of another kind or one the catalogue cannot evaluate, or a
+/// store/read-model error.
+pub async fn list_persons_page(
+    workspace: &Workspace,
+    query: &ListQuery,
+    page: ListPage,
+) -> Result<ListedPage<PersonSummary>, AppError> {
+    let (selection, total) = crate::list_query::select(workspace, query, ListedKind::Person, page).await?;
+    let items = list_persons_selected(workspace, &selection).await?;
+    Ok(ListedPage { items, total })
+}
+
+/// The summaries of the records `page` selects, in its order.
+async fn list_persons_selected(workspace: &Workspace, page: &Selection) -> Result<Vec<PersonSummary>, AppError> {
     let store = workspace.store();
     let (clusters, views) = crate::identity::listed_page::<PersonView>(store, page).await?;
     let lookups = Lookups::load(store, &views.iter().collect::<Vec<_>>()).await?;
@@ -1860,7 +1875,7 @@ struct PrimaryNameFields {
 fn primary_name_fields(primary: Option<&PersonName>) -> PrimaryNameFields {
     let primary_surname = primary.and_then(|name| name.surnames.first());
     PrimaryNameFields {
-        display_name: primary.map(render_name),
+        display_name: primary.map(PersonName::display),
         given: primary.and_then(|name| name.given.clone()),
         surname: primary_surname.map(|element| element.surname.clone()),
         surname_prefix: primary_surname.and_then(|element| element.prefix.clone()),
@@ -1967,16 +1982,4 @@ fn person_attachments(
         })
         .collect();
     (citations, media, notes)
-}
-
-/// Renders a name as `given primary-surname(s)` for display.
-pub(crate) fn render_name(name: &PersonName) -> String {
-    let mut parts: Vec<&str> = Vec::new();
-    if let Some(given) = name.given.as_deref() {
-        parts.push(given);
-    }
-    for surname in &name.surnames {
-        parts.push(&surname.surname);
-    }
-    parts.join(" ")
 }

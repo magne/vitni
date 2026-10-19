@@ -26,10 +26,10 @@ use vitni_app::config;
 use vitni_app::{
     AbandonReason, AppError, BackupError, CitationError, CitationSummary, Confidence, DbError, DnaMatchError,
     DnaMatchSummary, DnaProvider, DnaTestError, DnaTestSummary, DnaTestType, EventError, EventSummary, EventType,
-    FamilyError, FamilySummary, ListPage, MatchStatus, MediaError, MediaSummary, NoteError, NoteSummary, NoteType,
-    PersonError, PersonSummary, PlaceError, PlaceSummary, PlaceType, RepositoryError, RepositorySummary,
-    RepositoryType, ResearchNoteError, ResearchNoteSummary, Restriction, Sex, SourceError, SourceSummary, SubjectRef,
-    SuretyLabelOverrides, TagError, TagSummary,
+    FamilyError, FamilySummary, ListPage, ListQueryError, MatchStatus, MediaError, MediaSummary, NoteError,
+    NoteSummary, NoteType, PersonError, PersonSummary, PlaceError, PlaceSummary, PlaceType, RepositoryError,
+    RepositorySummary, RepositoryType, ResearchNoteError, ResearchNoteSummary, Restriction, Sex, SourceError,
+    SourceSummary, SubjectRef, SuretyLabelOverrides, TagError, TagSummary,
 };
 use vitni_app::{
     DatasetError, DatasetSummary, ImportRunError, ImportRunStatus, ImportRunSummary, MatchDataError, PackError,
@@ -43,6 +43,7 @@ mod event;
 mod family;
 mod import_plan;
 mod import_run;
+mod list_query;
 mod match_queue;
 mod matching;
 mod media;
@@ -136,13 +137,17 @@ impl Localizer {
     }
 
     /// What an empty `list` page prints: `whole`, the list's own empty message, unless the page starts
-    /// past the first record, where the list is not empty but the window is.
+    /// past the first record, where the list is not empty but the window is, or a `narrowed` query
+    /// matched nothing.
     #[must_use]
-    pub fn empty_page(&self, page: ListPage, whole: String) -> String {
-        if page.offset == 0 {
-            return whole;
+    pub fn empty_page(&self, page: ListPage, narrowed: bool, whole: String) -> String {
+        if page.offset > 0 {
+            return fl!(self.loader, "list-page-empty", offset = page.offset);
         }
-        fl!(self.loader, "list-page-empty", offset = page.offset)
+        if narrowed {
+            return fl!(self.loader, "list-no-match");
+        }
+        whole
     }
 
     /// Renders a record's privacy restrictions as ` [label, …]`, or empty when unrestricted.
@@ -523,6 +528,7 @@ impl Localizer {
             AppError::Dataset(dataset) => self.dataset_error(dataset),
             AppError::MatchData(data) => self.match_data_error(data),
             AppError::Backup(backup) => self.backup_error(backup),
+            AppError::ListQuery(query) => self.list_query_error(query),
             AppError::Db(db) => self.db_error(db),
         }
     }

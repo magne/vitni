@@ -7,9 +7,11 @@ use std::collections::BTreeSet;
 
 use clap::{Args, ValueEnum};
 use vitni_app::{
-    ChildParentRelationship, ChromosomeSide, Confidence, DnaGenomeBuild, DnaProvider, DnaTestType, EventType,
-    EvidenceKind, InformationKind, ListPage, NoteType, ParticipantRole, PlaceType, RepositoryType, Restriction,
-    SourceMediaType, SourceQuality, SuccessionKind,
+    AppError, ChildParentRelationship, ChromosomeSide, ColumnType, Confidence, DnaGenomeBuild, DnaProvider,
+    DnaTestType, EventType, EvidenceKind, FilterOp, FilterValue, GenealogicalDate, InformationKind, ListFilter,
+    ListPage, ListQuery, ListQueryError, ListSort, ListedKind, NoteType, ParticipantRole, PlaceType, RepositoryType,
+    Restriction, SortDirection, SourceMediaType, SourceQuality, SuccessionKind, Workspace, gregorian_date,
+    reference_id,
 };
 use vitni_core::enums::EvidenceLevel;
 
@@ -565,7 +567,8 @@ impl RestrictionsArgs {
     }
 }
 
-/// The window of a `list` verb: skip `--offset` records, then print at most `--limit` of them.
+/// The query and window of a `list` verb (ADR 0052 §9): narrow by `--search` and `--filter`, order by
+/// `--sort`, then skip `--offset` records and print at most `--limit` of them.
 #[derive(Args)]
 pub struct ListArgs {
     /// Print at most this many records (at least one).
@@ -574,6 +577,62 @@ pub struct ListArgs {
     /// Skip this many records first.
     #[arg(long, default_value_t = 0)]
     offset: u32,
+    /// List only records whose text columns or id contain this, in any case.
+    #[arg(long)]
+    search: Option<String>,
+    /// List only records passing `<column>:<op>:<value>` (e.g. `birth:before:1800`); repeat to combine.
+    #[arg(long = "filter", value_name = "COLUMN:OP:VALUE", value_parser = parse_filter)]
+    filters: Vec<FilterArg>,
+    /// Order by `<column>`, or `<column>:desc` for largest first.
+    #[arg(long, value_name = "COLUMN[:desc]", value_parser = parse_sort)]
+    sort: Option<SortArg>,
+}
+
+/// One `--filter` clause, split into its parts; the catalogue checks them when the query is built.
+#[derive(Clone, Debug)]
+pub struct FilterArg {
+    column: String,
+    op: String,
+    value: String,
+}
+
+/// Splits `<column>:<op>[:<value>]`; the value may itself hold colons.
+fn parse_filter(raw: &str) -> Result<FilterArg, String> {
+    let mut parts = raw.splitn(3, ':');
+    let column = parts.next().unwrap_or_default().trim();
+    let op = parts.next().unwrap_or_default().trim();
+    if column.is_empty() || op.is_empty() {
+        return Err(format!("expected COLUMN:OP:VALUE, got `{raw}`"));
+    }
+    Ok(FilterArg {
+        column: column.to_owned(),
+        op: op.to_owned(),
+        value: parts.next().unwrap_or_default().trim().to_owned(),
+    })
+}
+
+/// A `--sort` column and direction.
+#[derive(Clone, Debug)]
+pub struct SortArg {
+    column: String,
+    direction: SortDirection,
+}
+
+/// Splits `<column>[:asc|:desc]`.
+fn parse_sort(raw: &str) -> Result<SortArg, String> {
+    let (column, direction) = match raw.split_once(':') {
+        None => (raw, SortDirection::Ascending),
+        Some((column, "asc")) => (column, SortDirection::Ascending),
+        Some((column, "desc")) => (column, SortDirection::Descending),
+        Some(_) => return Err(format!("expected COLUMN, COLUMN:asc or COLUMN:desc, got `{raw}`")),
+    };
+    if column.trim().is_empty() {
+        return Err(format!("expected COLUMN, COLUMN:asc or COLUMN:desc, got `{raw}`"));
+    }
+    Ok(SortArg {
+        column: column.trim().to_owned(),
+        direction,
+    })
 }
 
 impl ListArgs {
@@ -585,4 +644,99 @@ impl ListArgs {
             limit: self.limit,
         }
     }
+
+    /// Whether `--search` or `--filter` narrows the list, so an empty one means no match.
+    #[must_use]
+    pub fn narrows(&self) -> bool {
+        self.search.as_deref().is_some_and(|search| !search.trim().is_empty()) || !self.filters.is_empty()
+    }
+
+    /// The list query for `kind`, each clause checked against its catalogue: a tag named by its name and
+    /// a record by its `human_id` become their ids.
+    ///
+    /// # Errors
+    ///
+    /// [`AppError::ListQuery`] naming the clause the catalogue cannot take, or a store error.
+    pub async fn query(&self, workspace: &Workspace, kind: ListedKind) -> Result<ListQuery, AppError> {
+        let mut filters = Vec::with_capacity(self.filters.len());
+        for filter in &self.filters {
+            filters.push(filter.to_filter(workspace, kind).await?);
+        }
+        Ok(ListQuery {
+            search: self.search.clone().unwrap_or_default(),
+            filters,
+            sort: self.sort.as_ref().map(|sort| ListSort {
+                column: sort.column.clone(),
+                direction: sort.direction,
+            }),
+            ..ListQuery::new(kind)
+        })
+    }
+}
+
+impl FilterArg {
+    /// The clause as the query holds it: its value read by the column's type.
+    async fn to_filter(&self, workspace: &Workspace, kind: ListedKind) -> Result<ListFilter, AppError> {
+        let column = self.column.clone();
+        let op = FilterOp::parse(&self.op).ok_or_else(|| ListQueryError::UnknownOperator {
+            column: column.clone(),
+            op: self.op.clone(),
+        })?;
+        let ty = kind
+            .column(&column)
+            .ok_or_else(|| ListQueryError::UnknownColumn {
+                kind,
+                column: column.clone(),
+            })?
+            .ty;
+        if !FilterOp::for_type(ty).contains(&op) {
+            return Err(ListQueryError::UnsupportedOperator { column, op }.into());
+        }
+        let wrong = || ListQueryError::WrongValue {
+            column: column.clone(),
+            op,
+        };
+        let raw = self.value.as_str();
+        let value = match (ty, op) {
+            (_, FilterOp::IsEmpty) => FilterValue::None,
+            (ColumnType::Text, _) => FilterValue::Text(raw.to_owned()),
+            (ColumnType::Date, FilterOp::Between) => {
+                let (from, to) = raw.split_once("..").ok_or_else(wrong)?;
+                FilterValue::DateRange {
+                    from: date(from).ok_or_else(wrong)?,
+                    to: date(to).ok_or_else(wrong)?,
+                }
+            }
+            (ColumnType::Date, _) => FilterValue::Date(date(raw).ok_or_else(wrong)?),
+            (ColumnType::Number, FilterOp::Between) => {
+                let (from, to) = raw.split_once("..").ok_or_else(wrong)?;
+                FilterValue::NumberRange {
+                    from: from.trim().parse().map_err(|_| wrong())?,
+                    to: to.trim().parse().map_err(|_| wrong())?,
+                }
+            }
+            (ColumnType::Number, _) => FilterValue::Number(raw.parse().map_err(|_| wrong())?),
+            (ColumnType::Choice, _) => {
+                FilterValue::Values(raw.split(',').map(|value| value.trim().to_owned()).collect())
+            }
+            (ColumnType::Tags, _) => {
+                let mut ids = Vec::new();
+                for tag in raw.split(',') {
+                    ids.push(reference_id(workspace, kind, &self.column, tag.trim()).await?);
+                }
+                FilterValue::Values(ids)
+            }
+            (ColumnType::Record, _) => FilterValue::Text(reference_id(workspace, kind, &self.column, raw).await?),
+        };
+        Ok(ListFilter {
+            column: self.column.clone(),
+            op,
+            value,
+        })
+    }
+}
+
+/// A `YYYY[-MM[-DD]]` filter date.
+fn date(raw: &str) -> Option<GenealogicalDate> {
+    crate::commands::person::parse_born(raw).ok().map(gregorian_date)
 }

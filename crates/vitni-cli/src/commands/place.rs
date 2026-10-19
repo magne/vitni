@@ -3,7 +3,7 @@
 use clap::Subcommand;
 use uuid::Uuid;
 use vitni_app::{
-    AppError, DateParts, ListPage, MatchableKind, MediaRefInput, MutationMeta, NewPlace, PlaceSuccessionInput,
+    AppError, DateParts, ListedKind, MatchableKind, MediaRefInput, MutationMeta, NewPlace, PlaceSuccessionInput,
     Provenance, Session, Workspace, add_place_citation, add_place_name, assert_place_coordinates,
     assert_place_enclosed_by, assert_place_succession, attach_place_media, attach_place_note, create_place,
     gregorian_date, list_places_page, set_place_code, set_place_restrictions, set_place_type, show_place, tag_place,
@@ -153,7 +153,8 @@ pub enum PlaceCmd {
         /// The place's human id (e.g. `P0001`).
         human_id: String,
     },
-    /// List the places by human id, all of them or one window.
+    /// List the places, narrowed by `--search` and `--filter`, ordered by `--sort` or else by human id;
+    /// all of them or one window.
     List(ListArgs),
 }
 
@@ -260,7 +261,7 @@ pub async fn run(
             restrict(workspace, session, &human_id, restrictions, localizer).await
         }
         PlaceCmd::Show { human_id } => show(workspace, &human_id, localizer).await,
-        PlaceCmd::List(window) => list(workspace, window.page(), localizer).await,
+        PlaceCmd::List(window) => list(workspace, &window, localizer).await,
     }
 }
 
@@ -318,10 +319,15 @@ async fn show(workspace: &Workspace, human_id: &str, localizer: &Localizer) -> R
 }
 
 /// Renders the `page` of place records, ordered by human id.
-async fn list(workspace: &Workspace, page: ListPage, localizer: &Localizer) -> Result<(), AppError> {
-    let places = list_places_page(workspace, page).await?;
+async fn list(workspace: &Workspace, window: &ListArgs, localizer: &Localizer) -> Result<(), AppError> {
+    let query = window.query(workspace, ListedKind::Place).await?;
+    let page = window.page();
+    let places = list_places_page(workspace, &query, page).await?.items;
     if places.is_empty() {
-        println!("{}", localizer.empty_page(page, localizer.place_list_empty()));
+        println!(
+            "{}",
+            localizer.empty_page(page, window.narrows(), localizer.place_list_empty())
+        );
         return Ok(());
     }
     for summary in &places {

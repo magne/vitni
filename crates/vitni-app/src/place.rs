@@ -30,10 +30,12 @@ use crate::error::AppError;
 use crate::event::list_events;
 use crate::geography::{EventPin, build_event_pins, place_point};
 use crate::identity::{self, IdentityDecision, PairDecision, PlaceClusters};
+use crate::list_query::{ListQuery, ListedPage, Selection};
 use crate::place_hierarchy::{HierarchyHop, generated_title, hierarchy_chain};
 use crate::session::Session;
 use crate::use_case::{self, MediaRefInput, MutationMeta, Provenance, resolve_media_id, resolve_note_id};
 use crate::workspace::Workspace;
+use vitni_db::ListedKind;
 
 /// An asserted place name, with its language/date metadata and the assertion's provenance (the
 /// evidence-first cue for the Names tab — data-model §14).
@@ -997,15 +999,28 @@ fn succession_ref(record: &PlaceSuccessionRecord, lookups: &PlaceLookups) -> Opt
 ///
 /// A store/read-model error.
 pub async fn list_places(workspace: &Workspace) -> Result<Vec<PlaceSummary>, AppError> {
-    list_places_page(workspace, ListPage::ALL).await
+    list_places_selected(workspace, &Selection::ALL).await
 }
 
-/// One `page` of [`list_places`]: a window over the records it lists, a merged record taking no slot.
+/// One `page` of the records `query` lists, in its order, with the total it matches (ADR 0052 §4): a
+/// merged record takes no slot, and a cluster root on the page reads with its members' data.
 ///
 /// # Errors
 ///
-/// A store/read-model error.
-pub async fn list_places_page(workspace: &Workspace, page: ListPage) -> Result<Vec<PlaceSummary>, AppError> {
+/// [`AppError::ListQuery`] for a query of another kind or one the catalogue cannot evaluate, or a
+/// store/read-model error.
+pub async fn list_places_page(
+    workspace: &Workspace,
+    query: &ListQuery,
+    page: ListPage,
+) -> Result<ListedPage<PlaceSummary>, AppError> {
+    let (selection, total) = crate::list_query::select(workspace, query, ListedKind::Place, page).await?;
+    let items = list_places_selected(workspace, &selection).await?;
+    Ok(ListedPage { items, total })
+}
+
+/// The summaries of the records `page` selects, in its order.
+async fn list_places_selected(workspace: &Workspace, page: &Selection) -> Result<Vec<PlaceSummary>, AppError> {
     list_resolved(workspace, None, page).await
 }
 
@@ -1017,7 +1032,7 @@ pub async fn list_places_page(workspace: &Workspace, page: ListPage) -> Result<V
 ///
 /// A store/read-model error.
 pub async fn list_places_as_of(workspace: &Workspace, as_of: GenealogicalDate) -> Result<Vec<PlaceSummary>, AppError> {
-    list_resolved(workspace, Some(&as_of), ListPage::ALL).await
+    list_resolved(workspace, Some(&as_of), &Selection::ALL).await
 }
 
 /// Lists every place resolved as of `as_of` (current/primary when `None`), a merged place listed once,
@@ -1025,7 +1040,7 @@ pub async fn list_places_as_of(workspace: &Workspace, as_of: GenealogicalDate) -
 async fn list_resolved(
     workspace: &Workspace,
     as_of: Option<&GenealogicalDate>,
-    page: ListPage,
+    page: &Selection,
 ) -> Result<Vec<PlaceSummary>, AppError> {
     let store = workspace.store();
     let (clusters, views) = identity::listed_page::<PlaceView>(store, page).await?;

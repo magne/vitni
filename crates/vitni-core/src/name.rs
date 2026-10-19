@@ -106,6 +106,19 @@ impl PersonName {
         let has_surname = self.surnames.iter().any(|s| !s.surname.trim().is_empty());
         !has_given && !has_surname
     }
+
+    /// The name as a list or header shows it: `given primary-surname(s)`.
+    #[must_use]
+    pub fn display(&self) -> String {
+        let mut parts: Vec<&str> = Vec::new();
+        if let Some(given) = self.given.as_deref() {
+            parts.push(given);
+        }
+        for surname in &self.surnames {
+            parts.push(&surname.surname);
+        }
+        parts.join(" ")
+    }
 }
 
 #[cfg(test)]

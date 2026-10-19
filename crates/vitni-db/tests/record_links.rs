@@ -5,21 +5,29 @@
 #![cfg(any(feature = "sqlite", feature = "postgres"))]
 #![expect(clippy::unwrap_used, reason = "tests abort on setup/assertion failure")]
 
+use std::collections::BTreeSet;
+
 use time::macros::datetime;
 use uuid::Uuid;
 use vitni_core::citation::command::{CitationCommand, CitationCommandEnvelope};
+use vitni_core::dna::{Centimorgans, DnaProvider};
+use vitni_core::dna_match::{DnaMatchCommand, DnaMatchCommandEnvelope};
+use vitni_core::dna_test::{DnaTestCommand, DnaTestCommandEnvelope};
 use vitni_core::enums::{EventType, EvidenceLevel, ParticipantRole, PlaceType, SourceMediaType};
 use vitni_core::event::command::{EventCommand, EventCommandEnvelope};
 use vitni_core::family::command::{FamilyCommand, FamilyCommandEnvelope};
 use vitni_core::ids::{
-    AgentId, AssertionId, CitationId, EventId, FamilyId, HumanId, PersonId, PlaceId, RepositoryId, SourceId, TagId,
+    AgentId, AssertionId, CitationId, DnaMatchId, DnaTestId, EventId, FamilyId, HumanId, NoteId, PersonId, PlaceId,
+    RepositoryId, ResearchNoteId, SourceId, TagId,
 };
+use vitni_core::note::{NoteCommand, NoteCommandEnvelope};
 use vitni_core::person::command::{PersonCommand, PersonCommandEnvelope};
 use vitni_core::place::command::{PlaceCommand, PlaceCommandEnvelope};
 use vitni_core::place_ref::PlaceRef;
 use vitni_core::provenance::{Agent, AgentKind, AssertionMeta, EventContext, Timestamp};
 use vitni_core::repo_ref::RepoRef;
 use vitni_core::repository::command::{RepositoryCommand, RepositoryCommandEnvelope};
+use vitni_core::research_note::{ResearchNoteCommand, ResearchNoteCommandEnvelope, SubjectRef};
 use vitni_core::source::command::{SourceCommand, SourceCommandEnvelope};
 use vitni_core::tag::command::{TagCommand, TagCommandEnvelope};
 use vitni_db::{RecordLink, Store};
@@ -446,6 +454,168 @@ async fn a_rebuild_reproduces_the_links(store: &Store) {
     );
 }
 
+async fn create_note(store: &Store, n: u128) {
+    let envelope = NoteCommandEnvelope {
+        meta: meta(n * 100),
+        command: NoteCommand::CreateNote {
+            note_id: NoteId::from_uuid(id(n)),
+            human_id: HumanId::new(format!("N{n:04}")),
+        },
+    };
+    store.execute_note(&id(n).to_string(), envelope).await.unwrap();
+}
+
+async fn create_research_note(store: &Store, n: u128) {
+    let envelope = ResearchNoteCommandEnvelope {
+        meta: meta(n * 100),
+        command: ResearchNoteCommand::CreateResearchNote {
+            research_note_id: ResearchNoteId::from_uuid(id(n)),
+            human_id: HumanId::new(format!("RN{n:04}")),
+            subjects: BTreeSet::from([SubjectRef::Person(PersonId::from_uuid(id(1)))]),
+            title: None,
+        },
+    };
+    store.execute_research_note(&id(n).to_string(), envelope).await.unwrap();
+}
+
+async fn create_dna_test(store: &Store, n: u128, person: u128) {
+    let envelope = DnaTestCommandEnvelope {
+        meta: meta(n * 100),
+        command: DnaTestCommand::CreateDnaTest {
+            dna_test_id: DnaTestId::from_uuid(id(n)),
+            human_id: HumanId::new(format!("D{n:04}")),
+            person_id: PersonId::from_uuid(id(person)),
+        },
+    };
+    store.execute_dna_test(&id(n).to_string(), envelope).await.unwrap();
+}
+
+async fn observe_match(store: &Store, n: u128, test_a: u128, test_b: u128) {
+    let envelope = DnaMatchCommandEnvelope {
+        meta: meta(n * 100),
+        command: DnaMatchCommand::ObserveMatch {
+            dna_match_id: DnaMatchId::from_uuid(id(n)),
+            human_id: HumanId::new(format!("M{n:04}")),
+            test_a: DnaTestId::from_uuid(id(test_a)),
+            test_b: DnaTestId::from_uuid(id(test_b)),
+            provider: DnaProvider::AncestryDna,
+            shared_cm: Centimorgans::from_hundredths(12_000),
+            percent_shared: None,
+            segment_count: 3,
+            largest_segment_cm: Centimorgans::from_hundredths(5_000),
+            predicted_relationship: None,
+        },
+    };
+    store.execute_dna_match(&id(n).to_string(), envelope).await.unwrap();
+}
+
+/// Tags person 1, note 80, research note 81 and DNA test 82 (of person 1) with tag 70.
+async fn tag_four_kinds(store: &Store) {
+    create_tag(store, 70).await;
+    create_person(store, 1).await;
+    create_note(store, 80).await;
+    create_research_note(store, 81).await;
+    create_dna_test(store, 82, 1).await;
+    let tag = TagId::from_uuid(id(70));
+    person(
+        store,
+        1,
+        1_701,
+        PersonCommand::Tag {
+            person_id: PersonId::from_uuid(id(1)),
+            tag_id: tag,
+        },
+    )
+    .await;
+    let envelope = NoteCommandEnvelope {
+        meta: meta(8_001),
+        command: NoteCommand::Tag {
+            note_id: NoteId::from_uuid(id(80)),
+            tag_id: tag,
+        },
+    };
+    store.execute_note(&id(80).to_string(), envelope).await.unwrap();
+    let envelope = ResearchNoteCommandEnvelope {
+        meta: meta(8_101),
+        command: ResearchNoteCommand::Tag {
+            research_note_id: ResearchNoteId::from_uuid(id(81)),
+            tag_id: tag,
+        },
+    };
+    store
+        .execute_research_note(&id(81).to_string(), envelope)
+        .await
+        .unwrap();
+    let envelope = DnaTestCommandEnvelope {
+        meta: meta(8_201),
+        command: DnaTestCommand::Tag {
+            dna_test_id: DnaTestId::from_uuid(id(82)),
+            tag_id: tag,
+        },
+    };
+    store.execute_dna_test(&id(82).to_string(), envelope).await.unwrap();
+}
+
+async fn a_tagged_record_of_any_kind_links_to_its_tag_until_untagged(store: &Store) {
+    tag_four_kinds(store).await;
+    assert_eq!(
+        linking(store, RecordLink::Tagged, &[70]).await,
+        pairs(&[(1, 70), (80, 70), (81, 70), (82, 70)])
+    );
+
+    let tag = TagId::from_uuid(id(70));
+    person(
+        store,
+        1,
+        1_702,
+        PersonCommand::Untag {
+            person_id: PersonId::from_uuid(id(1)),
+            tag_id: tag,
+        },
+    )
+    .await;
+    let envelope = NoteCommandEnvelope {
+        meta: meta(8_002),
+        command: NoteCommand::RetractAssertion {
+            note_id: NoteId::from_uuid(id(80)),
+            target: AssertionId::from_uuid(id(8_001)),
+        },
+    };
+    store.execute_note(&id(80).to_string(), envelope).await.unwrap();
+    assert_eq!(
+        linking(store, RecordLink::Tagged, &[70]).await,
+        pairs(&[(81, 70), (82, 70)]),
+        "untagging and retracting the tag drop the link"
+    );
+}
+
+async fn a_dna_test_links_to_its_person_and_a_match_to_its_tests(store: &Store) {
+    create_person(store, 1).await;
+    create_person(store, 2).await;
+    create_dna_test(store, 82, 1).await;
+    create_dna_test(store, 83, 2).await;
+    observe_match(store, 90, 82, 83).await;
+    assert_eq!(
+        linking(store, RecordLink::DnaTestPerson, &[1, 2]).await,
+        pairs(&[(82, 1), (83, 2)])
+    );
+    assert_eq!(
+        linking(store, RecordLink::DnaMatchTest, &[82, 83]).await,
+        pairs(&[(90, 82), (90, 83)])
+    );
+}
+
+async fn a_rebuild_reproduces_every_kinds_tag_links(store: &Store) {
+    tag_four_kinds(store).await;
+    store.rebuild_projections().await.unwrap();
+    assert_eq!(
+        linking(store, RecordLink::Tagged, &[70]).await,
+        pairs(&[(1, 70), (80, 70), (81, 70), (82, 70)]),
+        "one kind's rebuild keeps the other kinds' tag links"
+    );
+    assert_eq!(linking(store, RecordLink::DnaTestPerson, &[1]).await, pairs(&[(82, 1)]));
+}
+
 #[cfg(feature = "sqlite")]
 mod sqlite {
     use vitni_db::{RecordLink, Store};
@@ -469,6 +639,9 @@ mod sqlite {
     }
 
     sqlite_tests!(
+        a_tagged_record_of_any_kind_links_to_its_tag_until_untagged,
+        a_dna_test_links_to_its_person_and_a_match_to_its_tests,
+        a_rebuild_reproduces_every_kinds_tag_links,
         views_are_read_by_id_skipping_unknown_ones,
         more_ids_than_one_query_binds_are_all_read,
         a_familys_partners_and_children_link_to_it_while_they_are_members,
@@ -529,6 +702,9 @@ mod postgres {
     }
 
     postgres_tests!(
+        a_tagged_record_of_any_kind_links_to_its_tag_until_untagged,
+        a_dna_test_links_to_its_person_and_a_match_to_its_tests,
+        a_rebuild_reproduces_every_kinds_tag_links,
         views_are_read_by_id_skipping_unknown_ones,
         more_ids_than_one_query_binds_are_all_read,
         a_familys_partners_and_children_link_to_it_while_they_are_members,

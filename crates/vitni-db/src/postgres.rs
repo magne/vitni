@@ -71,6 +71,7 @@ macro_rules! postgres_queries {
                 $upcasters
             }))];
         postgres_side_indexes!($snake, $pool, queries);
+        postgres_list_table!($snake, $pool, queries);
         queries.push(Box::new(crate::record_origins::postgres::RecordOriginsQuery::new(
             $pool.clone(),
             $table_const,
@@ -80,6 +81,78 @@ macro_rules! postgres_queries {
         )));
         queries
     }};
+}
+
+/// Pushes the list table query (ADR 0052 §5) onto the queries of every listed aggregate — after its
+/// side indexes, so the record links its dependents are found through are current. `import_run` is not
+/// listed.
+macro_rules! postgres_list_table {
+    (person, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::list_table::postgres::ListTableQuery::<
+            vitni_core::person::PersonView,
+        >::new($pool.clone())));
+    };
+    (family, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::list_table::postgres::ListTableQuery::<
+            vitni_core::family::FamilyView,
+        >::new($pool.clone())));
+    };
+    (place, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::list_table::postgres::ListTableQuery::<
+            vitni_core::place::PlaceView,
+        >::new($pool.clone())));
+    };
+    (source, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::list_table::postgres::ListTableQuery::<
+            vitni_core::source::SourceView,
+        >::new($pool.clone())));
+    };
+    (citation, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::list_table::postgres::ListTableQuery::<
+            vitni_core::citation::CitationView,
+        >::new($pool.clone())));
+    };
+    (event, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::list_table::postgres::ListTableQuery::<
+            vitni_core::event::EventView,
+        >::new($pool.clone())));
+    };
+    (dna_test, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::list_table::postgres::ListTableQuery::<
+            vitni_core::dna_test::DnaTestView,
+        >::new($pool.clone())));
+    };
+    (dna_match, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::list_table::postgres::ListTableQuery::<
+            vitni_core::dna_match::DnaMatchView,
+        >::new($pool.clone())));
+    };
+    (repository, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::list_table::postgres::ListTableQuery::<
+            vitni_core::repository::RepositoryView,
+        >::new($pool.clone())));
+    };
+    (note, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::list_table::postgres::ListTableQuery::<
+            vitni_core::note::NoteView,
+        >::new($pool.clone())));
+    };
+    (media, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::list_table::postgres::ListTableQuery::<
+            vitni_core::media::MediaView,
+        >::new($pool.clone())));
+    };
+    (research_note, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::list_table::postgres::ListTableQuery::<
+            vitni_core::research_note::ResearchNoteView,
+        >::new($pool.clone())));
+    };
+    (tag, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::list_table::postgres::ListTableQuery::<
+            vitni_core::tag::TagView,
+        >::new($pool.clone())));
+    };
+    ($other:ident, $pool:expr, $queries:ident) => {};
 }
 
 /// Pushes the derived side indexes onto the queries of the one aggregate each is fed by: the identity
@@ -146,15 +219,39 @@ macro_rules! postgres_side_indexes {
         $queries.push(Box::new(crate::identity_links::postgres::IdentityLinksQuery::<
             vitni_core::repository::RepositoryView,
         >::new($pool.clone())));
+        $queries.push(Box::new(crate::record_links::postgres::RecordLinksQuery::<
+            vitni_core::repository::RepositoryView,
+        >::new($pool.clone())));
     };
     (note, $pool:expr, $queries:ident) => {
         $queries.push(Box::new(crate::identity_links::postgres::IdentityLinksQuery::<
+            vitni_core::note::NoteView,
+        >::new($pool.clone())));
+        $queries.push(Box::new(crate::record_links::postgres::RecordLinksQuery::<
             vitni_core::note::NoteView,
         >::new($pool.clone())));
     };
     (media, $pool:expr, $queries:ident) => {
         $queries.push(Box::new(crate::identity_links::postgres::IdentityLinksQuery::<
             vitni_core::media::MediaView,
+        >::new($pool.clone())));
+        $queries.push(Box::new(crate::record_links::postgres::RecordLinksQuery::<
+            vitni_core::media::MediaView,
+        >::new($pool.clone())));
+    };
+    (dna_test, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::record_links::postgres::RecordLinksQuery::<
+            vitni_core::dna_test::DnaTestView,
+        >::new($pool.clone())));
+    };
+    (dna_match, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::record_links::postgres::RecordLinksQuery::<
+            vitni_core::dna_match::DnaMatchView,
+        >::new($pool.clone())));
+    };
+    (research_note, $pool:expr, $queries:ident) => {
+        $queries.push(Box::new(crate::record_links::postgres::RecordLinksQuery::<
+            vitni_core::research_note::ResearchNoteView,
         >::new($pool.clone())));
     };
     ($other:ident, $pool:expr, $queries:ident) => {};
@@ -279,6 +376,9 @@ macro_rules! postgres_store {
                 // citation projections hold; its `Query` is appended to those frameworks above, and a
                 // workspace that predates it gets it created and filled from the open projections.
                 crate::record_links::postgres::create_filled(&pool).await?;
+                // The list tables (ADR 0052 §5) are derived from the projections and the record links; a
+                // workspace that predates one gets it created and filled, its tag links with it.
+                crate::list_table::postgres::create_filled(&pool).await?;
                 Ok(Self { $($snake,)+ pool, unreadable })
             }
 
@@ -367,6 +467,8 @@ macro_rules! postgres_store {
                 // The record links (ADR 0047) are derived from the rebuilt person, family, event and
                 // citation projections.
                 crate::record_links::postgres::rebuild_index(pool).await?;
+                // The list tables read the rebuilt projections.
+                crate::list_table::postgres::rebuild(pool).await?;
                 // The match keys need the name-culture packs, which only the app layer has: forgetting
                 // what the index was built under makes it rebuild on next use.
                 crate::match_keys::postgres::clear_state(pool).await?;
@@ -646,6 +748,24 @@ impl PostgresStore {
         targets: &[String],
     ) -> Result<Vec<(String, String)>, DbError> {
         crate::record_links::postgres::linking(&self.pool, relation, targets).await
+    }
+
+    /// Evaluates a list query over its kind's list table (ADR 0052 §4).
+    pub(crate) async fn list_query(
+        &self,
+        spec: &crate::list_table::ListSpec,
+    ) -> Result<crate::list_table::ListResult, DbError> {
+        crate::list_table::postgres::query(&self.pool, spec).await
+    }
+
+    /// The records carrying `tag`, as cluster roots (ADR 0052 §6).
+    pub(crate) async fn tag_uses(&self, tag: &str) -> Result<Vec<(crate::list_table::ListedKind, String)>, DbError> {
+        crate::list_table::postgres::tag_uses(&self.pool, tag).await
+    }
+
+    /// How many records carry each tag in use.
+    pub(crate) async fn tag_use_counts(&self) -> Result<Vec<(String, u64)>, DbError> {
+        crate::list_table::postgres::tag_use_counts(&self.pool).await
     }
 
     /// The creating origin of every imported aggregate of `kind` (ADR 0037 §4).

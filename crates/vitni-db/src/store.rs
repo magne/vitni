@@ -870,6 +870,61 @@ impl Store {
         }
     }
 
+    /// Evaluates a list query (ADR 0052 §4): the matching records of its kind, filtered, sorted and
+    /// windowed in SQL, with typed cells for the requested columns and the total match count. A record
+    /// merged into another (ADR 0039 §5) is left out of the rows and the count.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError::Malformed`] for a column or filter the kind's catalogue does not take, or a
+    /// [`DbError`] on a read failure.
+    #[cfg(any(feature = "sqlite", feature = "postgres"))]
+    pub async fn list_query(
+        &self,
+        spec: &crate::list_table::ListSpec,
+    ) -> Result<crate::list_table::ListResult, DbError> {
+        match &self.backend {
+            #[cfg(feature = "sqlite")]
+            Backend::Sqlite(s) => s.list_query(spec).await,
+            #[cfg(feature = "postgres")]
+            Backend::Postgres(p) => p.list_query(spec).await,
+        }
+    }
+
+    /// The records carrying the tag with id `tag`, through its `tagged` links (ADR 0052 §6): each read
+    /// as its cluster's root (ADR 0039 §5) and listed once, grouped by kind in [`ListedKind::ALL`]
+    /// order, then by `human_id`.
+    ///
+    /// [`ListedKind::ALL`]: crate::list_table::ListedKind::ALL
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read failure.
+    #[cfg(any(feature = "sqlite", feature = "postgres"))]
+    pub async fn tag_uses(&self, tag: &str) -> Result<Vec<(crate::list_table::ListedKind, String)>, DbError> {
+        match &self.backend {
+            #[cfg(feature = "sqlite")]
+            Backend::Sqlite(s) => s.tag_uses(tag).await,
+            #[cfg(feature = "postgres")]
+            Backend::Postgres(p) => p.tag_uses(tag).await,
+        }
+    }
+
+    /// How many records carry each tag in use, as `(tag id, uses)`, a cluster counted once.
+    ///
+    /// # Errors
+    ///
+    /// [`DbError`] on a read failure.
+    #[cfg(any(feature = "sqlite", feature = "postgres"))]
+    pub async fn tag_use_counts(&self) -> Result<Vec<(String, u64)>, DbError> {
+        match &self.backend {
+            #[cfg(feature = "sqlite")]
+            Backend::Sqlite(s) => s.tag_use_counts().await,
+            #[cfg(feature = "postgres")]
+            Backend::Postgres(p) => p.tag_use_counts().await,
+        }
+    }
+
     /// The origin of the creating event of each of the aggregates `ids` of `kind` that an import made,
     /// as `(aggregate_id, origin)`, oldest first (ADR 0037 §4) — [`Self::created_origins`] for named
     /// aggregates. The origins carry no content digest.

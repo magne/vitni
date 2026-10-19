@@ -13,7 +13,6 @@ use crate::dto::AggRef;
 use crate::error::AppError;
 use crate::identity::{ClusterView, PersonClusters, views};
 use crate::import_run::{ImportRunSummary, find_import_run};
-use crate::person::render_name;
 use crate::session::Session;
 use crate::use_case::Provenance;
 use crate::workspace::Workspace;
@@ -108,7 +107,7 @@ pub async fn linked_records(workspace: &Workspace, human_id: &str) -> Result<Lin
                 human_id: view.human_id().map(|id| id.as_str().to_owned()).unwrap_or_default(),
                 id: aggregate_id,
             },
-            display_name: view.names().first().map(|name| render_name(name)),
+            display_name: view.names().first().map(|name| name.display()),
             evidence_level: view.evidence_level().unwrap_or(EvidenceLevel::Conclusion),
             origin,
             via,
