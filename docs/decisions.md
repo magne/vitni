@@ -85,12 +85,6 @@ change ([`issue-tracking.md`](issue-tracking.md) §4). Check here before filing 
   (`Store::list_*_page`, `vitni <kind> list --limit/--offset`). A tag has no `human_id` and its list is
   a vocabulary of tens, and the import-run list sorts by start time and needs every run to know which
   one a dataset resumes from. Both stay whole lists.
-- **The Explorer windows its DOM, not its fetch.** #590 mounts only a window of rows (`ListWindow`)
-  but still loads the whole list once, and filters and sorts it in memory. The store now evaluates a
-  `ListQuery` — search, typed filters, one sort, offset or keyset pages, the total — over a list table
-  per kind (#677, ADR 0052 §4–5), and the CLI's list verbs read it; the paged summaries landed in #673.
-  The Explorer adopting the query, and the column chooser and saved searches built on it, are their
-  own changes (#678, #679, #680).
 - **The list tables are written after the projection, not in its transaction.** ADR 0052 §5 places
   the list-table write in the projection's transaction, but no side index shares it: the projection
   upsert runs on the pool, and `record_links`, the identity index and the rest follow as later steps

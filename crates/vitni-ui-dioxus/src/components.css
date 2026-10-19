@@ -334,6 +334,26 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
   border-radius: var(--r-md); padding: var(--sp-1) var(--sp-2);
   color: var(--ink); font-size: var(--fs-sm); outline: none;
 }
+/* The Explorer filter bar (ADR 0052 §2–3, #678): the clause editor, in the column's flow under the
+   toolbar (the column clips anything floated past it), then the applied clauses as chips. */
+.list-toolbar .btn { flex: none; white-space: nowrap; }
+.list-toolbar .badge { margin-left: var(--sp-1); padding: 1px var(--sp-1); }
+.filter-editor {
+  display: flex; flex-direction: column; gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--line); background: var(--panel-2);
+}
+.filter-editor .field { margin: 0; }
+.filter-values {
+  max-height: 180px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: var(--sp-1);
+}
+.filter-actions { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
+.list-filters {
+  display: flex; flex-wrap: wrap; gap: var(--sp-1);
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--line);
+}
 .list-rows { overflow: auto; flex: 1; }
 /* A windowed entity list (#590): the listbox is as tall as every row, and only the mounted rows sit
    in it, each at its own offset — so the scrollbar spans the whole list while the DOM holds a few. */
@@ -534,6 +554,11 @@ select.in {
   background: transparent; color: var(--muted); cursor: pointer;
 }
 .chip-delete:hover { background: var(--panel-1); color: var(--ink); }
+.chip-label {
+  appearance: none; background: none; border: 0; padding: 0; margin: 0;
+  color: inherit; font: inherit; cursor: pointer;
+}
+.chip-label:hover { color: var(--ink); text-decoration: underline; }
 
 /* Confidence badge: a dot + label, colored by surety level */
 .conf { display: inline-flex; align-items: center; gap: 5px; font-size: var(--fs-xs); font-weight: 600; color: var(--ink-2); }

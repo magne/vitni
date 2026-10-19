@@ -23,17 +23,17 @@ use vitni_app::DecidableKind;
 use vitni_app::{
     ActivityDetail, Age, AgeBound, AppError, AssociationRole, BackupError, Calendar, ChangeLogEntry, ChangeValue,
     ChildParentRelationship, ChromosomeSide, CitingContext, DatasetError, DateModifier, DatePoint, DateQuality,
-    DbError, DnaGenomeBuild, DnaProvider, DnaTestType, EvidenceKind, EvidenceLevel, FactType, GenealogicalDate,
-    GenealogicalDateBody, InformationKind, Kinship, ListQueryError, MatchBand, MatchDataError, MatchStatus, NameType,
-    NoteType, OperatorKind, PackError, ParticipantRole, RecordRole, RecordValue, RepositoryType, Sex, SourceMediaType,
-    SourceQuality, SuretyLabelOverrides, UsingKind, config,
+    DbError, DnaGenomeBuild, DnaProvider, DnaTestType, EvidenceKind, EvidenceLevel, FactType, FilterOp,
+    GenealogicalDate, GenealogicalDateBody, InformationKind, Kinship, ListQueryError, MatchBand, MatchDataError,
+    MatchStatus, NameType, NoteType, OperatorKind, PackError, ParticipantRole, RecordRole, RecordValue, RepositoryType,
+    Sex, SourceMediaType, SourceQuality, SuretyLabelOverrides, UsingKind, config,
 };
 
 use crate::action::{ActionLabel, Affordance};
 use crate::navigation::Category;
 use crate::presentation::{ConfidenceLevel, EvidenceAxis, RestrictionKind};
 use crate::view_model::CropCorner;
-use crate::view_model::{DateModifierKind, TimelineKind};
+use crate::view_model::{DateModifierKind, FilterDraftError, TimelineKind};
 use crate::vocabulary::{Action, Field, Form, Panel, SelectOption, SubmitResult, Table};
 
 /// The embedded baseline catalogue (compiled into the crate; complete fallback language).
@@ -2932,6 +2932,98 @@ impl Localizer {
             AppError::MatchData(data) => self.match_data_error(data),
             AppError::ListQuery(query) => self.list_query_error(query),
             AppError::Db(db) => self.db_error(db),
+        }
+    }
+
+    /// A list column's label, by its catalogue id (ADR 0052 §1); an id the catalogue lacks shows as
+    /// itself.
+    #[must_use]
+    pub fn list_column_label(&self, column: &str) -> String {
+        match column {
+            "name" => fl!(self.loader, "list-column-name"),
+            "given" => fl!(self.loader, "list-column-given"),
+            "surname" => fl!(self.loader, "list-column-surname"),
+            "sex" => fl!(self.loader, "list-column-sex"),
+            "birth" => fl!(self.loader, "list-column-birth"),
+            "death" => fl!(self.loader, "list-column-death"),
+            "tags" => fl!(self.loader, "list-column-tags"),
+            "partners" => fl!(self.loader, "list-column-partners"),
+            "marriage" => fl!(self.loader, "list-column-marriage"),
+            "children" => fl!(self.loader, "list-column-children"),
+            "type" => fl!(self.loader, "list-column-type"),
+            "date" => fl!(self.loader, "list-column-date"),
+            "place" => fl!(self.loader, "list-column-place"),
+            "description" => fl!(self.loader, "list-column-description"),
+            "enclosed-by" => fl!(self.loader, "list-column-enclosed-by"),
+            "title" => fl!(self.loader, "list-column-title"),
+            "author" => fl!(self.loader, "list-column-author"),
+            "abbreviation" => fl!(self.loader, "list-column-abbreviation"),
+            "source" => fl!(self.loader, "list-column-source"),
+            "page" => fl!(self.loader, "list-column-page"),
+            "confidence" => fl!(self.loader, "list-column-confidence"),
+            "path" => fl!(self.loader, "list-column-path"),
+            "mime" => fl!(self.loader, "list-column-mime"),
+            "text" => fl!(self.loader, "list-column-text"),
+            "person" => fl!(self.loader, "list-column-person"),
+            "provider" => fl!(self.loader, "list-column-provider"),
+            "test-type" => fl!(self.loader, "list-column-test-type"),
+            "kit" => fl!(self.loader, "list-column-kit"),
+            "test-a" => fl!(self.loader, "list-column-test-a"),
+            "test-b" => fl!(self.loader, "list-column-test-b"),
+            "shared-cm" => fl!(self.loader, "list-column-shared-cm"),
+            "status" => fl!(self.loader, "list-column-status"),
+            "relationship" => fl!(self.loader, "list-column-relationship"),
+            "priority" => fl!(self.loader, "list-column-priority"),
+            "color" => fl!(self.loader, "list-column-color"),
+            other => other.to_owned(),
+        }
+    }
+
+    /// A filter operator's label (ADR 0052 §2).
+    #[must_use]
+    pub fn filter_op_label(&self, op: FilterOp) -> String {
+        match op {
+            FilterOp::Contains => fl!(self.loader, "filter-op-contains"),
+            FilterOp::Is => fl!(self.loader, "filter-op-is"),
+            FilterOp::IsEmpty => fl!(self.loader, "filter-op-is-empty"),
+            FilterOp::Before => fl!(self.loader, "filter-op-before"),
+            FilterOp::After => fl!(self.loader, "filter-op-after"),
+            FilterOp::Between => fl!(self.loader, "filter-op-between"),
+            FilterOp::LessThan => fl!(self.loader, "filter-op-less-than"),
+            FilterOp::GreaterThan => fl!(self.loader, "filter-op-greater-than"),
+            FilterOp::IsAnyOf => fl!(self.loader, "filter-op-is-any-of"),
+            FilterOp::IsNoneOf => fl!(self.loader, "filter-op-is-none-of"),
+            FilterOp::HasAnyOf => fl!(self.loader, "filter-op-has-any-of"),
+            FilterOp::HasAllOf => fl!(self.loader, "filter-op-has-all-of"),
+            FilterOp::HasNoneOf => fl!(self.loader, "filter-op-has-none-of"),
+        }
+    }
+
+    /// An applied filter's chip: `Birth before 1800`.
+    #[must_use]
+    pub fn filter_chip(&self, column: &str, op: &str, value: &str) -> String {
+        fl!(self.loader, "filter-chip", column = column, op = op, value = value)
+    }
+
+    /// An applied filter's chip when the operator takes no value: `Death is empty`.
+    #[must_use]
+    pub fn filter_chip_bare(&self, column: &str, op: &str) -> String {
+        fl!(self.loader, "filter-chip-bare", column = column, op = op)
+    }
+
+    /// A *between* filter's range: `1800 – 1850`.
+    #[must_use]
+    pub fn filter_range(&self, from: &str, to: &str) -> String {
+        fl!(self.loader, "filter-range", from = from, to = to)
+    }
+
+    /// Why a filter clause in the editor cannot be applied.
+    #[must_use]
+    pub fn filter_draft_error(&self, error: FilterDraftError) -> String {
+        match error {
+            FilterDraftError::MissingValue => fl!(self.loader, "filter-error-missing"),
+            FilterDraftError::BadDate => fl!(self.loader, "filter-error-date"),
+            FilterDraftError::BadNumber => fl!(self.loader, "filter-error-number"),
         }
     }
 

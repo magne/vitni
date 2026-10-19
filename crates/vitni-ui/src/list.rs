@@ -1,7 +1,10 @@
 //! Generic list vocabulary: the framework-neutral shapes the master-detail list framework is driven
 //! by (ADR 0008). A [`RowVm`] is one entity rendered as a list row — already-localized strings so a
-//! renderer stays dumb — and [`visible_rows`] applies a [`ListQuery`] (search + sort) purely, so the
-//! filtering/sorting is unit-testable without a renderer.
+//! renderer stays dumb — and [`visible_rows`] applies a [`RowQuery`] (search + sort) purely to a list
+//! held in memory (the Help topics). An entity list is searched, filtered and sorted by the store
+//! instead ([`crate::listed`]).
+
+use vitni_app::{ListSort, ListedKind, SortDirection};
 
 /// One entity as a row in a list view: an already-localized title and optional subtitle/avatar,
 /// keyed by its stable user-facing id.
@@ -51,8 +54,6 @@ pub enum RowSort {
     /// By id, ascending (the default; lists come from the app ordered by id).
     #[default]
     IdAsc,
-    /// By id, descending.
-    IdDesc,
     /// By title, ascending (case-insensitive).
     TitleAsc,
     /// By title, descending (case-insensitive).
@@ -60,52 +61,44 @@ pub enum RowSort {
 }
 
 impl RowSort {
-    /// The next order in the toolbar sort-button cycle (id ↑ → id ↓ → name ↑ → name ↓ → id ↑).
+    /// The next order in the toolbar sort-button cycle (id ↑ → name ↑ → name ↓ → id ↑).
     #[must_use]
-    pub fn next(self) -> Self {
+    pub const fn next(self) -> Self {
         match self {
-            Self::IdAsc => Self::IdDesc,
-            Self::IdDesc => Self::TitleAsc,
+            Self::IdAsc => Self::TitleAsc,
             Self::TitleAsc => Self::TitleDesc,
             Self::TitleDesc => Self::IdAsc,
         }
     }
+
+    /// The store sort for a list of `kind`: none for the id order, the kind's title column for a name
+    /// order.
+    #[must_use]
+    pub fn query_sort(self, kind: ListedKind) -> Option<ListSort> {
+        let direction = match self {
+            Self::IdAsc => return None,
+            Self::TitleAsc => SortDirection::Ascending,
+            Self::TitleDesc => SortDirection::Descending,
+        };
+        Some(ListSort {
+            column: kind.title_column().id.to_owned(),
+            direction,
+        })
+    }
 }
 
-/// The live list state: the search query and the sort order.
+/// The search and sort of a list held in memory.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct ListQuery {
+pub struct RowQuery {
     /// The current search text; empty means "no filter".
     pub query: String,
     /// The current sort order.
     pub sort: RowSort,
 }
 
-/// The row `delta` steps from the currently-selected one within the visible (filtered + sorted)
-/// order — the `[`/`]` prev/next-record navigation over a master-detail list.
-///
-/// `selected` is the current selection's id, if any. Movement clamps at both ends (no wrap). With no
-/// selection (or a selection filtered out of view), a forward step (`delta >= 0`) lands on the first
-/// visible row and a backward step on the last. Returns `None` only when nothing is visible.
-#[must_use]
-pub fn step_row(rows: &[RowVm], q: &ListQuery, selected: Option<&str>, delta: isize) -> Option<RowVm> {
-    let visible = visible_rows(rows, q);
-    let last = visible.len().checked_sub(1)?;
-    let next = match selected.and_then(|id| visible.iter().position(|row| row.id == id)) {
-        Some(current) => {
-            let current = isize::try_from(current).unwrap_or(0);
-            let last_index = isize::try_from(last).unwrap_or(0);
-            usize::try_from((current + delta).clamp(0, last_index)).unwrap_or(0)
-        }
-        None if delta >= 0 => 0,
-        None => last,
-    };
-    visible.get(next).cloned()
-}
-
 /// Filters `rows` by the query (when non-empty) and sorts them per `q.sort`.
 #[must_use]
-pub fn visible_rows(rows: &[RowVm], q: &ListQuery) -> Vec<RowVm> {
+pub fn visible_rows(rows: &[RowVm], q: &RowQuery) -> Vec<RowVm> {
     let mut visible: Vec<RowVm> = if q.query.is_empty() {
         rows.to_vec()
     } else {
@@ -113,7 +106,6 @@ pub fn visible_rows(rows: &[RowVm], q: &ListQuery) -> Vec<RowVm> {
     };
     match q.sort {
         RowSort::IdAsc => visible.sort_by(|a, b| a.id.cmp(&b.id)),
-        RowSort::IdDesc => visible.sort_by(|a, b| b.id.cmp(&a.id)),
         RowSort::TitleAsc => visible.sort_by_key(|row| row.title.to_lowercase()),
         RowSort::TitleDesc => visible.sort_by_key(|row| std::cmp::Reverse(row.title.to_lowercase())),
     }
@@ -122,7 +114,9 @@ pub fn visible_rows(rows: &[RowVm], q: &ListQuery) -> Vec<RowVm> {
 
 #[cfg(test)]
 mod tests {
-    use super::{ListQuery, RowSort, RowVm, step_row, visible_rows};
+    use vitni_app::{ListSort, ListedKind, SortDirection};
+
+    use super::{RowQuery, RowSort, RowVm, visible_rows};
 
     fn rows() -> Vec<RowVm> {
         vec![
@@ -145,13 +139,13 @@ mod tests {
 
     #[test]
     fn empty_query_returns_all_rows() {
-        let visible = visible_rows(&rows(), &ListQuery::default());
+        let visible = visible_rows(&rows(), &RowQuery::default());
         assert_eq!(visible.len(), 2);
     }
 
     #[test]
     fn query_matches_case_insensitively_on_title() {
-        let q = ListQuery {
+        let q = RowQuery {
             query: "ada".to_owned(),
             sort: RowSort::IdAsc,
         };
@@ -164,7 +158,7 @@ mod tests {
     fn query_matches_on_subtitle_and_id() {
         let by_subtitle = visible_rows(
             &rows(),
-            &ListQuery {
+            &RowQuery {
                 query: "FEMALE".to_owned(),
                 sort: RowSort::IdAsc,
             },
@@ -172,7 +166,7 @@ mod tests {
         assert_eq!(by_subtitle.len(), 1);
         let by_id = visible_rows(
             &rows(),
-            &ListQuery {
+            &RowQuery {
                 query: "i0001".to_owned(),
                 sort: RowSort::IdAsc,
             },
@@ -183,19 +177,11 @@ mod tests {
 
     #[test]
     fn sort_orders_apply() {
-        let id_asc = visible_rows(&rows(), &ListQuery::default());
+        let id_asc = visible_rows(&rows(), &RowQuery::default());
         assert_eq!([id_asc[0].id.as_str(), id_asc[1].id.as_str()], ["I0001", "I0002"]);
-        let id_desc = visible_rows(
-            &rows(),
-            &ListQuery {
-                query: String::new(),
-                sort: RowSort::IdDesc,
-            },
-        );
-        assert_eq!([id_desc[0].id.as_str(), id_desc[1].id.as_str()], ["I0002", "I0001"]);
         let title_asc = visible_rows(
             &rows(),
-            &ListQuery {
+            &RowQuery {
                 query: String::new(),
                 sort: RowSort::TitleAsc,
             },
@@ -203,7 +189,7 @@ mod tests {
         assert_eq!(title_asc[0].title, "Ada Lovelace");
         let title_desc = visible_rows(
             &rows(),
-            &ListQuery {
+            &RowQuery {
                 query: String::new(),
                 sort: RowSort::TitleDesc,
             },
@@ -213,62 +199,30 @@ mod tests {
 
     #[test]
     fn empty_list_stays_empty() {
-        let checked = visible_rows(&[], &ListQuery::default());
+        let checked = visible_rows(&[], &RowQuery::default());
         assert!(checked.is_empty(), "{checked:?}");
     }
 
     #[test]
-    fn step_row_moves_within_the_sorted_order() {
-        let q = ListQuery::default(); // IdAsc: I0001 (Charles) then I0002 (Ada)
-        assert_eq!(
-            step_row(&rows(), &q, Some("I0001"), 1).map(|r| r.id),
-            Some("I0002".to_owned())
-        );
-        assert_eq!(
-            step_row(&rows(), &q, Some("I0002"), -1).map(|r| r.id),
-            Some("I0001".to_owned())
-        );
+    fn the_sort_button_cycles_through_the_orders_the_store_can_serve() {
+        assert_eq!(RowSort::IdAsc.next(), RowSort::TitleAsc);
+        assert_eq!(RowSort::TitleAsc.next(), RowSort::TitleDesc);
+        assert_eq!(RowSort::TitleDesc.next(), RowSort::IdAsc);
     }
 
     #[test]
-    fn step_row_clamps_at_both_ends() {
-        let q = ListQuery::default();
+    fn a_name_order_sorts_the_store_by_the_kinds_title_column() {
+        assert_eq!(RowSort::IdAsc.query_sort(ListedKind::Person), None);
         assert_eq!(
-            step_row(&rows(), &q, Some("I0001"), -1).map(|r| r.id),
-            Some("I0001".to_owned())
+            RowSort::TitleDesc.query_sort(ListedKind::Source),
+            Some(ListSort {
+                column: "title".to_owned(),
+                direction: SortDirection::Descending,
+            })
         );
         assert_eq!(
-            step_row(&rows(), &q, Some("I0002"), 1).map(|r| r.id),
-            Some("I0002".to_owned())
+            RowSort::TitleAsc.query_sort(ListedKind::Event).map(|sort| sort.column),
+            Some("type".to_owned())
         );
-    }
-
-    #[test]
-    fn step_row_without_selection_lands_on_the_first_or_last() {
-        let q = ListQuery::default();
-        assert_eq!(step_row(&rows(), &q, None, 1).map(|r| r.id), Some("I0001".to_owned()));
-        assert_eq!(step_row(&rows(), &q, None, -1).map(|r| r.id), Some("I0002".to_owned()));
-    }
-
-    #[test]
-    fn step_row_honours_the_active_filter() {
-        let q = ListQuery {
-            query: "ada".to_owned(),
-            sort: RowSort::IdAsc,
-        };
-        // Only Ada is visible; stepping stays on her (and a filtered-out selection falls back to first).
-        assert_eq!(
-            step_row(&rows(), &q, Some("I0001"), 1).map(|r| r.id),
-            Some("I0002".to_owned())
-        );
-        assert_eq!(
-            step_row(&rows(), &q, Some("I0002"), 1).map(|r| r.id),
-            Some("I0002".to_owned())
-        );
-    }
-
-    #[test]
-    fn step_row_on_empty_is_none() {
-        assert!(step_row(&[], &ListQuery::default(), None, 1).is_none());
     }
 }

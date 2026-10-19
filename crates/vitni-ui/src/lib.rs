@@ -28,6 +28,7 @@ pub mod import_payload;
 pub mod intent;
 pub mod list;
 pub mod list_window;
+pub mod listed;
 pub mod navigation;
 pub mod palette;
 pub mod picker;
@@ -60,8 +61,11 @@ pub use intent::{
     dispatch_tag_change_set, load_run_record_changes, load_run_records, pin_publisher, resolve_record_name,
     unpin_publisher,
 };
-pub use list::{ListQuery, RowSort, RowVm, step_row, visible_rows};
+pub use list::{RowQuery, RowSort, RowVm, visible_rows};
 pub use list_window::{ListWindow, WINDOW_ROWS};
+pub use listed::{
+    ListedRows, PAGE_ROWS, RowsPage, list_page, listed_category, listed_kind, page_window, resolve_filter,
+};
 pub use navigation::{
     Category, CitationChangeSetRequest, CitationEdit, CitationSourceRequest, DecideMatch, Destination,
     DnaMatchChangeSetRequest, DnaMatchEdit, DnaTestChangeSetRequest, DnaTestEdit, DraftCitationRef, DraftId,
@@ -87,36 +91,38 @@ pub use shortcuts::{
     ShortcutGroup, compare_decision, navigation_shortcuts, resolved_shortcuts, shortcuts,
 };
 pub use view_model::{
-    ActivityVm, AddressVm, AssociationVm, AttachSaveAction, AttachedRefVm, BulkImportProgress, BulkImportSession,
-    BulkImportStage, BulkImportStep, BulkImportSummary, CATEGORY_CONVENTION, CapabilityGrantVm, ChildRelationshipVm,
-    CitationAttributeVm, CitationDetail, CitationDraft, CitationRefVm, CitingRecordVm, CompareRowVm, CompareSide,
-    CompareSideVm, CropCorner, DATE_CALENDARS, DATE_QUALITIES, DEFAULT_TAG_COLOR, DEFAULT_TAG_PRIORITY, DashboardStats,
-    DashboardVm, DataQualityVm, DateDraft, DateEntryError, DateModifierKind, DnaInferenceVm, DnaMatchDetail,
-    DnaMatchDraft, DnaSegmentVm, DnaTestDetail, DnaTestDraft, DnaTestMatchVm, EarlierImportVm, EventDetail, EventDraft,
-    EventPinVm, EventRefVm, EvidenceAxisVm, EvidenceSnippetVm, ExportDestination, ExportProgress, ExportSession,
-    ExportStage, ExportSummary, FactVm, FamilyChildVm, FamilyDetail, FamilyDraft, FamilyEventVm, FamilyVm,
-    FilenameHints, GeographyVm, HaplogroupRowVm, HistoryEntryVm, ImportSession, ImportSourcePath, ImportStage,
-    ImportTargetChoice, ImportTargetError, JumpVm, LinkedRecordVm, MapPointVm, MarkerShapeVm, MatchCompareVm,
-    MatchQueueVm, MatchStageVm, MediaAttributeVm, MediaDetail, MediaDraft, MediaRefVm, MediaSaveDraft, MergeBlockedVm,
-    MergeFailure, NEW_EVENT_TYPES, NEW_PLACE_TYPES, NameVm, NewCitationFields, NewEventFields, NewMediaFields,
-    NewNoteFields, NewPersonFields, NewPlaceFields, NewRecordDraft, NewRepositoryFields, NewSourceFields, NoteDetail,
-    NoteDraft, OriginChipVm, OriginVm, ParticipantVm, PartnerInput, PartnerVm, PedigreeNodeVm, PedigreeSlotVm,
-    PedigreeVm, PersonDetail, PersonDraft, PickerHit, PickerRowVm, PinnedPublisherVm, PlaceDetail, PlaceDraft,
-    PlaceGeometryVm, PlaceHierarchyVm, PlaceLinkVm, PlaceMarkerVm, PlaceNameVm, PlaceRowStatus, PlaceRowVm,
-    PlaceSuccessionVm, PluginGrantVm, ProvenanceDraft, QueuedMatchVm, RecordDraft, RecordLink, RelationshipVm,
-    RepositoryDetail, RepositoryDraft, RepositoryLinkVm, RepositoryUrlVm, ResearchNoteDetail, ResearchNoteDraft,
-    ResumeVm, RowOutcome, RunDisclosureVm, RunGroupVm, RunOptionVm, RunRecordVm, RunRecordsVm, SUCCESSION_KINDS,
-    SharedAncestorVm, ShortcutBindingVm, ShortcutsVm, SimilarHitVm, SimilarVm, SourceAttributeVm, SourceCitationVm,
-    SourceDetail, SourceDraft, SourceHeldVm, SourceReliabilityVm, SubjectVm, TIME_SLIDER_RANGE, TagDetail, TagDraft,
-    TagUsageGroupVm, TimelineKind, TimelineRowVm, TranslationVm, TrustStoreVm, UsingRecordVm, ZOOM_RANGE, citation_row,
+    ActiveFilter, ActivityVm, AddressVm, AssociationVm, AttachSaveAction, AttachedRefVm, BulkImportProgress,
+    BulkImportSession, BulkImportStage, BulkImportStep, BulkImportSummary, CATEGORY_CONVENTION, CapabilityGrantVm,
+    ChildRelationshipVm, ChoiceOption, CitationAttributeVm, CitationDetail, CitationDraft, CitationRefVm,
+    CitingRecordVm, ColumnChoice, CompareRowVm, CompareSide, CompareSideVm, CropCorner, DATE_CALENDARS, DATE_QUALITIES,
+    DEFAULT_TAG_COLOR, DEFAULT_TAG_PRIORITY, DashboardStats, DashboardVm, DataQualityVm, DateDraft, DateEntryError,
+    DateModifierKind, DnaInferenceVm, DnaMatchDetail, DnaMatchDraft, DnaSegmentVm, DnaTestDetail, DnaTestDraft,
+    DnaTestMatchVm, EarlierImportVm, EventDetail, EventDraft, EventPinVm, EventRefVm, EvidenceAxisVm,
+    EvidenceSnippetVm, ExportDestination, ExportProgress, ExportSession, ExportStage, ExportSummary, FactVm,
+    FamilyChildVm, FamilyDetail, FamilyDraft, FamilyEventVm, FamilyVm, FilenameHints, FilterDraft, FilterDraftError,
+    GeographyVm, HaplogroupRowVm, HistoryEntryVm, ImportSession, ImportSourcePath, ImportStage, ImportTargetChoice,
+    ImportTargetError, JumpVm, LinkedRecordVm, MapPointVm, MarkerShapeVm, MatchCompareVm, MatchQueueVm, MatchStageVm,
+    MediaAttributeVm, MediaDetail, MediaDraft, MediaRefVm, MediaSaveDraft, MergeBlockedVm, MergeFailure,
+    NEW_EVENT_TYPES, NEW_PLACE_TYPES, NameVm, NewCitationFields, NewEventFields, NewMediaFields, NewNoteFields,
+    NewPersonFields, NewPlaceFields, NewRecordDraft, NewRepositoryFields, NewSourceFields, NoteDetail, NoteDraft,
+    OriginChipVm, OriginVm, ParticipantVm, PartnerInput, PartnerVm, PedigreeNodeVm, PedigreeSlotVm, PedigreeVm,
+    PersonDetail, PersonDraft, PickerHit, PickerRowVm, PinnedPublisherVm, PlaceDetail, PlaceDraft, PlaceGeometryVm,
+    PlaceHierarchyVm, PlaceLinkVm, PlaceMarkerVm, PlaceNameVm, PlaceRowStatus, PlaceRowVm, PlaceSuccessionVm,
+    PluginGrantVm, ProvenanceDraft, QueuedMatchVm, RecordDraft, RecordLink, RelationshipVm, RepositoryDetail,
+    RepositoryDraft, RepositoryLinkVm, RepositoryUrlVm, ResearchNoteDetail, ResearchNoteDraft, ResumeVm, RowOutcome,
+    RunDisclosureVm, RunGroupVm, RunOptionVm, RunRecordVm, RunRecordsVm, SUCCESSION_KINDS, SharedAncestorVm,
+    ShortcutBindingVm, ShortcutsVm, SimilarHitVm, SimilarVm, SourceAttributeVm, SourceCitationVm, SourceDetail,
+    SourceDraft, SourceHeldVm, SourceReliabilityVm, SubjectVm, TIME_SLIDER_RANGE, TagDetail, TagDraft, TagUsageGroupVm,
+    TimelineKind, TimelineRowVm, TranslationVm, TrustStoreVm, UsingRecordVm, ZOOM_RANGE, choice_options, citation_row,
     citation_tabs, clamp_slider_year, clamp_zoom, collapse_history, display_coordinates, dna_match_row, dna_match_tabs,
     dna_test_row, dna_test_tabs, event_list_row, event_row, event_tabs, evidence_axes, family_list_row, family_row,
-    family_tabs, first_undoable, format_date_point, link_is_savable, media_row, media_tabs, name_matches, note_row,
-    note_tabs, parse_birth, parse_date_point, person_list_row, person_row, person_tabs, place_map_display_shape,
-    place_row, place_tabs, plan_writes_nothing, plugin_grant_vm, query_draft, rank_picker_rows, ranks_by_similarity,
-    rect_contains, rect_css, rect_from_drag, rect_moved, rect_resized, repository_row, repository_tabs,
-    research_note_row, research_note_tabs, resolve_attach_save, resolve_geometry_as_of, shortcuts_vm, slugify,
-    source_row, source_tabs, suggest_filename, tag_row, tag_tabs, toggled_restrictions, trust_store_vm,
+    family_tabs, filter_chip_label, filter_columns, filter_ops, first_undoable, format_date_point, link_is_savable,
+    media_row, media_tabs, name_matches, note_row, note_tabs, parse_birth, parse_date_point, person_list_row,
+    person_row, person_tabs, place_map_display_shape, place_row, place_tabs, plan_writes_nothing, plugin_grant_vm,
+    query_draft, rank_picker_rows, ranks_by_similarity, rect_contains, rect_css, rect_from_drag, rect_moved,
+    rect_resized, repository_row, repository_tabs, research_note_row, research_note_tabs, resolve_attach_save,
+    resolve_geometry_as_of, shortcuts_vm, slugify, source_row, source_tabs, suggest_filename, tag_row, tag_tabs,
+    toggled_restrictions, trust_store_vm,
 };
 pub use vocabulary::{
     Action, Field, Form, Panel, SelectOption, SubmitResult, Table, VocabularyError, parse, parse_submit_result,

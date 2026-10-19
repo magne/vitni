@@ -25,9 +25,24 @@ tab-empty = Ingenting her ennå.
 # Verktøylinje for listesortering (PR39)
 sort-order-title = Endre sorteringsrekkefølge
 sort-id-asc = Sortering: ID ↑
-sort-id-desc = Sortering: ID ↓
 sort-name-asc = Sortering: Navn ↑
 sort-name-desc = Sortering: Navn ↓
+
+# Filterlinje i utforskeren (ADR 0052 §2–4, #678)
+list-no-match = Ingen poster passer.
+list-filters = Filtre
+list-filters-title = Filtrer lista etter kolonnene
+filter-editor = Filter
+filter-column = Kolonne
+filter-op = Vilkår
+filter-value = Verdi
+filter-from = Fra
+filter-to = Til
+filter-apply = Bruk
+filter-remove = Fjern
+filter-cancel = Avbryt
+filter-edit = Rediger filteret: { $filter }
+filter-delete = Fjern filteret: { $filter }
 
 # Komponentramme (tilgjengelige navn for ikonknapper, hopp-lenke)
 skip-to-content = Hopp til innhold

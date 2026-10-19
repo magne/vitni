@@ -25,7 +25,7 @@ use vitni_core::matching::MatchableKind;
 use crate::store::DbError;
 
 pub(crate) use rows::ListedRecord;
-pub use rows::kebab as choice_name;
+pub use rows::{choice_key, kebab as choice_name};
 
 /// A kind of record a list shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]

@@ -173,7 +173,8 @@ pub use import_run::{
 };
 pub use linked_records::{LinkedRecord, LinkedRecords, OriginRef, linked_records, record_url, unlink_person};
 pub use list_query::{
-    FilterOp, FilterValue, ListFilter, ListQuery, ListQueryError, ListSort, ListedPage, query_list, reference_id,
+    FilterOp, FilterValue, ListFilter, ListQuery, ListQueryError, ListSort, ListedPage, query_list, record_target,
+    reference_id,
 };
 pub use map_source::{MapBasemap, MapSource, google_viewport_copyright, refresh_map_attribution, resolve_map_source};
 pub use match_queue::{
@@ -262,8 +263,8 @@ pub use staging::{
     StagedSource, StagedTag, WriteScope, commit_import, plan_import,
 };
 pub use tag::{
-    TagSummary, create_tag, list_tags, rename_tag, set_restrictions as set_tag_restrictions, set_tag_color,
-    set_tag_priority, show_tag,
+    TagSummary, create_tag, list_tags, list_tags_query, rename_tag, set_restrictions as set_tag_restrictions,
+    set_tag_color, set_tag_priority, show_tag,
 };
 pub use tag_change_set::{TagChangeSet, TagTarget, commit_tag_change_set};
 pub use tag_usage::TagUsageGroup;
@@ -324,7 +325,7 @@ pub use vitni_core::temporal::resolve_as_of;
 pub use vitni_core::text::{Attribute, ExternalId, Rect, Url};
 pub use vitni_db::{
     ColumnType, DbError, ListCell, ListColumn, ListCursor, ListPage, ListResult, ListRow, ListWindow, ListedKind,
-    SortDirection, SortKey, UnreadableEvent,
+    SortDirection, SortKey, UnreadableEvent, choice_key,
 };
 pub use workspace::{
     BackupSettings, IdFormatLayers, LayerKind, LocaleOverrides, OperatorRecord, PluginPreferences, PreferenceLayers,

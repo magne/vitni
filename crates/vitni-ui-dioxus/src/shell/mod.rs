@@ -23,6 +23,7 @@ pub mod focus_trap;
 pub mod gui_probe;
 pub mod help_overlay;
 pub mod keyboard;
+pub mod list_filters;
 pub mod nav_state;
 pub mod new_record_picker;
 pub mod palette;

@@ -10,7 +10,7 @@
 use std::collections::HashMap;
 
 use dioxus::prelude::*;
-use vitni_ui::{ListQuery, ListWindow, RowSort, RowVm, visible_rows};
+use vitni_ui::{ListWindow, ListedRows, RowSort, RowVm};
 
 use crate::components::{Badge, BadgeSpec, ListRow, TabItem, Tabs, TextInput};
 use crate::screens::DockedRecordDetail;
@@ -79,6 +79,8 @@ pub struct ListChrome {
     pub filter_placeholder: String,
     /// The empty-list message.
     pub empty: String,
+    /// The message of a list whose search or filters match nothing.
+    pub no_match: String,
     /// The already-localized labels for the toolbar sort-cycle button.
     pub sort: SortChrome,
 }
@@ -91,8 +93,6 @@ pub struct SortChrome {
     pub title: String,
     /// The label shown when sorting by id, ascending.
     pub id_asc: String,
-    /// The label shown when sorting by id, descending.
-    pub id_desc: String,
     /// The label shown when sorting by title, ascending.
     pub name_asc: String,
     /// The label shown when sorting by title, descending.
@@ -106,7 +106,6 @@ impl SortChrome {
         Self {
             title: chrome.sort_order_title(),
             id_asc: chrome.sort_label(RowSort::IdAsc),
-            id_desc: chrome.sort_label(RowSort::IdDesc),
             name_asc: chrome.sort_label(RowSort::TitleAsc),
             name_desc: chrome.sort_label(RowSort::TitleDesc),
         }
@@ -117,7 +116,6 @@ impl SortChrome {
     pub fn label(&self, sort: RowSort) -> &str {
         match sort {
             RowSort::IdAsc => &self.id_asc,
-            RowSort::IdDesc => &self.id_desc,
             RowSort::TitleAsc => &self.name_asc,
             RowSort::TitleDesc => &self.name_desc,
         }
@@ -126,28 +124,48 @@ impl SortChrome {
 
 /// A searchable, keyboard-operable entity list.
 ///
-/// The toolbar carries a filter searchbox; the body is a `listbox` of rows with roving focus (↑/↓
-/// move the tab stop, Enter/Space activate the row). The caller owns the `query` and `selected`
-/// signals and supplies the localized [`ListChrome`]. Creating a new record is reached from the shell
-/// top bar/tabstrip (`⌘N`, the new-record menu), not from this pane.
+/// The toolbar carries a search box, the caller's `tools` (the Explorer's *Filters* button) and the
+/// sort-cycle button; the caller's `bar` (the Explorer's filter chips and editor) sits under it. The
+/// body is a `listbox` of rows with roving focus (↑/↓ move the tab stop, Enter/Space activate the row).
+/// The caller owns the `search`, `sort` and `selected` signals and evaluates them into `rows`: the
+/// Explorer through the store's list query (ADR 0052 §4), Help over its topics in memory. Creating a
+/// new record is reached from the shell top bar/tabstrip (`⌘N`, the new-record menu), not from this
+/// pane.
 ///
-/// A long list mounts only a window of its rows (#590, [`ListWindow`]): the filtered rows are a memo,
-/// so scrolling re-renders [`ListRows`] alone and never re-filters or re-sorts the whole list.
+/// A long list mounts only a window of its rows (#590, [`ListWindow`]), and `rows` may hold only some
+/// pages of the result: the box is as tall as the whole result, a row whose page is not read yet waits
+/// in its place, and `onmissing` asks for the pages the window needs.
 #[component]
 pub fn ListPane(
-    /// The rows to show (before the search filter, which this pane applies).
-    rows: Vec<RowVm>,
-    /// The live search state.
-    query: Signal<ListQuery>,
+    /// The rows of the result read so far, under its total.
+    rows: ReadSignal<ListedRows>,
+    /// The search text.
+    search: Signal<String>,
+    /// The sort order.
+    sort: Signal<RowSort>,
     /// The selected row id.
     selected: Signal<Option<String>>,
     /// The localized chrome strings (labels, placeholder).
     chrome: ListChrome,
+    /// Whether a search or filter narrows the list, so an empty result matched nothing rather than
+    /// the list being empty.
+    #[props(default)]
+    narrowed: bool,
     /// Fired when a row is activated, with the activated row (e.g. to open a record tab).
     #[props(default)]
     onselect: Option<Callback<RowVm>>,
+    /// Fired with the pages the mounted window needs and `rows` lacks.
+    #[props(default)]
+    onmissing: Option<Callback<Vec<usize>>>,
+    /// Extra toolbar controls, between the search box and the sort button.
+    #[props(default)]
+    tools: Option<Element>,
+    /// Content under the toolbar, above the rows.
+    #[props(default)]
+    bar: Option<Element>,
 ) -> Element {
-    let visible = use_memo(use_reactive!(|rows| visible_rows(&rows, &query.read())));
+    let empty = rows.read().is_empty();
+    let message = if narrowed { &chrome.no_match } else { &chrome.empty };
     rsx! {
         div { class: "list-toolbar",
             TextInput {
@@ -155,48 +173,67 @@ pub fn ListPane(
                 role: "searchbox",
                 aria_label: "{chrome.filter_placeholder}",
                 placeholder: "{chrome.filter_placeholder}",
-                value: "{query.read().query}",
-                oninput: move |event: FormEvent| query.write().query = event.value(),
+                value: "{search}",
+                oninput: move |event: FormEvent| search.set(event.value()),
             }
+            {tools}
             button {
                 class: "btn sm",
                 r#type: "button",
                 title: "{chrome.sort.title}",
                 onclick: move |_| {
-                    let next = query.read().sort.next();
-                    query.write().sort = next;
+                    let next = sort().next();
+                    sort.set(next);
                 },
-                "{chrome.sort.label(query.read().sort)}"
+                "{chrome.sort.label(sort())}"
             }
         }
-        if visible.read().is_empty() {
-            p { class: "empty", "{chrome.empty}" }
+        {bar}
+        if empty {
+            p { class: "empty", "{message}" }
         } else {
-            ListRows { visible, label: chrome.list_label.clone(), selected, onselect }
+            ListRows { rows, label: chrome.list_label.clone(), selected, onselect, onmissing }
         }
     }
 }
 
 /// The scrolled `listbox` of a [`ListPane`]: mounts the rows of the current [`ListWindow`] plus the
-/// roving tab stop, each at its own row offset inside a box as tall as the whole list, so the
-/// scrollbar spans every row while the DOM holds a bounded few.
+/// roving tab stop, each at its own row offset inside a box as tall as the whole result, so the
+/// scrollbar spans every row while the DOM holds a bounded few. A mounted row whose page is not read
+/// yet is a busy placeholder, and the pages the window lacks go to `onmissing`.
 ///
 /// Roving focus is window-aware: ↑/↓ to a row that is not mounted moves the window to it and the row
 /// takes focus as it mounts ([`ListItem`]'s `pending` check).
 #[component]
 fn ListRows(
-    visible: Memo<Vec<RowVm>>,
+    rows: ReadSignal<ListedRows>,
     label: String,
     selected: Signal<Option<String>>,
     onselect: Option<Callback<RowVm>>,
+    onmissing: Option<Callback<Vec<usize>>>,
 ) -> Element {
     let mut window = use_signal(ListWindow::default);
     let focused = use_signal(|| 0_usize);
     let nodes = use_signal(HashMap::<String, MountedEvent>::new);
-    let pending = use_signal(|| None::<String>);
-    let rows = visible.read();
-    let total = rows.len();
+    let pending = use_signal(|| None::<usize>);
+    let listed = rows.read();
+    let total = listed.total();
     let stop = focused().min(total.saturating_sub(1));
+    let mounted = window().rendered(total, stop);
+    // Re-run on every change to `rows`, not only when the missing set changes: a list read again from
+    // the top drops the pages still in flight, and the window may need the very same pages again.
+    // The caller's `onmissing` skips a page already being read.
+    use_effect(move || {
+        let missing = {
+            let listed = rows.read();
+            let total = listed.total();
+            let stop = focused().min(total.saturating_sub(1));
+            listed.missing_pages(&window().rendered(total, stop))
+        };
+        if let (false, Some(onmissing)) = (missing.is_empty(), onmissing) {
+            onmissing.call(missing);
+        }
+    });
     rsx! {
         div {
             class: "list-rows",
@@ -204,7 +241,7 @@ fn ListRows(
                 let next = ListWindow::at_scroll(
                     event.scroll_top(),
                     f64::from(event.scroll_height()),
-                    visible.peek().len(),
+                    rows.peek().total(),
                 );
                 if *window.peek() != next {
                     window.set(next);
@@ -215,19 +252,33 @@ fn ListRows(
                 role: "listbox",
                 aria_label: "{label}",
                 style: "height:calc({total} * var(--list-row-h))",
-                onkeydown: move |event| step_focus(&event, visible, focused, window, nodes, pending),
-                for index in window().rendered(total, stop) {
-                    ListItem {
-                        key: "{rows[index].id}",
-                        index,
-                        total,
-                        stop,
-                        focused,
-                        row: rows[index].clone(),
-                        selected,
-                        nodes,
-                        pending,
-                        onselect,
+                onkeydown: move |event| step_focus(&event, rows, focused, window, nodes, pending),
+                for index in mounted {
+                    if let Some(row) = listed.row(index) {
+                        ListItem {
+                            key: "{row.id}",
+                            index,
+                            total,
+                            stop,
+                            focused,
+                            row: row.clone(),
+                            selected,
+                            nodes,
+                            pending,
+                            onselect,
+                        }
+                    } else {
+                        div {
+                            key: "busy-{index}",
+                            class: "row",
+                            role: "option",
+                            aria_busy: "true",
+                            aria_selected: "false",
+                            tabindex: if index == stop { "0" } else { "-1" },
+                            style: "top:calc({index} * var(--list-row-h))",
+                            aria_posinset: index + 1,
+                            aria_setsize: total,
+                        }
                     }
                 }
             }
@@ -239,39 +290,38 @@ fn ListRows(
 /// it is mounted, else once it mounts.
 fn step_focus(
     event: &KeyboardEvent,
-    visible: Memo<Vec<RowVm>>,
+    rows: ReadSignal<ListedRows>,
     mut focused: Signal<usize>,
     mut window: Signal<ListWindow>,
     nodes: Signal<HashMap<String, MountedEvent>>,
-    mut pending: Signal<Option<String>>,
+    mut pending: Signal<Option<usize>>,
 ) {
-    let rows = visible.peek();
-    let current = focused.peek().min(rows.len().saturating_sub(1));
-    let Some(next) = next_vertical(&event.key(), current, rows.len()) else {
+    let listed = rows.peek();
+    let total = listed.total();
+    let current = focused.peek().min(total.saturating_sub(1));
+    let Some(next) = next_vertical(&event.key(), current, total) else {
         return;
     };
     event.prevent_default();
-    let Some(row) = rows.get(next) else {
-        return;
-    };
     focused.set(next);
     let revealed = window.peek().revealing(next);
     if *window.peek() != revealed {
         window.set(revealed);
     }
-    if let Some(node) = nodes.peek().get(&row.id).cloned() {
+    let node = listed.row(next).and_then(|row| nodes.peek().get(&row.id).cloned());
+    if let Some(node) = node {
         spawn(async move {
             let _ = node.set_focus(true).await;
         });
     } else {
-        pending.set(Some(row.id.clone()));
+        pending.set(Some(next));
     }
 }
 
 /// One row in a [`ListPane`]: a [`ListRow`] at its offset in the whole list, wired to selection and
 /// the roving-focus bookkeeping — its mounted node is kept under its row id while it is mounted, and
-/// it takes focus on mount when ↑/↓ was waiting for it. A click moves the tab stop to the row, so the
-/// row holding focus is always mounted, however far the window scrolls from it.
+/// it takes focus on mount when ↑/↓ was waiting for its index. A click moves the tab stop to the row,
+/// so the row holding focus is always mounted, however far the window scrolls from it.
 #[component]
 fn ListItem(
     index: usize,
@@ -281,7 +331,7 @@ fn ListItem(
     row: RowVm,
     selected: Signal<Option<String>>,
     nodes: Signal<HashMap<String, MountedEvent>>,
-    pending: Signal<Option<String>>,
+    pending: Signal<Option<usize>>,
     #[props(default)] onselect: Option<Callback<RowVm>>,
 ) -> Element {
     let id = row.id.clone();
@@ -310,7 +360,7 @@ fn ListItem(
             aria_setsize: total,
             onmounted: move |event: MountedEvent| {
                 nodes.write().insert(id.clone(), event.clone());
-                if pending.peek().as_deref() == Some(id.as_str()) {
+                if *pending.peek() == Some(index) {
                     pending.set(None);
                     spawn(async move {
                         let _ = event.set_focus(true).await;

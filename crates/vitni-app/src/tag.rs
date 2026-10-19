@@ -11,9 +11,10 @@ use vitni_core::ids::TagId;
 use vitni_core::provenance::EvidenceRef;
 use vitni_core::tag::TagView;
 use vitni_core::tag::command::{TagCommand, TagCommandEnvelope};
-use vitni_db::Store;
+use vitni_db::{ListPage, ListedKind, Store};
 
 use crate::error::AppError;
+use crate::list_query::{ListQuery, Selection, in_order, select};
 use crate::session::Session;
 use crate::tag_usage::{self, TagUsageGroup};
 use crate::use_case::{self, Provenance};
@@ -213,6 +214,22 @@ pub async fn list_tags(workspace: &Workspace) -> Result<Vec<TagSummary>, AppErro
         summaries.push(summarize(view, Vec::new(), usage_count));
     }
     Ok(summaries)
+}
+
+/// Every tag `query` lists, in its order (ADR 0052 §4): a vocabulary of tens with no `human_id`, so the
+/// query runs over all of it rather than a page.
+///
+/// # Errors
+///
+/// [`AppError::ListQuery`] for a query of another kind or one the catalogue cannot evaluate, or a
+/// store/read-model error.
+pub async fn list_tags_query(workspace: &Workspace, query: &ListQuery) -> Result<Vec<TagSummary>, AppError> {
+    let (selection, _) = select(workspace, query, ListedKind::Tag, ListPage::ALL).await?;
+    let tags = list_tags(workspace).await?;
+    let Selection::Ids(ids) = selection else {
+        return Ok(tags);
+    };
+    Ok(in_order(tags, &ids, |tag| Some(tag.id.clone())))
 }
 
 /// Executes one command through the store, stamping the operator `provenance` and backing

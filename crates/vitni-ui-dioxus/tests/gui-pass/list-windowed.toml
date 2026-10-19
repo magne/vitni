@@ -4,7 +4,8 @@
 # the roving tab stop — stays mounted, so ↓ must move the window back and focus the second row as it
 # mounts, Tab must still enter the list at its stop, and a clicked row must stay mounted as the stop.
 # SSR proves the bound on what mounts; only the live app shows scrolling move the window and focus land
-# on a row that was not mounted.
+# on a row that was not mounted. The Explorer reads its list a page at a time (#678), so a row scrolled
+# to past the first page (I0120) is present only once its page has been read.
 description = "A long list mounts a window of rows; ↓ and Tab still reach rows outside it (#590)"
 # Writing large.ged keeps the disk busy enough to starve the GUIs beside it.
 exclusive = true
@@ -57,6 +58,11 @@ label = "rail: People"
 do = "click"
 at = { role = "searchbox", within = "explorer" }
 label = "the Explorer filter"
+
+[[step]]
+do = "key"
+chord = "Tab"
+label = "Tab: the Filters button"
 
 [[step]]
 do = "key"
@@ -146,7 +152,7 @@ because = "scrolled far from the head, the window must have unmounted the second
 kind = "present"
 shot = "scrolled"
 element = { role = "option", text = "I0120", within = "explorer" }
-because = "scrolling must move the window to the rows in view"
+because = "scrolling must move the window to the rows in view, reading the page they are on"
 
 [[assert]]
 kind = "focus"
