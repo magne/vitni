@@ -108,8 +108,10 @@ pub(crate) trait ListedRecord: DeserializeOwned + Send + Sync + 'static {
 
 /// A closed enum value as its kebab-case variant name: `Female` → `female`, `VeryHigh` → `very-high`.
 /// Read from the serde form, so a unit variant and an adjacently tagged one (`{"type": "Female"}`) name
-/// the same; an escape variant names its tag (`custom`), not its free text.
-pub(crate) fn choice_key<T: Serialize>(value: &T) -> Option<String> {
+/// the same; an escape variant names its tag (`custom`), not its free text. `None` for a value that
+/// serializes as neither.
+#[must_use]
+pub fn choice_key<T: Serialize>(value: &T) -> Option<String> {
     let name = match serde_json::to_value(value).ok()? {
         serde_json::Value::String(name) => name,
         serde_json::Value::Object(object) => object.get("type")?.as_str()?.to_owned(),

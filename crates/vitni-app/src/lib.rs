@@ -325,7 +325,7 @@ pub use vitni_core::temporal::resolve_as_of;
 pub use vitni_core::text::{Attribute, ExternalId, Rect, Url};
 pub use vitni_db::{
     ColumnType, DbError, ListCell, ListColumn, ListCursor, ListPage, ListResult, ListRow, ListWindow, ListedKind,
-    SortDirection, SortKey, UnreadableEvent, choice_name,
+    SortDirection, SortKey, UnreadableEvent, choice_key,
 };
 pub use workspace::{
     BackupSettings, IdFormatLayers, LayerKind, LocaleOverrides, OperatorRecord, PluginPreferences, PreferenceLayers,

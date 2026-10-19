@@ -94,6 +94,10 @@ fn ExplorerList(category: Category) -> Element {
         ..ListQuery::new(kind)
     });
     let mut rows = use_signal(ListedRows::default);
+    let refused_rows = use_signal(ListedRows::default);
+    // The query `rows` answers: a later page is read for it, never for a newer query whose first page
+    // has not replaced `rows` yet, so one result never mixes rows from two queries.
+    let mut held = use_signal(|| None::<ListQuery>);
     // Bumped whenever the list is read again from the top, so a later page read for the result it
     // replaced is dropped rather than mixed in.
     let mut generation = use_signal(|| 0_u64);
@@ -103,25 +107,32 @@ fn ExplorerList(category: Category) -> Element {
         let services = first_services.clone();
         let query = query();
         let _ = nav.data_version.read();
-        async move { load_list_page(services, query, 0).await }
+        async move {
+            let page = load_list_page(services, query.clone(), 0).await;
+            (query, page)
+        }
     });
     use_effect(move || {
-        if let Some(Ok(page)) = &*first.read() {
+        if let Some((query, Ok(page))) = &*first.read() {
             let mut listed = ListedRows::default();
             listed.insert(page);
             *generation.write() += 1;
             requested.write().clear();
+            held.set(Some(query.clone()));
             rows.set(listed);
         }
     });
     let fetch = use_callback(move |pages: Vec<usize>| {
         let reading = *generation.peek();
+        let Some(query) = held.peek().clone() else {
+            return;
+        };
         for page in pages {
             if !requested.write().insert(page) {
                 continue;
             }
             let services = services.clone();
-            let query = query.peek().clone();
+            let query = query.clone();
             spawn(async move {
                 let loaded = load_list_page(services, query, page).await;
                 if *generation.peek() != reading {
@@ -137,37 +148,40 @@ fn ExplorerList(category: Category) -> Element {
     });
     use_record_step(nav, category, rows, selected, fetch);
     let narrowed = !search.read().is_empty() || !filters.read().is_empty();
-    let state = match &*first.read() {
-        None if *generation.read() == 0 => Err(loading),
-        Some(Err(message)) => Err(message.clone()),
-        None | Some(Ok(_)) => Ok(()),
+    // A query the store refuses keeps the toolbar, so the search or clause behind it can be changed.
+    let refused = match &*first.read() {
+        None if *generation.read() == 0 => return rsx! { p { class: "loading", "{loading}" } },
+        Some((_, Err(message))) => Some(message.clone()),
+        None | Some((_, Ok(_))) => None,
     };
-    match state {
-        Err(message) => rsx! {
-            div { class: "list-toolbar",
-                FiltersButton { count: filters.read().len(), editing }
-            }
-            FilterBar { kind, filters, editing }
-            p { class: "empty", "{message}" }
-        },
-        Ok(()) => rsx! {
-            ListPane {
-                rows,
-                search,
-                sort,
-                selected,
-                chrome: list_chrome.clone(),
-                narrowed,
-                onselect: move |row: RowVm| nav.open_record(RecordRef {
-                    category,
-                    human_id: row.id,
-                    label: row.title,
-                }),
-                onmissing: fetch,
-                tools: rsx! { FiltersButton { count: filters.read().len(), editing } },
-                bar: rsx! { FilterBar { kind, filters, editing } },
-            }
-        },
+    let (shown, chrome, narrowed) = match refused {
+        Some(message) => (
+            ReadSignal::from(refused_rows),
+            ListChrome {
+                empty: message,
+                ..list_chrome
+            },
+            false,
+        ),
+        None => (ReadSignal::from(rows), list_chrome, narrowed),
+    };
+    rsx! {
+        ListPane {
+            rows: shown,
+            search,
+            sort,
+            selected,
+            chrome,
+            narrowed,
+            onselect: move |row: RowVm| nav.open_record(RecordRef {
+                category,
+                human_id: row.id,
+                label: row.title,
+            }),
+            onmissing: fetch,
+            tools: rsx! { FiltersButton { count: filters.read().len(), editing } },
+            bar: rsx! { FilterBar { kind, filters, editing } },
+        }
     }
 }
 

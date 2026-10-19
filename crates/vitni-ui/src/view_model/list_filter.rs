@@ -12,12 +12,12 @@ use std::collections::BTreeMap;
 
 use vitni_app::{
     Calendar, ColumnType, DateParts, DnaProvider, DnaTestType, EventType, FilterOp, FilterValue, GenealogicalDate,
-    ListFilter, ListedKind, MatchStatus, NoteType, PlaceType, RepositoryType, Sex, choice_name, gregorian_date,
+    ListFilter, ListedKind, MatchStatus, NoteType, RepositoryType, Sex, choice_key, gregorian_date,
 };
 
 use crate::i18n::Localizer;
 use crate::presentation::ConfidenceLevel;
-use crate::view_model::parse_date_point;
+use crate::view_model::{NEW_PLACE_TYPES, parse_date_point};
 
 /// One catalogue column, labelled, as the editor's column select offers it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -242,7 +242,7 @@ pub fn choice_options(loc: &Localizer, kind: ListedKind, column: &str) -> Vec<Ch
             loc.sex_label(Some(sex))
         }),
         (ListedKind::Event, "type") => options(&EVENT_TYPES, |ty| loc.event_type_label(ty)),
-        (ListedKind::Place, "type") => options(&PLACE_TYPES, |ty| loc.place_type_label(ty)),
+        (ListedKind::Place, "type") => options(&NEW_PLACE_TYPES, |ty| loc.place_type_label(ty)),
         (ListedKind::Citation, "confidence") => {
             options(&ConfidenceLevel::all().map(vitni_app::Confidence::from), |confidence| {
                 loc.confidence_label((*confidence).into())
@@ -291,21 +291,19 @@ pub fn filter_chip_label(loc: &Localizer, kind: ListedKind, active: &ActiveFilte
     loc.filter_chip(&column, &op, &value)
 }
 
-/// `values` as options, keyed by their variant name.
-fn options<T: std::fmt::Debug>(values: &[T], label: impl Fn(&T) -> String) -> Vec<ChoiceOption> {
+/// `values` as options, keyed as the list table stores them ([`choice_key`]).
+fn options<T: serde::Serialize>(values: &[T], label: impl Fn(&T) -> String) -> Vec<ChoiceOption> {
     let mut options = Vec::with_capacity(values.len());
     for value in values {
+        let Some(key) = choice_key(value) else {
+            continue;
+        };
         options.push(ChoiceOption {
-            key: key(value),
+            key,
             label: label(value),
         });
     }
     options
-}
-
-/// A unit variant's choice key: its name in kebab case, as the list table stores it.
-fn key<T: std::fmt::Debug>(value: &T) -> String {
-    choice_name(&format!("{value:?}"))
 }
 
 const EVENT_TYPES: [EventType; 30] = [
@@ -339,18 +337,6 @@ const EVENT_TYPES: [EventType; 30] = [
     EventType::MarriageContract,
     EventType::MarriageLicense,
     EventType::MarriageSettlement,
-];
-
-const PLACE_TYPES: [PlaceType; 9] = [
-    PlaceType::Country,
-    PlaceType::County,
-    PlaceType::Municipality,
-    PlaceType::Parish,
-    PlaceType::City,
-    PlaceType::Town,
-    PlaceType::Village,
-    PlaceType::Farm,
-    PlaceType::Building,
 ];
 
 const REPOSITORY_TYPES: [RepositoryType; 7] = [

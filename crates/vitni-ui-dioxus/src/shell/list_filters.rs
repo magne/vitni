@@ -19,6 +19,7 @@ use vitni_ui::{
 
 use crate::app::AppCtx;
 use crate::components::{Checkbox, Chip, SelectChoice, SelectInput, TextInput, record_picker};
+use crate::i18n::Chrome;
 use crate::screens::use_existing_picker;
 use crate::services::{load_tags, resolve_list_filter};
 use crate::shell::{ChromeCtx, data_loc};
@@ -211,7 +212,7 @@ fn FilterEditor(
                     },
                 }
             }
-            {value_editor(kind, &current, draft)}
+            {value_editor(&chrome, kind, &current, draft)}
             if let Some(message) = message {
                 span { class: "field-error", role: "alert", "{message}" }
             }
@@ -242,11 +243,11 @@ fn FilterEditor(
 }
 
 /// The value editor `current`'s column and operator need: none for *is empty*.
-fn value_editor(kind: ListedKind, current: &FilterDraft, draft: Signal<FilterDraft>) -> Element {
+fn value_editor(chrome: &Chrome, kind: ListedKind, current: &FilterDraft, draft: Signal<FilterDraft>) -> Element {
     match current.value_type(kind) {
         None => rsx! {},
         Some(ColumnType::Text | ColumnType::Date | ColumnType::Number) => {
-            typed_values(current.op == FilterOp::Between, current, draft)
+            typed_values(chrome, current.op == FilterOp::Between, current, draft)
         }
         Some(ColumnType::Choice) => rsx! {
             ChoiceValues { kind, column: current.column.clone(), draft }
@@ -255,14 +256,13 @@ fn value_editor(kind: ListedKind, current: &FilterDraft, draft: Signal<FilterDra
             TagValues { draft }
         },
         Some(ColumnType::Record) => rsx! {
-            RecordValue { kind, column: current.column.clone(), draft }
+            RecordValue { key: "{current.column}", kind, column: current.column.clone(), draft }
         },
     }
 }
 
 /// One text field, or two for a *between* range.
-fn typed_values(between: bool, current: &FilterDraft, mut draft: Signal<FilterDraft>) -> Element {
-    let chrome = use_context::<ChromeCtx>().0;
+fn typed_values(chrome: &Chrome, between: bool, current: &FilterDraft, mut draft: Signal<FilterDraft>) -> Element {
     let first_label = if between {
         chrome.filter_from()
     } else {

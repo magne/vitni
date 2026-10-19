@@ -107,25 +107,37 @@ pub fn use_record_step(
     selected: Signal<Option<String>>,
     fetch: Callback<Vec<usize>>,
 ) {
-    let mut waiting = use_signal(|| None::<usize>);
+    // The index stepped to, and the total of the result it indexes.
+    let mut waiting = use_signal(|| None::<(usize, usize)>);
     use_effect(move || {
         let Some(delta) = *nav.pending_step.read() else {
             return;
         };
         nav.pending_step.set(None);
         let current = selected.peek().clone();
-        if let Some(target) = rows.peek().step(current.as_deref(), isize::from(delta)) {
-            waiting.set(Some(target));
+        let listed = rows.peek();
+        if let Some(target) = listed.step(current.as_deref(), isize::from(delta)) {
+            waiting.set(Some((target, listed.total())));
         }
     });
     use_effect(move || {
-        let Some(target) = *waiting.read() else {
+        let Some((target, total)) = *waiting.read() else {
             return;
         };
-        let Some(row) = rows.read().row(target).cloned() else {
+        let listed = rows.read();
+        // A result read again with another total no longer holds the row stepped to; nor does one
+        // too short for it, whose page would only ever come back empty.
+        if listed.total() != total || target >= listed.total() {
+            drop(listed);
+            waiting.set(None);
+            return;
+        }
+        let Some(row) = listed.row(target).cloned() else {
+            drop(listed);
             fetch.call(vec![target / PAGE_ROWS]);
             return;
         };
+        drop(listed);
         waiting.set(None);
         nav.open_record(RecordRef {
             category,

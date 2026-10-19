@@ -220,12 +220,20 @@ fn ListRows(
     let total = listed.total();
     let stop = focused().min(total.saturating_sub(1));
     let mounted = window().rendered(total, stop);
-    let missing = listed.missing_pages(&mounted);
-    use_effect(use_reactive!(|missing| {
+    // Re-run on every change to `rows`, not only when the missing set changes: a list read again from
+    // the top drops the pages still in flight, and the window may need the very same pages again.
+    // The caller's `onmissing` skips a page already being read.
+    use_effect(move || {
+        let missing = {
+            let listed = rows.read();
+            let total = listed.total();
+            let stop = focused().min(total.saturating_sub(1));
+            listed.missing_pages(&window().rendered(total, stop))
+        };
         if let (false, Some(onmissing)) = (missing.is_empty(), onmissing) {
             onmissing.call(missing);
         }
-    }));
+    });
     rsx! {
         div {
             class: "list-rows",
