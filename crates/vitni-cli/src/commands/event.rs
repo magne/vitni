@@ -3,7 +3,7 @@
 use clap::Subcommand;
 use uuid::Uuid;
 use vitni_app::{
-    AppError, DateParts, ListPage, MatchableKind, MediaRefInput, MutationMeta, NewEvent, Provenance, Session,
+    AppError, DateParts, ListedKind, MatchableKind, MediaRefInput, MutationMeta, NewEvent, Provenance, Session,
     Workspace, add_event_citation, assert_event_date, attach_event_media, attach_event_note, create_event, link_place,
     list_events_page, set_event_description, set_event_restrictions, set_event_type, show_event, tag_event,
 };
@@ -203,7 +203,7 @@ pub async fn run(
             restrict(workspace, session, &human_id, restrictions, localizer).await
         }
         EventCmd::Show { human_id } => show(workspace, &human_id, localizer).await,
-        EventCmd::List(window) => list(workspace, window.page(), localizer).await,
+        EventCmd::List(window) => list(workspace, &window, localizer).await,
     }
 }
 
@@ -239,10 +239,15 @@ async fn show(workspace: &Workspace, human_id: &str, localizer: &Localizer) -> R
 }
 
 /// Renders the `page` of event records, ordered by human id.
-async fn list(workspace: &Workspace, page: ListPage, localizer: &Localizer) -> Result<(), AppError> {
-    let events = list_events_page(workspace, page).await?;
+async fn list(workspace: &Workspace, window: &ListArgs, localizer: &Localizer) -> Result<(), AppError> {
+    let query = window.query(workspace, ListedKind::Event).await?;
+    let page = window.page();
+    let events = list_events_page(workspace, &query, page).await?.items;
     if events.is_empty() {
-        println!("{}", localizer.empty_page(page, localizer.event_list_empty()));
+        println!(
+            "{}",
+            localizer.empty_page(page, window.narrows(), localizer.event_list_empty())
+        );
         return Ok(());
     }
     for summary in &events {

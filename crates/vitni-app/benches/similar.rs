@@ -28,10 +28,11 @@ use tempfile::TempDir;
 use time::macros::datetime;
 use uuid::Uuid;
 use vitni_app::{
-    AppDefaults, CheckFinding, DatasetId, DateParts, EntityFields, EntityRef, ImportReview, LinkKind, ListPage,
-    MatchBand, MatchableKind, MutationMeta, NewImportRun, OperatorConfig, PendingRun, PersonNameParts, RecordGraph,
-    Session, StagedEntity, StagedEvent, StagedLink, StagedPerson, StagedPlace, Workspace, WorkspaceDefaults,
-    assert_event_date, evidence_health, find_similar, gregorian_date, list_persons_page, person_names, recent_activity,
+    AppDefaults, CheckFinding, DatasetId, DateParts, EntityFields, EntityRef, FilterOp, FilterValue, ImportReview,
+    LinkKind, ListFilter, ListPage, ListQuery, ListSort, ListWindow, ListedKind, MatchBand, MatchableKind,
+    MutationMeta, NewImportRun, OperatorConfig, PendingRun, PersonNameParts, RecordGraph, Session, SortDirection,
+    StagedEntity, StagedEvent, StagedLink, StagedPerson, StagedPlace, Workspace, WorkspaceDefaults, assert_event_date,
+    evidence_health, find_similar, gregorian_date, list_persons_page, person_names, query_list, recent_activity,
     run_checks, workspace_counts,
 };
 use vitni_core::date::{Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody};
@@ -696,17 +697,83 @@ fn bench_person_list(c: &mut Criterion, rt: &tokio::runtime::Runtime, dataset: &
     group.bench_with_input(BenchmarkId::new("last_page", dataset.persons), dataset, |b, _| {
         b.iter(|| rt.block_on(store.list_persons_page(last)).expect("page").len());
     });
+    let everyone = ListQuery::new(ListedKind::Person);
     group.bench_with_input(
         BenchmarkId::new("first_page_summaries", dataset.persons),
         dataset,
         |b, dataset| {
             b.iter(|| {
-                rt.block_on(list_persons_page(&dataset.workspace, first))
+                rt.block_on(list_persons_page(&dataset.workspace, &everyone, first))
                     .expect("summaries")
+                    .items
                     .len()
             });
         },
     );
+    group.finish();
+}
+
+/// A filtered, sorted person list query (ADR 0052 §4): its first page, a page halfway through its
+/// matches by offset, and the same page by keyset.
+fn bench_person_query(c: &mut Criterion, rt: &tokio::runtime::Runtime, dataset: &Dataset) {
+    let born_before = ListQuery {
+        filters: vec![ListFilter {
+            column: "birth".to_owned(),
+            op: FilterOp::Before,
+            value: FilterValue::Date(gregorian_date(DateParts {
+                year: 1900,
+                month: None,
+                day: None,
+            })),
+        }],
+        sort: Some(ListSort {
+            column: "birth".to_owned(),
+            direction: SortDirection::Descending,
+        }),
+        columns: vec!["name".to_owned(), "birth".to_owned()],
+        ..ListQuery::new(ListedKind::Person)
+    };
+    let window = |offset| ListWindow::Offset {
+        offset,
+        limit: Some(PAGE),
+    };
+    let matches = rt
+        .block_on(query_list(&dataset.workspace, &born_before, window(0)))
+        .expect("query")
+        .total;
+    let deep = u32::try_from(matches / 2).expect("matches fit u32");
+    let held = rt
+        .block_on(query_list(
+            &dataset.workspace,
+            &born_before,
+            window(deep.saturating_sub(1)),
+        ))
+        .expect("query")
+        .rows
+        .first()
+        .map(|row| row.cursor.clone())
+        .expect("a row in the middle of the matches");
+    let after = ListWindow::After {
+        cursor: held,
+        limit: Some(PAGE),
+    };
+    let query = |window: ListWindow| {
+        rt.block_on(query_list(&dataset.workspace, &born_before, window))
+            .expect("query")
+            .rows
+            .len()
+    };
+    let mut group = c.benchmark_group("person_query");
+    group.sample_size(10);
+    group.bench_with_input(BenchmarkId::new("first_page", dataset.persons), dataset, |b, _| {
+        b.iter(|| query(window(0)));
+    });
+    group.bench_with_input(BenchmarkId::new("deep_offset", dataset.persons), dataset, |b, _| {
+        b.iter(|| query(window(deep)));
+    });
+    group.bench_with_input(BenchmarkId::new("deep_keyset", dataset.persons), dataset, |b, _| {
+        b.iter(|| query(after.clone()));
+    });
     group.finish();
 }
 
@@ -715,6 +782,7 @@ fn benches(c: &mut Criterion) {
     for persons in SIZES {
         let dataset = rt.block_on(seed(persons));
         bench_person_list(c, &rt, &dataset);
+        bench_person_query(c, &rt, &dataset);
         bench_index_build(c, &rt, &dataset);
         bench_find_similar(c, &rt, &dataset);
         bench_edit_then_lookup(c, &rt, &dataset);

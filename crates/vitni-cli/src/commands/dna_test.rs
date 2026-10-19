@@ -3,7 +3,7 @@
 use clap::Subcommand;
 use uuid::Uuid;
 use vitni_app::{
-    AppError, ListPage, MutationMeta, NewDnaTest, Provenance, Session, Workspace, assert_dna_test_haplogroup,
+    AppError, ListedKind, MutationMeta, NewDnaTest, Provenance, Session, Workspace, assert_dna_test_haplogroup,
     attach_dna_test_note, create_dna_test, list_dna_tests_page, set_dna_test_genome_build, set_dna_test_kit_id,
     set_dna_test_provider, set_dna_test_restrictions, set_dna_test_type, show_dna_test, tag_dna_test,
 };
@@ -181,7 +181,7 @@ pub async fn run(
             restrict(workspace, session, &human_id, restrictions, localizer).await
         }
         DnaTestCmd::Show { human_id } => show(workspace, &human_id, localizer).await,
-        DnaTestCmd::List(window) => list(workspace, window.page(), localizer).await,
+        DnaTestCmd::List(window) => list(workspace, &window, localizer).await,
     }
 }
 
@@ -217,10 +217,15 @@ async fn show(workspace: &Workspace, human_id: &str, localizer: &Localizer) -> R
 }
 
 /// Renders the `page` of DNA test records, ordered by human id.
-async fn list(workspace: &Workspace, page: ListPage, localizer: &Localizer) -> Result<(), AppError> {
-    let tests = list_dna_tests_page(workspace, page).await?;
+async fn list(workspace: &Workspace, window: &ListArgs, localizer: &Localizer) -> Result<(), AppError> {
+    let query = window.query(workspace, ListedKind::DnaTest).await?;
+    let page = window.page();
+    let tests = list_dna_tests_page(workspace, &query, page).await?.items;
     if tests.is_empty() {
-        println!("{}", localizer.empty_page(page, localizer.dna_test_list_empty()));
+        println!(
+            "{}",
+            localizer.empty_page(page, window.narrows(), localizer.dna_test_list_empty())
+        );
         return Ok(());
     }
     for summary in &tests {

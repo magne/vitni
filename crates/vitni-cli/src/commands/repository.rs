@@ -3,7 +3,7 @@
 use clap::Subcommand;
 use uuid::Uuid;
 use vitni_app::{
-    Address, AppError, ListPage, MatchableKind, MutationMeta, NewRepository, Provenance, Session, Url, Workspace,
+    Address, AppError, ListedKind, MatchableKind, MutationMeta, NewRepository, Provenance, Session, Url, Workspace,
     add_repository_address, add_repository_url, attach_repository_note, create_repository, list_repositories_page,
     set_repository_name, set_repository_restrictions, set_repository_type, show_repository, tag_repository,
 };
@@ -198,7 +198,7 @@ pub async fn run(
             restrict(workspace, session, &human_id, restrictions, localizer).await
         }
         RepositoryCmd::Show { human_id } => show(workspace, &human_id, localizer).await,
-        RepositoryCmd::List(window) => list(workspace, window.page(), localizer).await,
+        RepositoryCmd::List(window) => list(workspace, &window, localizer).await,
     }
 }
 
@@ -234,10 +234,15 @@ async fn show(workspace: &Workspace, human_id: &str, localizer: &Localizer) -> R
 }
 
 /// Renders the `page` of repository records, ordered by human id.
-async fn list(workspace: &Workspace, page: ListPage, localizer: &Localizer) -> Result<(), AppError> {
-    let repositories = list_repositories_page(workspace, page).await?;
+async fn list(workspace: &Workspace, window: &ListArgs, localizer: &Localizer) -> Result<(), AppError> {
+    let query = window.query(workspace, ListedKind::Repository).await?;
+    let page = window.page();
+    let repositories = list_repositories_page(workspace, &query, page).await?.items;
     if repositories.is_empty() {
-        println!("{}", localizer.empty_page(page, localizer.repository_list_empty()));
+        println!(
+            "{}",
+            localizer.empty_page(page, window.narrows(), localizer.repository_list_empty())
+        );
         return Ok(());
     }
     for summary in &repositories {

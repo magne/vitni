@@ -16,9 +16,11 @@ use vitni_db::{ListPage, Store};
 use crate::citation::TagRef;
 use crate::dto::tag_refs;
 use crate::error::AppError;
+use crate::list_query::{ListQuery, ListedPage, Selection, in_order};
 use crate::session::Session;
 use crate::use_case::{self, MutationMeta, Provenance};
 use crate::workspace::Workspace;
+use vitni_db::ListedKind;
 
 /// One of a research note's subjects, resolved for display and navigation (ADR 0028 §2).
 ///
@@ -439,19 +441,37 @@ pub async fn show_research_note(
 ///
 /// A store/read-model error.
 pub async fn list_research_notes(workspace: &Workspace) -> Result<Vec<ResearchNoteSummary>, AppError> {
-    list_research_notes_page(workspace, ListPage::ALL).await
+    list_research_notes_selected(workspace, &Selection::ALL).await
 }
 
-/// One `page` of [`list_research_notes`].
+/// One `page` of the records `query` lists, in its order, with the total it matches (ADR 0052 §4): a
+/// merged record takes no slot, and a cluster root on the page reads with its members' data.
 ///
 /// # Errors
 ///
-/// A store/read-model error.
+/// [`AppError::ListQuery`] for a query of another kind or one the catalogue cannot evaluate, or a
+/// store/read-model error.
 pub async fn list_research_notes_page(
     workspace: &Workspace,
+    query: &ListQuery,
     page: ListPage,
+) -> Result<ListedPage<ResearchNoteSummary>, AppError> {
+    let (selection, total) = crate::list_query::select(workspace, query, ListedKind::ResearchNote, page).await?;
+    let items = list_research_notes_selected(workspace, &selection).await?;
+    Ok(ListedPage { items, total })
+}
+
+/// The summaries of the records `page` selects, in its order.
+async fn list_research_notes_selected(
+    workspace: &Workspace,
+    page: &Selection,
 ) -> Result<Vec<ResearchNoteSummary>, AppError> {
-    let views = workspace.store().list_research_notes_page(page).await?;
+    let views = match page {
+        Selection::Page(page) => workspace.store().list_research_notes_page(*page).await?,
+        Selection::Ids(ids) => in_order(workspace.store().research_notes_by_ids(ids).await?, ids, |view| {
+            view.research_note_id().map(|id| id.to_string())
+        }),
+    };
     summaries(workspace.store(), &views).await
 }
 

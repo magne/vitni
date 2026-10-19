@@ -2,7 +2,7 @@
 
 use clap::Subcommand;
 use vitni_app::{
-    AppError, ChildParentRelationship, ListPage, MatchableKind, MutationMeta, Provenance, Session, Workspace,
+    AppError, ChildParentRelationship, ListedKind, MatchableKind, MutationMeta, Provenance, Session, Workspace,
     add_child, add_partner, create_family, list_families_page, remove_child, remove_partner, set_family_restrictions,
     show_family,
 };
@@ -124,7 +124,7 @@ pub async fn run(
             restrict(workspace, session, &human_id, restrictions, localizer).await
         }
         FamilyCmd::Show { human_id } => show(workspace, &human_id, localizer).await,
-        FamilyCmd::List(window) => list(workspace, window.page(), localizer).await,
+        FamilyCmd::List(window) => list(workspace, &window, localizer).await,
     }
 }
 
@@ -160,10 +160,15 @@ async fn show(workspace: &Workspace, human_id: &str, localizer: &Localizer) -> R
 }
 
 /// Renders the `page` of family records, ordered by human id.
-async fn list(workspace: &Workspace, page: ListPage, localizer: &Localizer) -> Result<(), AppError> {
-    let families = list_families_page(workspace, page).await?;
+async fn list(workspace: &Workspace, window: &ListArgs, localizer: &Localizer) -> Result<(), AppError> {
+    let query = window.query(workspace, ListedKind::Family).await?;
+    let page = window.page();
+    let families = list_families_page(workspace, &query, page).await?.items;
     if families.is_empty() {
-        println!("{}", localizer.empty_page(page, localizer.family_list_empty()));
+        println!(
+            "{}",
+            localizer.empty_page(page, window.narrows(), localizer.family_list_empty())
+        );
         return Ok(());
     }
     for summary in &families {

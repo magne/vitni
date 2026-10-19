@@ -3,7 +3,7 @@
 use clap::Subcommand;
 use uuid::Uuid;
 use vitni_app::{
-    AppError, ListPage, MatchableKind, MutationMeta, NewNote, Provenance, Session, Workspace, create_note,
+    AppError, ListedKind, MatchableKind, MutationMeta, NewNote, Provenance, Session, Workspace, create_note,
     list_notes_page, set_note_restrictions, set_note_text, set_note_type, show_note, tag_note,
 };
 
@@ -131,7 +131,7 @@ pub async fn run(
             restrict(workspace, session, &human_id, restrictions, localizer).await
         }
         NoteCmd::Show { human_id } => show(workspace, &human_id, localizer).await,
-        NoteCmd::List(window) => list(workspace, window.page(), localizer).await,
+        NoteCmd::List(window) => list(workspace, &window, localizer).await,
     }
 }
 
@@ -167,10 +167,15 @@ async fn show(workspace: &Workspace, human_id: &str, localizer: &Localizer) -> R
 }
 
 /// Renders the `page` of note records, ordered by human id.
-async fn list(workspace: &Workspace, page: ListPage, localizer: &Localizer) -> Result<(), AppError> {
-    let notes = list_notes_page(workspace, page).await?;
+async fn list(workspace: &Workspace, window: &ListArgs, localizer: &Localizer) -> Result<(), AppError> {
+    let query = window.query(workspace, ListedKind::Note).await?;
+    let page = window.page();
+    let notes = list_notes_page(workspace, &query, page).await?.items;
     if notes.is_empty() {
-        println!("{}", localizer.empty_page(page, localizer.note_list_empty()));
+        println!(
+            "{}",
+            localizer.empty_page(page, window.narrows(), localizer.note_list_empty())
+        );
         return Ok(());
     }
     for summary in &notes {

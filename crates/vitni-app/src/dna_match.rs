@@ -21,9 +21,11 @@ use crate::citation::TagRef;
 use crate::dna_match_usage::DnaMatchUsage;
 use crate::dto::{AggRef, AttachedRef, CitingRecordRef, tag_refs};
 use crate::error::AppError;
+use crate::list_query::{ListQuery, ListedPage, Selection, in_order};
 use crate::session::Session;
 use crate::use_case::{self, MutationMeta, Provenance, resolve_note_id};
 use crate::workspace::Workspace;
+use vitni_db::ListedKind;
 
 /// A frontend-neutral summary of a DNA match (the DTO the CLI/UI renders), carrying its stable id and
 /// the joined views the detail tabs render (the cross-aggregate-joins dependency note).
@@ -357,16 +359,34 @@ pub async fn show_dna_match(workspace: &Workspace, human_id: &str) -> Result<Opt
 ///
 /// A store/read-model error.
 pub async fn list_dna_matches(workspace: &Workspace) -> Result<Vec<DnaMatchSummary>, AppError> {
-    list_dna_matches_page(workspace, ListPage::ALL).await
+    list_dna_matches_selected(workspace, &Selection::ALL).await
 }
 
-/// One `page` of [`list_dna_matches`].
+/// One `page` of the records `query` lists, in its order, with the total it matches (ADR 0052 §4): a
+/// merged record takes no slot, and a cluster root on the page reads with its members' data.
 ///
 /// # Errors
 ///
-/// A store/read-model error.
-pub async fn list_dna_matches_page(workspace: &Workspace, page: ListPage) -> Result<Vec<DnaMatchSummary>, AppError> {
-    let views = workspace.store().list_dna_matches_page(page).await?;
+/// [`AppError::ListQuery`] for a query of another kind or one the catalogue cannot evaluate, or a
+/// store/read-model error.
+pub async fn list_dna_matches_page(
+    workspace: &Workspace,
+    query: &ListQuery,
+    page: ListPage,
+) -> Result<ListedPage<DnaMatchSummary>, AppError> {
+    let (selection, total) = crate::list_query::select(workspace, query, ListedKind::DnaMatch, page).await?;
+    let items = list_dna_matches_selected(workspace, &selection).await?;
+    Ok(ListedPage { items, total })
+}
+
+/// The summaries of the records `page` selects, in its order.
+async fn list_dna_matches_selected(workspace: &Workspace, page: &Selection) -> Result<Vec<DnaMatchSummary>, AppError> {
+    let views = match page {
+        Selection::Page(page) => workspace.store().list_dna_matches_page(*page).await?,
+        Selection::Ids(ids) => in_order(workspace.store().dna_matches_by_ids(ids).await?, ids, |view| {
+            view.dna_match_id().map(|id| id.to_string())
+        }),
+    };
     let lookups = DnaMatchLookups::load(workspace.store(), &views.iter().collect::<Vec<_>>()).await?;
     Ok(views.iter().map(|view| summarize(view, &lookups)).collect())
 }

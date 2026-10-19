@@ -1525,3 +1525,135 @@ fn an_attach_verb_naming_an_unknown_note_or_media_fails() {
         .failure()
         .stderr(predicate::str::contains("no media with human_id \"O9999\""));
 }
+
+/// The record ids a `<kind> list` prints, in order.
+fn listed_ids(dir: &Path, kind: &str, args: &[&str]) -> Vec<String> {
+    let assert = vitni(dir).args([kind, "list"]).args(args).assert().success();
+    stdout(&assert)
+        .lines()
+        .filter_map(|line| line.split_whitespace().next())
+        .filter(|id| id.chars().next().is_some_and(|first| first.is_ascii_uppercase()))
+        .map(str::to_owned)
+        .collect()
+}
+
+#[test]
+fn list_narrows_and_orders_by_search_filter_and_sort() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    for (given, surname, born) in [
+        ("Ola", "Olsen", "1790"),
+        ("Kari", "Olsen", "1810-05"),
+        ("Per", "Hansen", "1805"),
+    ] {
+        vitni(dir.path())
+            .args([
+                "person",
+                "create",
+                "--given",
+                given,
+                "--surname",
+                surname,
+                "--born",
+                born,
+            ])
+            .assert()
+            .success();
+    }
+    let persons = |args: &[&str]| listed_ids(dir.path(), "person", args);
+
+    assert_eq!(
+        persons(&["--filter", "surname:contains:OLS", "--sort", "birth:desc"]),
+        ["I0002", "I0001"]
+    );
+    assert_eq!(persons(&["--search", "per"]), ["I0003"]);
+    assert_eq!(persons(&["--filter", "birth:before:1800"]), ["I0001"]);
+    assert_eq!(
+        persons(&["--filter", "birth:between:1800..1809", "--sort", "birth"]),
+        ["I0003"]
+    );
+    assert_eq!(
+        persons(&[
+            "--filter",
+            "surname:is:olsen",
+            "--filter",
+            "birth:after:1800",
+            "--limit",
+            "1"
+        ]),
+        ["I0002"],
+        "filters combine with AND"
+    );
+    vitni(dir.path())
+        .args(["person", "list", "--filter", "surname:is:nobody"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Nothing matches the query."));
+}
+
+#[test]
+fn a_list_filter_the_catalogue_cannot_evaluate_fails_naming_the_clause() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    for (filter, named) in [
+        ("nickname:is:x", "nickname"),
+        ("birth:contains:17", "contains"),
+        ("birth:near:1800", "near"),
+        ("birth:before:soon", "before"),
+        ("sex:is-any-of:femal", "femal"),
+    ] {
+        vitni(dir.path())
+            .args(["person", "list", "--filter", filter])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains(named));
+    }
+    vitni(dir.path())
+        .args(["person", "list", "--sort", "tags"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("tags"));
+    vitni(dir.path())
+        .args(["person", "list", "--filter", "surname"])
+        .assert()
+        .failure();
+}
+
+#[test]
+fn a_list_filter_takes_a_tag_by_name_and_a_record_by_its_human_id() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    let created = vitni(dir.path())
+        .args(["tag", "create", "--name", "To verify"])
+        .assert()
+        .success();
+    let tag = stdout(&created).split_whitespace().last().unwrap().to_owned();
+    vitni(dir.path())
+        .args(["place", "create", "--name", "Fana"])
+        .assert()
+        .success();
+    for _ in 0..2 {
+        vitni(dir.path())
+            .args(["event", "create", "--type", "birth"])
+            .assert()
+            .success();
+    }
+    vitni(dir.path())
+        .args(["event", "link-place", "E0001", "P0001"])
+        .assert()
+        .success();
+    vitni(dir.path())
+        .args(["event", "tag", "E0002", "--tag", &tag])
+        .assert()
+        .success();
+    let events = |args: &[&str]| listed_ids(dir.path(), "event", args);
+
+    assert_eq!(events(&["--filter", "tags:has-any-of:to verify"]), ["E0002"]);
+    assert_eq!(events(&["--filter", "tags:has-none-of:To verify"]), ["E0001"]);
+    assert_eq!(events(&["--filter", "place:is:P0001"]), ["E0001"]);
+    vitni(dir.path())
+        .args(["event", "list", "--filter", "place:is:P0999"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("P0999"));
+}

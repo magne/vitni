@@ -17,6 +17,7 @@ mod sql;
 #[cfg(feature = "sqlite")]
 pub(crate) mod sqlite;
 
+use serde::{Deserialize, Serialize};
 use vitni_core::date::GenealogicalDate;
 use vitni_core::ids::TagId;
 use vitni_core::matching::MatchableKind;
@@ -26,7 +27,8 @@ use crate::store::DbError;
 pub(crate) use rows::ListedRecord;
 
 /// A kind of record a list shows.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum ListedKind {
     /// Persons.
     Person,
@@ -209,6 +211,36 @@ impl ListedKind {
         }
     }
 
+    /// The kind's title column, the one every row shows: its catalogue's first.
+    #[must_use]
+    pub const fn title_column(self) -> ListColumn {
+        match self.columns() {
+            [title, ..] => *title,
+            // Every catalogue above names a first column; a test holds each to it.
+            [] => TAGS,
+        }
+    }
+
+    /// The kind's name as a query and the CLI spell it (`person`, `dna-test`).
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Person => "person",
+            Self::Family => "family",
+            Self::Event => "event",
+            Self::Place => "place",
+            Self::Source => "source",
+            Self::Citation => "citation",
+            Self::Repository => "repository",
+            Self::Media => "media",
+            Self::Note => "note",
+            Self::ResearchNote => "research-note",
+            Self::DnaTest => "dna-test",
+            Self::DnaMatch => "dna-match",
+            Self::Tag => "tag",
+        }
+    }
+
     /// The column named `id`, if the kind has one.
     #[must_use]
     pub fn column(self, id: &str) -> Option<ListColumn> {
@@ -313,7 +345,8 @@ pub struct ListPredicate {
 }
 
 /// A sort direction.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum SortDirection {
     /// Smallest first.
     Ascending,
@@ -421,4 +454,22 @@ fn tag_ids(joined: Option<&str>) -> Result<Vec<TagId>, DbError> {
     }
     tags.sort_by_key(TagId::as_uuid);
     Ok(tags)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ColumnType, ListedKind};
+
+    #[test]
+    fn every_kind_has_a_text_or_record_title_and_unique_column_ids() {
+        for kind in ListedKind::ALL {
+            let title = kind.title_column();
+            assert_eq!(kind.columns().first(), Some(&title), "{kind:?}");
+            assert_ne!(title.ty, ColumnType::Tags, "{kind:?}");
+            let mut ids: Vec<&str> = kind.columns().iter().map(|column| column.id).collect();
+            ids.sort_unstable();
+            ids.dedup();
+            assert_eq!(ids.len(), kind.columns().len(), "{kind:?}");
+        }
+    }
 }

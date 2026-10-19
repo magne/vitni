@@ -27,9 +27,11 @@ use crate::dto::{AggRef, AttachedRef, CitationRef, MediaLookup, MediaRefSummary}
 use crate::error::AppError;
 use crate::event::EventSummary;
 use crate::identity::{self, EventClusters, FamilyClusters, IdentityDecision, PairDecision, PersonClusters};
+use crate::list_query::{ListQuery, ListedPage, Selection};
 use crate::session::Session;
 use crate::use_case::{self, MediaRefInput, MutationMeta, Provenance, resolve_media_id, resolve_note_id};
 use crate::workspace::Workspace;
+use vitni_db::ListedKind;
 
 /// A family partner, joined to the person projection: their name + lifespan for display, the stable
 /// ids for navigation, and the assertion's surety + source count (the evidence-first cue).
@@ -899,15 +901,28 @@ pub async fn show_family(workspace: &Workspace, human_id: &str) -> Result<Option
 ///
 /// A store/read-model error.
 pub async fn list_families(workspace: &Workspace) -> Result<Vec<FamilySummary>, AppError> {
-    list_families_page(workspace, ListPage::ALL).await
+    list_families_selected(workspace, &Selection::ALL).await
 }
 
-/// One `page` of [`list_families`]: a window over the records it lists, a merged record taking no slot.
+/// One `page` of the records `query` lists, in its order, with the total it matches (ADR 0052 §4): a
+/// merged record takes no slot, and a cluster root on the page reads with its members' data.
 ///
 /// # Errors
 ///
-/// A store/read-model error.
-pub async fn list_families_page(workspace: &Workspace, page: ListPage) -> Result<Vec<FamilySummary>, AppError> {
+/// [`AppError::ListQuery`] for a query of another kind or one the catalogue cannot evaluate, or a
+/// store/read-model error.
+pub async fn list_families_page(
+    workspace: &Workspace,
+    query: &ListQuery,
+    page: ListPage,
+) -> Result<ListedPage<FamilySummary>, AppError> {
+    let (selection, total) = crate::list_query::select(workspace, query, ListedKind::Family, page).await?;
+    let items = list_families_selected(workspace, &selection).await?;
+    Ok(ListedPage { items, total })
+}
+
+/// The summaries of the records `page` selects, in its order.
+async fn list_families_selected(workspace: &Workspace, page: &Selection) -> Result<Vec<FamilySummary>, AppError> {
     let store = workspace.store();
     let (clusters, views) = crate::identity::listed_page::<FamilyView>(store, page).await?;
     let lookups = FamilyLookups::load(store, &views.iter().collect::<Vec<_>>()).await?;

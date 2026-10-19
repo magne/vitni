@@ -13,13 +13,13 @@ use std::path::Path;
 use uuid::Uuid;
 use vitni_app::backup::current_format_version;
 use vitni_app::{
-    ListPage, OperatorConfig, RestoreRequest, Workspace, WorkspaceDefaults, list_citations, list_citations_page,
-    list_dna_matches, list_dna_matches_page, list_dna_tests, list_dna_tests_page, list_events, list_events_page,
-    list_families, list_families_page, list_media, list_media_page, list_notes, list_notes_page, list_persons,
-    list_persons_page, list_places, list_places_page, list_repositories, list_repositories_page, list_research_notes,
-    list_research_notes_page, list_sources, list_sources_page, restore_backup, show_citation, show_dna_match,
-    show_dna_test, show_event, show_family, show_media, show_note, show_person, show_place, show_repository,
-    show_research_note, show_source,
+    ListPage, ListQuery, ListedKind, OperatorConfig, RestoreRequest, Workspace, WorkspaceDefaults, list_citations,
+    list_citations_page, list_dna_matches, list_dna_matches_page, list_dna_tests, list_dna_tests_page, list_events,
+    list_events_page, list_families, list_families_page, list_media, list_media_page, list_notes, list_notes_page,
+    list_persons, list_persons_page, list_places, list_places_page, list_repositories, list_repositories_page,
+    list_research_notes, list_research_notes_page, list_sources, list_sources_page, restore_backup, show_citation,
+    show_dna_match, show_dna_test, show_event, show_family, show_media, show_note, show_person, show_place,
+    show_repository, show_research_note, show_source,
 };
 use vitni_core::ids::AgentId;
 
@@ -79,7 +79,7 @@ fn apply<T>(summary: &mut T, clear: impl FnOnce(&mut T)) {
 /// Asserts that every listed summary reads as `show_*` with `clear` applied, that `clear` leaves a listed
 /// summary unchanged (its reverse-usage fields are already empty), and that pages tile the list.
 macro_rules! check_kind {
-    ($ws:expr, $list:ident, $page:ident, $show:ident, $clear:expr) => {{
+    ($ws:expr, $kind:ident, $list:ident, $page:ident, $show:ident, $clear:expr) => {{
         let ws = $ws;
         let listed = $list(ws).await.expect(stringify!($list));
         assert!(
@@ -122,6 +122,7 @@ macro_rules! check_kind {
         for offset in (0..).step_by(PAGE as usize) {
             let page = $page(
                 ws,
+                &ListQuery::new(ListedKind::$kind),
                 ListPage {
                     offset,
                     limit: Some(PAGE),
@@ -129,10 +130,16 @@ macro_rules! check_kind {
             )
             .await
             .expect(stringify!($page));
-            if page.is_empty() {
+            assert_eq!(
+                page.total,
+                listed.len() as u64,
+                "{} counts the whole list",
+                stringify!($page)
+            );
+            if page.items.is_empty() {
                 break;
             }
-            tiled.extend(page);
+            tiled.extend(page.items);
         }
         assert_eq!(tiled, listed, "the pages of {} tile the list", stringify!($list));
     }};
@@ -142,10 +149,10 @@ macro_rules! check_kind {
 async fn list_summaries_read_as_shown_without_reverse_usage() {
     let (ws, _home) = fixture().await;
     let ws = &ws;
-    check_kind!(ws, list_persons, list_persons_page, show_person, |_| {});
-    check_kind!(ws, list_families, list_families_page, show_family, |_| {});
-    check_kind!(ws, list_events, list_events_page, show_event, |_| {});
-    check_kind!(ws, list_places, list_places_page, show_place, |s| {
+    check_kind!(ws, Person, list_persons, list_persons_page, show_person, |_| {});
+    check_kind!(ws, Family, list_families, list_families_page, show_family, |_| {});
+    check_kind!(ws, Event, list_events, list_events_page, show_event, |_| {});
+    check_kind!(ws, Place, list_places, list_places_page, show_place, |s| {
         for row in s.predecessors.iter().chain(&s.successors) {
             s.claim_owners.remove(&row.assertion_id);
         }
@@ -153,24 +160,41 @@ async fn list_summaries_read_as_shown_without_reverse_usage() {
         s.successors.clear();
         s.events.clear();
     });
-    check_kind!(ws, list_sources, list_sources_page, show_source, |s| {
+    check_kind!(ws, Source, list_sources, list_sources_page, show_source, |s| {
         for citation in &mut s.citations {
             citation.backers.clear();
         }
         s.reliability.record_count = 0;
     });
-    check_kind!(ws, list_citations, list_citations_page, show_citation, |_| {});
-    check_kind!(ws, list_repositories, list_repositories_page, show_repository, |_| {});
-    check_kind!(ws, list_media, list_media_page, show_media, |s| s.used_by.clear());
-    check_kind!(ws, list_notes, list_notes_page, show_note, |s| s.references.clear());
-    check_kind!(ws, list_dna_tests, list_dna_tests_page, show_dna_test, |s| s
-        .matches
+    check_kind!(ws, Citation, list_citations, list_citations_page, show_citation, |_| {});
+    check_kind!(
+        ws,
+        Repository,
+        list_repositories,
+        list_repositories_page,
+        show_repository,
+        |_| {}
+    );
+    check_kind!(ws, Media, list_media, list_media_page, show_media, |s| s
+        .used_by
         .clear());
-    check_kind!(ws, list_dna_matches, list_dna_matches_page, show_dna_match, |s| s
-        .cited_by
+    check_kind!(ws, Note, list_notes, list_notes_page, show_note, |s| s
+        .references
+        .clear());
+    check_kind!(ws, DnaTest, list_dna_tests, list_dna_tests_page, show_dna_test, |s| s
+        .matches
         .clear());
     check_kind!(
         ws,
+        DnaMatch,
+        list_dna_matches,
+        list_dna_matches_page,
+        show_dna_match,
+        |s| s.cited_by.clear()
+    );
+    check_kind!(
+        ws,
+        ResearchNote,
         list_research_notes,
         list_research_notes_page,
         show_research_note,

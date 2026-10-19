@@ -29,10 +29,12 @@ use crate::dto::{AggRef, AttachedRef, CitationRef, UsingRecordRef, citation_refs
 use crate::error::AppError;
 use crate::event::{DateParts, gregorian_date};
 use crate::identity::{self, IdentityDecision, PairDecision};
+use crate::list_query::{ListQuery, ListedPage, Selection};
 use crate::media_usage::MediaUsage;
 use crate::session::Session;
 use crate::use_case::{self, MutationMeta, Provenance, resolve_media_id, resolve_note_id};
 use crate::workspace::Workspace;
+use vitni_db::ListedKind;
 
 /// A frontend-neutral summary of a media object (the DTO the CLI renders), carrying its stable id and
 /// the joined views the detail tabs render (the cross-aggregate-joins dependency note).
@@ -566,15 +568,28 @@ pub async fn show_media(workspace: &Workspace, human_id: &str) -> Result<Option<
 ///
 /// A store/read-model error.
 pub async fn list_media(workspace: &Workspace) -> Result<Vec<MediaSummary>, AppError> {
-    list_media_page(workspace, ListPage::ALL).await
+    list_media_selected(workspace, &Selection::ALL).await
 }
 
-/// One `page` of [`list_media`]: a window over the records it lists, a merged record taking no slot.
+/// One `page` of the records `query` lists, in its order, with the total it matches (ADR 0052 §4): a
+/// merged record takes no slot, and a cluster root on the page reads with its members' data.
 ///
 /// # Errors
 ///
-/// A store/read-model error.
-pub async fn list_media_page(workspace: &Workspace, page: ListPage) -> Result<Vec<MediaSummary>, AppError> {
+/// [`AppError::ListQuery`] for a query of another kind or one the catalogue cannot evaluate, or a
+/// store/read-model error.
+pub async fn list_media_page(
+    workspace: &Workspace,
+    query: &ListQuery,
+    page: ListPage,
+) -> Result<ListedPage<MediaSummary>, AppError> {
+    let (selection, total) = crate::list_query::select(workspace, query, ListedKind::Media, page).await?;
+    let items = list_media_selected(workspace, &selection).await?;
+    Ok(ListedPage { items, total })
+}
+
+/// The summaries of the records `page` selects, in its order.
+async fn list_media_selected(workspace: &Workspace, page: &Selection) -> Result<Vec<MediaSummary>, AppError> {
     let store = workspace.store();
     let (clusters, views) = identity::listed_page::<MediaView>(store, page).await?;
     let lookups = MediaLookups::load(store, &views.iter().collect::<Vec<_>>()).await?;

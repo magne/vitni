@@ -23,9 +23,11 @@ use crate::citation::TagRef;
 use crate::dto::{AggRef, AttachedRef, SourceLinkRef, tag_refs};
 use crate::error::AppError;
 use crate::identity::{self, CitationClusters, IdentityDecision, PairDecision, RepositoryClusters};
+use crate::list_query::{ListQuery, ListedPage, Selection};
 use crate::session::Session;
 use crate::use_case::{self, MutationMeta, Provenance, resolve_note_id};
 use crate::workspace::Workspace;
+use vitni_db::ListedKind;
 
 /// An address recorded on a repository, with the `AssertionId` that introduced it — the target a
 /// per-card Edit supersedes and a Retract retracts (ADR 0004 §2).
@@ -487,15 +489,31 @@ pub async fn show_repository(workspace: &Workspace, human_id: &str) -> Result<Op
 ///
 /// A store/read-model error.
 pub async fn list_repositories(workspace: &Workspace) -> Result<Vec<RepositorySummary>, AppError> {
-    list_repositories_page(workspace, ListPage::ALL).await
+    list_repositories_selected(workspace, &Selection::ALL).await
 }
 
-/// One `page` of [`list_repositories`]: a window over the records it lists, a merged record taking no slot.
+/// One `page` of the records `query` lists, in its order, with the total it matches (ADR 0052 §4): a
+/// merged record takes no slot, and a cluster root on the page reads with its members' data.
 ///
 /// # Errors
 ///
-/// A store/read-model error.
-pub async fn list_repositories_page(workspace: &Workspace, page: ListPage) -> Result<Vec<RepositorySummary>, AppError> {
+/// [`AppError::ListQuery`] for a query of another kind or one the catalogue cannot evaluate, or a
+/// store/read-model error.
+pub async fn list_repositories_page(
+    workspace: &Workspace,
+    query: &ListQuery,
+    page: ListPage,
+) -> Result<ListedPage<RepositorySummary>, AppError> {
+    let (selection, total) = crate::list_query::select(workspace, query, ListedKind::Repository, page).await?;
+    let items = list_repositories_selected(workspace, &selection).await?;
+    Ok(ListedPage { items, total })
+}
+
+/// The summaries of the records `page` selects, in its order.
+async fn list_repositories_selected(
+    workspace: &Workspace,
+    page: &Selection,
+) -> Result<Vec<RepositorySummary>, AppError> {
     let store = workspace.store();
     let (clusters, views) = identity::listed_page::<RepositoryView>(store, page).await?;
     let lookups = RepositoryLookups::load(store, &views.iter().collect::<Vec<_>>()).await?;

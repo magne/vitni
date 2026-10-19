@@ -3,7 +3,7 @@
 use clap::Subcommand;
 use uuid::Uuid;
 use vitni_app::{
-    AppError, Centimorgans, DnaSegment, ListPage, MutationMeta, NewDnaMatch, PercentShared, Provenance, Session,
+    AppError, Centimorgans, DnaSegment, ListedKind, MutationMeta, NewDnaMatch, PercentShared, Provenance, Session,
     SharedAncestor, Workspace, add_dna_match_segment, assert_dna_match_shared_ancestor, attach_dna_match_note,
     list_dna_matches_page, observe_dna_match, set_dna_match_restrictions, set_dna_match_status, show_dna_match,
     tag_dna_match,
@@ -230,7 +230,7 @@ pub async fn run(
             restrict(workspace, session, &human_id, restrictions, localizer).await
         }
         DnaMatchCmd::Show { human_id } => show(workspace, &human_id, localizer).await,
-        DnaMatchCmd::List(window) => list(workspace, window.page(), localizer).await,
+        DnaMatchCmd::List(window) => list(workspace, &window, localizer).await,
     }
 }
 
@@ -266,10 +266,15 @@ async fn show(workspace: &Workspace, human_id: &str, localizer: &Localizer) -> R
 }
 
 /// Renders the `page` of DNA match records, ordered by human id.
-async fn list(workspace: &Workspace, page: ListPage, localizer: &Localizer) -> Result<(), AppError> {
-    let matches = list_dna_matches_page(workspace, page).await?;
+async fn list(workspace: &Workspace, window: &ListArgs, localizer: &Localizer) -> Result<(), AppError> {
+    let query = window.query(workspace, ListedKind::DnaMatch).await?;
+    let page = window.page();
+    let matches = list_dna_matches_page(workspace, &query, page).await?.items;
     if matches.is_empty() {
-        println!("{}", localizer.empty_page(page, localizer.dna_match_list_empty()));
+        println!(
+            "{}",
+            localizer.empty_page(page, window.narrows(), localizer.dna_match_list_empty())
+        );
         return Ok(());
     }
     for summary in &matches {

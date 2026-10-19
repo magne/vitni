@@ -792,6 +792,7 @@ err-config = konfigurasjonsfeil: { $detail }
 err-workspace = arbeidsområdefeil: { $detail }
 err-not-found = { $id } finnes ikke
 err-domain = ugyldig operasjon
+err-list-query = dette listesøket kan ikke kjøres: { $detail }
 err-plugin = programtilleggsfeil: { $detail }
 err-db-unsupported = ikke støttet: { $detail }
 err-db-backend = databasefeil: { $detail }

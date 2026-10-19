@@ -96,6 +96,8 @@ macro_rules! for_each_db_by_ids_aggregate {
             (note, notes_by_ids, NOTE_VIEW_TABLE, vitni_core::note::NoteView),
             (tag, tags_by_ids, TAG_VIEW_TABLE, vitni_core::tag::TagView),
             (dna_test, dna_tests_by_ids, DNA_TEST_VIEW_TABLE, vitni_core::dna_test::DnaTestView),
+            (dna_match, dna_matches_by_ids, DNA_MATCH_VIEW_TABLE, vitni_core::dna_match::DnaMatchView),
+            (research_note, research_notes_by_ids, RESEARCH_NOTE_VIEW_TABLE, vitni_core::research_note::ResearchNoteView),
         }
     };
 }

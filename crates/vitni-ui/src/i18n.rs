@@ -2929,6 +2929,7 @@ impl Localizer {
             AppError::Backup(backup) => self.backup_error(backup),
             AppError::Dataset(dataset) => self.dataset_error(dataset),
             AppError::MatchData(data) => self.match_data_error(data),
+            AppError::ListQuery(query) => fl!(self.loader, "err-list-query", detail = query.to_string()),
             AppError::Db(db) => self.db_error(db),
         }
     }
