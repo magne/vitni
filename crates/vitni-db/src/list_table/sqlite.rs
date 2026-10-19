@@ -196,10 +196,10 @@ async fn by_id<V: ListedRecord>(
         .collect())
 }
 
-/// Recomputes the rows of `ids`, deleting the row of an id with no projection.
-async fn refresh<V: ListedRecord>(pool: &Pool<Sqlite>, ids: &[String]) -> Result<(), DbError> {
+/// Recomputes the rows of `ids`, deleting the row of an id with no projection; whether any row changed.
+async fn refresh<V: ListedRecord>(pool: &Pool<Sqlite>, ids: &[String]) -> Result<bool, DbError> {
     if ids.is_empty() {
-        return Ok(());
+        return Ok(false);
     }
     let views: Vec<V> = sqlite_query::views_by_ids(pool, V::VIEW_TABLE, ids).await?;
     let rows = compute(pool, &views).await?;
@@ -208,26 +208,30 @@ async fn refresh<V: ListedRecord>(pool: &Pool<Sqlite>, ids: &[String]) -> Result
         .await
         .map_err(backend("opening a list table transaction"))?;
     let upsert = sql::upsert(DIALECT, V::KIND);
+    let mut changed = false;
     for row in &rows {
-        bind_all(sqlx::query(&upsert), &sql::row_values(V::KIND, row))
+        let written = bind_all(sqlx::query(&upsert), &sql::row_values(V::KIND, row))
             .execute(&mut *tx)
             .await
             .map_err(backend("writing a list row"))?;
+        changed |= written.rows_affected() > 0;
     }
     for id in ids {
         if rows.iter().all(|row| &row.id != id) {
-            sqlx::query(&format!("DELETE FROM {} WHERE view_id = ?", V::KIND.table()))
+            let deleted = sqlx::query(&format!("DELETE FROM {} WHERE view_id = ?", V::KIND.table()))
                 .bind(id)
                 .execute(&mut *tx)
                 .await
                 .map_err(backend("deleting a list row"))?;
+            changed |= deleted.rows_affected() > 0;
         }
     }
-    tx.commit().await.map_err(backend("committing list rows"))
+    tx.commit().await.map_err(backend("committing list rows"))?;
+    Ok(changed)
 }
 
 /// Recomputes the rows of `ids`, of `kind`.
-async fn refresh_kind(pool: &Pool<Sqlite>, kind: ListedKind, ids: &[String]) -> Result<(), DbError> {
+async fn refresh_kind(pool: &Pool<Sqlite>, kind: ListedKind, ids: &[String]) -> Result<bool, DbError> {
     match kind {
         ListedKind::Person => refresh::<PersonView>(pool, ids).await,
         ListedKind::Family => refresh::<FamilyView>(pool, ids).await,
@@ -272,10 +276,14 @@ impl<V: ListedRecord> Query<V::State> for ListTableQuery<V> {
     }
 }
 
-/// Recomputes the record's row, then the rows of the records whose rows read it.
+/// Recomputes the record's row, then — when it changed — the rows of the records whose rows read it.
+/// What they read of it is in its row too (its title, an event's type and date), so an unchanged row
+/// leaves them as they are: a note attached to a parish rewrites no event row.
 async fn relist<V: ListedRecord>(pool: &Pool<Sqlite>, id: &str) -> Result<(), DbError> {
     let id = [id.to_owned()];
-    refresh::<V>(pool, &id).await?;
+    if !refresh::<V>(pool, &id).await? {
+        return Ok(());
+    }
     for (dependent, relation, target) in DEPENDENTS {
         if *target != V::KIND {
             continue;

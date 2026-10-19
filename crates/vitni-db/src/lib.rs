@@ -59,7 +59,7 @@ mod tables;
 #[cfg(any(feature = "sqlite", feature = "postgres"))]
 pub use list_table::{
     ColumnType, ListCell, ListColumn, ListCursor, ListPredicate, ListResult, ListRow, ListSort, ListSpec, ListTest,
-    ListWindow, ListedKind, SortDirection, SortKey,
+    ListWindow, ListedKind, SortDirection, SortKey, choice_name,
 };
 #[cfg(any(feature = "sqlite", feature = "postgres"))]
 pub use match_keys::{DirtyRecord, KeyedRecord};

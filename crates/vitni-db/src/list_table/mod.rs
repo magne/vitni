@@ -25,6 +25,7 @@ use vitni_core::matching::MatchableKind;
 use crate::store::DbError;
 
 pub(crate) use rows::ListedRecord;
+pub use rows::kebab as choice_name;
 
 /// A kind of record a list shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
@@ -455,6 +456,7 @@ fn tag_ids(joined: Option<&str>) -> Result<Vec<TagId>, DbError> {
         tags.push(TagId::from_uuid(uuid));
     }
     tags.sort_by_key(TagId::as_uuid);
+    tags.dedup();
     Ok(tags)
 }
 

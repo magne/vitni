@@ -15,6 +15,7 @@ use vitni_core::enums::{EventType, NoteType, PlaceType, RepositoryType, Sex};
 use vitni_core::provenance::Confidence;
 use vitni_db::{
     ColumnType, ListPage, ListPredicate, ListResult, ListSpec, ListTest, ListWindow, ListedKind, SortDirection,
+    choice_name,
 };
 
 use crate::error::AppError;
@@ -319,13 +320,12 @@ pub async fn reference_id(
     let store = workspace.store();
     let found = match (ty, record_target(kind, column)) {
         (ColumnType::Tags, _) => {
+            let wanted = reference.trim().to_lowercase();
             let mut found = None;
             for tag in store.list_tags().await? {
                 let id = tag.tag_id().map(|id| id.to_string());
-                let named = tag
-                    .name()
-                    .is_some_and(|name| name.eq_ignore_ascii_case(reference.trim()));
-                if named || id.as_deref() == Some(reference) {
+                let named = tag.name().is_some_and(|name| name.to_lowercase() == wanted);
+                if named || id.as_deref() == Some(reference.trim()) {
                     found = id;
                     break;
                 }
@@ -550,7 +550,7 @@ fn key(point: &DatePoint, month: u8, day: u8) -> i64 {
 fn choices(kind: ListedKind, column: &str, values: &[String]) -> Result<Vec<String>, ListQueryError> {
     let mut keys = Vec::with_capacity(values.len());
     for value in values {
-        let key = kebab(value.trim());
+        let key = choice_name(value.trim());
         if !is_choice(kind, column, &key) {
             return Err(ListQueryError::UnknownChoice {
                 column: column.to_owned(),
@@ -586,18 +586,6 @@ fn names<T: serde::de::DeserializeOwned>(key: &str) -> bool {
         || serde_json::from_value::<T>(serde_json::json!({ "type": name })).is_ok()
 }
 
-/// `PascalCase` or `kebab-case` → `kebab-case`.
-fn kebab(name: &str) -> String {
-    let mut kebab = String::with_capacity(name.len() + 4);
-    for (index, character) in name.chars().enumerate() {
-        if character.is_uppercase() && index > 0 && !kebab.ends_with('-') {
-            kebab.push('-');
-        }
-        kebab.extend(character.to_lowercase());
-    }
-    kebab
-}
-
 /// `kebab-case` → `PascalCase`.
 fn pascal(key: &str) -> String {
     let mut pascal = String::with_capacity(key.len());
@@ -615,7 +603,9 @@ fn pascal(key: &str) -> String {
 mod tests {
     use vitni_db::ListedKind;
 
-    use super::{FilterOp, is_choice, kebab, pascal};
+    use vitni_db::choice_name;
+
+    use super::{FilterOp, is_choice, pascal};
 
     #[test]
     fn every_operator_round_trips_its_name() {
@@ -628,8 +618,8 @@ mod tests {
 
     #[test]
     fn a_choice_is_named_in_kebab_case_whatever_its_spelling() {
-        assert_eq!(kebab("VeryHigh"), "very-high");
-        assert_eq!(kebab("very-high"), "very-high");
+        assert_eq!(choice_name("VeryHigh"), "very-high");
+        assert_eq!(choice_name("very-high"), "very-high");
         assert_eq!(pascal("twenty-three-and-me"), "TwentyThreeAndMe");
         assert!(is_choice(ListedKind::Person, "sex", "female"));
         assert!(is_choice(ListedKind::Citation, "confidence", "very-high"));

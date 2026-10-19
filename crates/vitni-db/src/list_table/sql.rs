@@ -50,18 +50,16 @@ impl Dialect {
         }
     }
 
-    /// The record's tag ids, comma-joined.
-    const fn tag_list(self) -> &'static str {
-        match self {
-            Self::Sqlite => {
-                "(SELECT group_concat(l.target, ',') FROM record_links l \
-                 WHERE l.relation = 'tagged' AND l.source = t.view_id)"
-            }
-            Self::Postgres => {
-                "(SELECT string_agg(l.target, ',') FROM record_links l \
-                 WHERE l.relation = 'tagged' AND l.source = t.view_id)"
-            }
-        }
+    /// The tag ids of the row's record and the records merged into it, comma-joined.
+    fn tag_list(self, kind: ListedKind) -> String {
+        let aggregate = match self {
+            Self::Sqlite => "group_concat(l.target, ',')",
+            Self::Postgres => "string_agg(l.target, ',')",
+        };
+        format!(
+            "(SELECT {aggregate} FROM record_links l WHERE l.relation = 'tagged' AND {})",
+            cluster_source(kind)
+        )
     }
 }
 
@@ -179,6 +177,7 @@ pub(crate) fn table_columns(dialect: Dialect, kind: ListedKind) -> Vec<(String, 
         ("view_id".to_owned(), "TEXT NOT NULL PRIMARY KEY"),
         ("human_id".to_owned(), "TEXT"),
         ("search".to_owned(), "TEXT NOT NULL"),
+        ("signature".to_owned(), "TEXT NOT NULL"),
     ];
     for column in kind.columns() {
         for (name, stored) in physical(column) {
@@ -218,12 +217,14 @@ pub(crate) fn upsert(dialect: Dialect, kind: ListedKind) -> String {
         .skip(1)
         .map(|name| format!("{name} = excluded.{name}"))
         .collect();
+    // An unchanged row is not rewritten, so the write reports it untouched.
     format!(
-        "INSERT INTO {} ({}) VALUES ({}) ON CONFLICT (view_id) DO UPDATE SET {}",
-        kind.table(),
+        "INSERT INTO {table} ({}) VALUES ({}) ON CONFLICT (view_id) DO UPDATE SET {} \
+         WHERE {table}.signature <> excluded.signature",
         names.join(", "),
         placeholders.join(", "),
-        updates.join(", ")
+        updates.join(", "),
+        table = kind.table()
     )
 }
 
@@ -260,13 +261,29 @@ pub(crate) fn row_values(kind: ListedKind, row: &RowValues) -> Vec<Value> {
             }
         }
     }
+    let search = search.join("\n");
+    let signature = signature(row.human_id.as_deref(), &values);
     let mut row_values = vec![
         Value::Text(Some(row.id.clone())),
         Value::Text(row.human_id.clone()),
-        Value::Text(Some(search.join("\n"))),
+        Value::Text(Some(search)),
+        Value::Text(Some(signature)),
     ];
     row_values.extend(values);
     row_values
+}
+
+/// A digest of a row's values, so a write can tell an unchanged row from a changed one.
+fn signature(human_id: Option<&str>, values: &[Value]) -> String {
+    use std::fmt::Write as _;
+
+    use sha2::{Digest as _, Sha256};
+    let mut hex = String::with_capacity(64);
+    for byte in Sha256::digest(format!("{human_id:?}{values:?}").as_bytes()) {
+        // Writing to a String cannot fail.
+        let _ = write!(hex, "{byte:02x}");
+    }
+    hex
 }
 
 /// How one requested cell is read back from a result row: its type and its column aliases.
@@ -419,15 +436,22 @@ fn predicate(binder: &mut Binder, kind: ListedKind, column: &str, test: &ListTes
             let folded: Vec<String> = values.iter().map(|value| fold(value)).collect();
             format!("(t.{stem} IS NULL OR t.{stem} NOT IN ({}))", binder.list(&folded))
         }
-        (ColumnType::Record, ListTest::Is(id)) => format!("t.{stem} = {}", binder.text(id)),
+        // The record or one merged into it: a reference to a merged record reads as its root's.
+        (ColumnType::Record, ListTest::Is(id)) => {
+            let record = binder.text(id);
+            let root = binder.text(id);
+            format!(
+                "(t.{stem} = {record} OR t.{stem} IN (SELECT m.member FROM identity_links m WHERE m.root = {root}))"
+            )
+        }
         (ColumnType::Tags, ListTest::AnyOf(tags)) if tags.is_empty() => "1 = 0".to_owned(),
-        (ColumnType::Tags, ListTest::AnyOf(tags)) => format!("EXISTS ({})", tagged(binder, tags)),
-        (ColumnType::Tags, ListTest::NoneOf(tags)) => format!("NOT EXISTS ({})", tagged(binder, tags)),
+        (ColumnType::Tags, ListTest::AnyOf(tags)) => format!("EXISTS ({})", tagged(binder, kind, tags)),
+        (ColumnType::Tags, ListTest::NoneOf(tags)) => format!("NOT EXISTS ({})", tagged(binder, kind, tags)),
         (ColumnType::Tags, ListTest::AllOf(tags)) if tags.is_empty() => "1 = 1".to_owned(),
         (ColumnType::Tags, ListTest::AllOf(tags)) => {
             let mut all = Vec::with_capacity(tags.len());
             for tag in tags {
-                all.push(format!("EXISTS ({})", tagged(binder, std::slice::from_ref(tag))));
+                all.push(format!("EXISTS ({})", tagged(binder, kind, std::slice::from_ref(tag))));
             }
             all.join(" AND ")
         }
@@ -441,12 +465,26 @@ fn predicate(binder: &mut Binder, kind: ListedKind, column: &str, test: &ListTes
     Ok(sql)
 }
 
-/// The `tagged` links from the row's record to one of `tags`.
-fn tagged(binder: &mut Binder, tags: &[String]) -> String {
+/// The `tagged` links from the row's record, or a record merged into it, to one of `tags`: a cluster
+/// carries its members' tags, as its tag uses count them (ADR 0039 §5).
+fn tagged(binder: &mut Binder, kind: ListedKind, tags: &[String]) -> String {
     format!(
-        "SELECT 1 FROM record_links l WHERE l.relation = 'tagged' AND l.source = t.view_id AND l.target IN ({})",
+        "SELECT 1 FROM record_links l WHERE l.relation = 'tagged' AND {} AND l.target IN ({})",
+        cluster_source(kind),
         binder.list(tags)
     )
+}
+
+/// A link `l` whose source is the row's record or a record merged into it.
+fn cluster_source(kind: ListedKind) -> String {
+    match kind.merged_kind() {
+        Some(merged) => format!(
+            "(l.source = t.view_id OR l.source IN \
+             (SELECT m.member FROM identity_links m WHERE m.kind = '{}' AND m.root = t.view_id))",
+            merged.as_str()
+        ),
+        None => "l.source = t.view_id".to_owned(),
+    }
 }
 
 /// The conditions every matching row meets: listed (not merged), the search, the filters.
@@ -590,7 +628,7 @@ pub(crate) fn select(dialect: Dialect, spec: &ListSpec) -> Result<Select, DbErro
                 ),
                 CellRead::Record(index),
             ),
-            ColumnType::Tags => (format!("{} AS {alias}", dialect.tag_list()), CellRead::Tags(index)),
+            ColumnType::Tags => (format!("{} AS {alias}", dialect.tag_list(kind)), CellRead::Tags(index)),
         };
         fields.push(field);
         cells.push(read);

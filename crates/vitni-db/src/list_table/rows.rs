@@ -118,11 +118,13 @@ pub(crate) fn choice_key<T: Serialize>(value: &T) -> Option<String> {
     Some(kebab(&name))
 }
 
-/// `PascalCase` → `kebab-case`.
-pub(crate) fn kebab(name: &str) -> String {
+/// A choice's name as a query holds it: `PascalCase` or `kebab-case` → `kebab-case` (`VeryHigh` and
+/// `very-high` both `very-high`). The one spelling of a stored choice key and of a filter's value.
+#[must_use]
+pub fn kebab(name: &str) -> String {
     let mut kebab = String::with_capacity(name.len() + 4);
     for (index, character) in name.chars().enumerate() {
-        if character.is_uppercase() && index > 0 {
+        if character.is_uppercase() && index > 0 && !kebab.ends_with('-') {
             kebab.push('-');
         }
         kebab.extend(character.to_lowercase());

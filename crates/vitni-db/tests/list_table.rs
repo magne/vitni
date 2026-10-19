@@ -693,6 +693,58 @@ async fn a_tags_uses_are_read_through_its_links_a_cluster_once(store: &Store) {
     );
 }
 
+async fn a_cluster_root_carries_its_members_tags_and_references(store: &Store) {
+    five_people(store).await;
+    create_tag(store, 70).await;
+    tag_person(store, 3, 70).await;
+    let merge = PersonCommand::MergePersons {
+        surviving: person_id(1),
+        merged: person_id(3),
+        assessment: None,
+    };
+    person(store, 1, 199, merge).await;
+    let tagged = ListSpec {
+        columns: vec!["tags".to_owned()],
+        ..filtered(ListedKind::Person, "tags", ListTest::AnyOf(vec![id(70).to_string()]))
+    };
+    let result = run(store, &tagged).await;
+    assert_eq!(
+        result
+            .rows
+            .iter()
+            .map(|row| row.human_id.clone().unwrap_or_default())
+            .collect::<Vec<_>>(),
+        ["I0001"],
+        "the root carries its member's tag, as the tag's uses count it"
+    );
+    assert_eq!(
+        result.rows[0].cells,
+        vec![Some(ListCell::Tags(vec![TagId::from_uuid(id(70))]))]
+    );
+    let none = filtered(ListedKind::Person, "tags", ListTest::NoneOf(vec![id(70).to_string()]));
+    assert!(!human_ids(store, &none).await.contains(&"I0001".to_owned()));
+
+    create_place(store, 30, "Fana").await;
+    create_place(store, 31, "Fana sokn").await;
+    let link = EventCommand::LinkPlace {
+        event_id: EventId::from_uuid(id(11)),
+        place_id: PlaceId::from_uuid(id(31)),
+    };
+    event(store, 11, 1_199, link).await;
+    let merge = PlaceCommand::MergePlaces {
+        surviving: PlaceId::from_uuid(id(30)),
+        merged: PlaceId::from_uuid(id(31)),
+        assessment: None,
+    };
+    place(store, 30, 3_099, merge).await;
+    let at_root = filtered(ListedKind::Event, "place", ListTest::Is(id(30).to_string()));
+    assert_eq!(
+        human_ids(store, &at_root).await,
+        ["E0011"],
+        "an event at a merged-in place is at its root"
+    );
+}
+
 #[cfg(feature = "sqlite")]
 mod sqlite {
     use vitni_db::{ListTest, ListedKind, RecordLink, Store};
@@ -716,6 +768,7 @@ mod sqlite {
     }
 
     sqlite_tests!(
+        a_cluster_root_carries_its_members_tags_and_references,
         a_tags_uses_are_read_through_its_links_a_cluster_once,
         a_query_pages_the_listed_records_with_their_total,
         a_row_carries_typed_cells_for_the_requested_columns,
@@ -793,6 +846,7 @@ mod postgres {
     }
 
     postgres_tests!(
+        a_cluster_root_carries_its_members_tags_and_references,
         a_tags_uses_are_read_through_its_links_a_cluster_once,
         a_query_pages_the_listed_records_with_their_total,
         a_row_carries_typed_cells_for_the_requested_columns,

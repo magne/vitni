@@ -648,7 +648,7 @@ impl ListArgs {
     /// Whether `--search` or `--filter` narrows the list, so an empty one means no match.
     #[must_use]
     pub fn narrows(&self) -> bool {
-        self.search.is_some() || !self.filters.is_empty()
+        self.search.as_deref().is_some_and(|search| !search.trim().is_empty()) || !self.filters.is_empty()
     }
 
     /// The list query for `kind`, each clause checked against its catalogue: a tag named by its name and
