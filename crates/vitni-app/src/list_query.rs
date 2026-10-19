@@ -359,8 +359,9 @@ pub async fn reference_id(
         .ok_or_else(unknown)?)
 }
 
-/// The kind a record column of `kind` refers to.
-const fn record_target(kind: ListedKind, column: &str) -> Option<ListedKind> {
+/// The kind a record column of `kind` refers to; `None` for any other column.
+#[must_use]
+pub const fn record_target(kind: ListedKind, column: &str) -> Option<ListedKind> {
     match (kind, column.as_bytes()) {
         (ListedKind::Event, b"place") | (ListedKind::Place, b"enclosed-by") => Some(ListedKind::Place),
         (ListedKind::Citation, b"source") => Some(ListedKind::Source),

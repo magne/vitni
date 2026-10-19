@@ -173,7 +173,8 @@ pub use import_run::{
 };
 pub use linked_records::{LinkedRecord, LinkedRecords, OriginRef, linked_records, record_url, unlink_person};
 pub use list_query::{
-    FilterOp, FilterValue, ListFilter, ListQuery, ListQueryError, ListSort, ListedPage, query_list, reference_id,
+    FilterOp, FilterValue, ListFilter, ListQuery, ListQueryError, ListSort, ListedPage, query_list, record_target,
+    reference_id,
 };
 pub use map_source::{MapBasemap, MapSource, google_viewport_copyright, refresh_map_attribution, resolve_map_source};
 pub use match_queue::{
