@@ -583,9 +583,9 @@ pub async fn list_media_page(
     query: &ListQuery,
     page: ListPage,
 ) -> Result<ListedPage<MediaSummary>, AppError> {
-    let (selection, total) = crate::list_query::select(workspace, query, ListedKind::Media, page).await?;
-    let items = list_media_selected(workspace, &selection).await?;
-    Ok(ListedPage { items, total })
+    let selected = crate::list_query::select(workspace, query, ListedKind::Media, page).await?;
+    let items = list_media_selected(workspace, &selected.selection).await?;
+    Ok(selected.into_page(items))
 }
 
 /// The summaries of the records `page` selects, in its order.

@@ -322,14 +322,15 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
   background: var(--panel);
   display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden;
 }
+/* The search takes the first line; the Filters, Columns and sort controls wrap under it. */
 .list-toolbar {
-  display: flex; align-items: center; gap: var(--sp-2);
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2);
   padding: var(--sp-2) var(--sp-3);
   border-bottom: 1px solid var(--line);
-  min-width: 0;
+  min-width: 0; position: relative;
 }
 .list-toolbar .filter {
-  flex: 1 1 auto; min-width: 0;
+  flex: 1 1 100%; min-width: 0;
   background: var(--panel-2); border: 1px solid var(--line);
   border-radius: var(--r-md); padding: var(--sp-1) var(--sp-2);
   color: var(--ink); font-size: var(--fs-sm); outline: none;
@@ -338,6 +339,24 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
    toolbar (the column clips anything floated past it), then the applied clauses as chips. */
 .list-toolbar .btn { flex: none; white-space: nowrap; }
 .list-toolbar .badge { margin-left: var(--sp-1); padding: 1px var(--sp-1); }
+/* The Columns and sort menus (ADR 0052 §7, #679) hang full-width under the toolbar, not under their
+   button: the column clips anything floated past its edge. */
+.list-toolbar .menu-anchor { position: static; }
+.list-menu {
+  position: absolute; top: calc(100% + 4px); left: var(--sp-3); right: var(--sp-3); z-index: 21;
+  max-height: 60vh; overflow-y: auto;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-md);
+  box-shadow: var(--shadow-2); padding: var(--sp-1);
+}
+.list-menu-column { display: flex; align-items: center; gap: var(--sp-1); padding: 0 var(--sp-2); }
+.list-menu-column label {
+  flex: 1; display: flex; align-items: center; gap: var(--sp-2);
+  padding: var(--sp-1) 0; color: var(--ink); font-size: var(--fs-md); cursor: pointer;
+}
+.menu-sep { height: 1px; margin: var(--sp-1) 0; background: var(--line); }
+.menu-check { width: 1em; flex: none; color: var(--accent); }
+.menu-item[aria-disabled="true"] { color: var(--muted); cursor: not-allowed; }
+.menu-item[aria-disabled="true"]:hover { background: none; }
 .filter-editor {
   display: flex; flex-direction: column; gap: var(--sp-2);
   padding: var(--sp-2) var(--sp-3);

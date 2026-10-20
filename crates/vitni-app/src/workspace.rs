@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use unic_langid::LanguageIdentifier;
 use uuid::Uuid;
 use vitni_core::id_format::IdFormat;
-use vitni_db::{Store, UnreadableEvent};
+use vitni_db::{ListedKind, Store, UnreadableEvent};
 
 use crate::aggregates::for_each_human_id_aggregate;
 use crate::config::{
@@ -22,6 +22,7 @@ use crate::config::{
     SuretyLabelOverrides, ThemeMode, WorkspaceDefaults, shared_matching_dir,
 };
 use crate::error::AppError;
+use crate::list_query::ListSort;
 use crate::matching::Matching;
 
 /// The workspace manifest file name.
@@ -330,11 +331,49 @@ where
     Ok(recent)
 }
 
+/// One Explorer list's chosen columns and sort (`workspace.toml` `[ui.lists.<kind>]`, ADR 0052 §7):
+/// presentation state, kept per kind. The ids are catalogue column ids; the frontend drops one the
+/// catalogue no longer has.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ListPreferences {
+    /// The columns a row shows after its title, in order; `None` uses the kind's default columns, so
+    /// an empty list means the user hid them all.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub columns: Option<Vec<String>>,
+    /// The sort; `None` orders by `human_id`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sort: Option<ListSort>,
+}
+
+/// Deserializes the per-kind list preferences, dropping an entry this version cannot read — an
+/// unknown kind, or a malformed value — rather than failing the whole manifest parse.
+fn deserialize_lists<'de, D>(deserializer: D) -> Result<BTreeMap<ListedKind, ListPreferences>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Readable {
+        Preferences(ListPreferences),
+        Unreadable(serde::de::IgnoredAny),
+    }
+
+    let entries = BTreeMap::<String, Readable>::deserialize(deserializer)?;
+    let mut lists = BTreeMap::new();
+    for (key, entry) in entries {
+        let kind = ListedKind::ALL.iter().copied().find(|kind| kind.as_str() == key);
+        if let (Some(kind), Readable::Preferences(preferences)) = (kind, entry) {
+            lists.insert(kind, preferences);
+        }
+    }
+    Ok(lists)
+}
+
 /// Per-workspace UI preference overrides (`workspace.toml` `[ui]`, ADR 0005).
 ///
 /// `theme` absent falls back **live** to the global `[workspace-defaults.ui].theme`; `window` is
 /// per-workspace only (absent means use the built-in default size, centred by the OS); `recent` is
-/// the persisted "Jump back in" list.
+/// the persisted "Jump back in" list; `lists` each Explorer list's columns and sort.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UiPreferences {
     /// The pinned colour-theme mode; `None` uses the global default.
@@ -350,10 +389,17 @@ pub struct UiPreferences {
         deserialize_with = "deserialize_recent"
     )]
     pub recent: Vec<RecentItem>,
+    /// Each Explorer list's chosen columns and sort, by kind.
+    #[serde(
+        default,
+        skip_serializing_if = "BTreeMap::is_empty",
+        deserialize_with = "deserialize_lists"
+    )]
+    pub lists: BTreeMap<ListedKind, ListPreferences>,
 }
 
 /// The fully-resolved UI preferences a frontend reads at startup (theme over the live default, plus
-/// any saved geometry and the recent list).
+/// any saved geometry, the recent list and the list layouts).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedUiPreferences {
     /// The effective theme mode (manifest override over the global default).
@@ -362,15 +408,18 @@ pub struct ResolvedUiPreferences {
     pub window: Option<WindowGeometry>,
     /// The persisted "Jump back in" list, newest first.
     pub recent: Vec<RecentItem>,
+    /// Each Explorer list's chosen columns and sort, by kind.
+    pub lists: BTreeMap<ListedKind, ListPreferences>,
 }
 
-/// Resolves effective UI prefs: theme override wins over the live global default; geometry and the
-/// recent list are manifest-only (no default fallback). Mirrors [`resolve_id_formats`].
+/// Resolves effective UI prefs: theme override wins over the live global default; geometry, the recent
+/// list and the list layouts are manifest-only (no default fallback). Mirrors [`resolve_id_formats`].
 fn resolve_ui_preferences(overrides: &UiPreferences, defaults: &WorkspaceDefaults) -> ResolvedUiPreferences {
     ResolvedUiPreferences {
         theme: overrides.theme.unwrap_or(defaults.ui.theme),
         window: overrides.window,
         recent: overrides.recent.clone(),
+        lists: overrides.lists.clone(),
     }
 }
 
@@ -572,6 +621,18 @@ pub fn save_window_geometry(dir: &Path, geometry: WindowGeometry) -> Result<(), 
 pub fn save_recent(dir: &Path, recent: &[RecentItem]) -> Result<(), AppError> {
     let mut manifest = read_manifest(dir)?;
     manifest.ui.recent = recent.to_vec();
+    write_manifest(dir, &manifest)
+}
+
+/// Persists one Explorer list's columns and sort into the workspace manifest's `[ui.lists.<kind>]`
+/// block (read-modify-write, preserving the rest). No store is opened.
+///
+/// # Errors
+///
+/// [`AppError::Workspace`] if the manifest is missing or cannot be read/written.
+pub fn save_list_preferences(dir: &Path, kind: ListedKind, preferences: &ListPreferences) -> Result<(), AppError> {
+    let mut manifest = read_manifest(dir)?;
+    manifest.ui.lists.insert(kind, preferences.clone());
     write_manifest(dir, &manifest)
 }
 
@@ -1005,12 +1066,12 @@ pub(crate) fn write_manifest(dir: &Path, manifest: &WorkspaceManifest) -> Result
 #[cfg(test)]
 mod tests {
     use super::{
-        IdFormatOverrides, LayerKind, LocaleOverrides, RECENT_LIMIT, RecentItem, UiPreferences, WindowGeometry,
-        Workspace, person_id_format_layers, push_recent, read_manifest, read_plugin_preferences,
-        read_preference_layers, read_resolved_locale, read_resolved_surety_labels, read_ui_preferences,
-        resolve_database_url, resolve_init_database_url, resolve_locale, resolve_surety_labels, resolve_ui_preferences,
-        save_locale_overrides, save_plugin_enabled, save_plugin_grants, save_recent, save_surety_label_overrides,
-        save_theme_mode, save_window_geometry, surety_layers, theme_layers,
+        IdFormatOverrides, LayerKind, ListPreferences, ListSort, ListedKind, LocaleOverrides, RECENT_LIMIT, RecentItem,
+        UiPreferences, WindowGeometry, Workspace, person_id_format_layers, push_recent, read_manifest,
+        read_plugin_preferences, read_preference_layers, read_resolved_locale, read_resolved_surety_labels,
+        read_ui_preferences, resolve_database_url, resolve_init_database_url, resolve_locale, resolve_surety_labels,
+        resolve_ui_preferences, save_list_preferences, save_locale_overrides, save_plugin_enabled, save_plugin_grants,
+        save_recent, save_surety_label_overrides, save_theme_mode, save_window_geometry, surety_layers, theme_layers,
     };
     use crate::config::{
         AppDefaults, DateFormat, Engine, IdFormats, LocaleDefaults, NumberFormat, OperatorConfig, SuretyLabelOverride,
@@ -1019,6 +1080,7 @@ mod tests {
     use std::path::Path;
     use uuid::Uuid;
     use vitni_core::ids::AgentId;
+    use vitni_db::SortDirection;
 
     fn operator() -> OperatorConfig {
         OperatorConfig {
@@ -1283,8 +1345,7 @@ mod tests {
     fn ui_theme_override_wins_over_the_live_default() {
         let overrides = UiPreferences {
             theme: Some(ThemeMode::Dark),
-            window: None,
-            recent: Vec::new(),
+            ..UiPreferences::default()
         };
         let resolved = resolve_ui_preferences(&overrides, &defaults_with_theme(ThemeMode::Light));
         assert_eq!(resolved.theme, ThemeMode::Dark, "the manifest override pins the theme");
@@ -1409,6 +1470,75 @@ label = "Ada Lovelace"
             1
         );
         assert!(matches!(recent.first(), Some(RecentItem::Record { human_id, .. }) if human_id == "I0003"));
+    }
+
+    #[test]
+    fn list_preferences_persist_per_kind_under_ui_lists() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ws = dir.path().join("ws");
+        Workspace::init(&ws, &operator(), &AppDefaults::default(), None).expect("init");
+        save_theme_mode(&ws, ThemeMode::Dark).expect("save theme");
+        let person = ListPreferences {
+            columns: Some(vec!["sex".to_owned(), "birth".to_owned()]),
+            sort: Some(ListSort {
+                column: "birth".to_owned(),
+                direction: SortDirection::Descending,
+            }),
+        };
+        let event = ListPreferences {
+            columns: Some(Vec::new()),
+            sort: None,
+        };
+
+        save_list_preferences(&ws, ListedKind::Person, &person).expect("save person");
+        save_list_preferences(&ws, ListedKind::Event, &event).expect("save event");
+
+        let text = std::fs::read_to_string(ws.join("workspace.toml")).expect("manifest text");
+        assert!(text.contains("[ui.lists.person]"), "{text}");
+        assert!(text.contains("[ui.lists.person.sort]"), "{text}");
+        let resolved = read_ui_preferences(&ws, &defaults_with_theme(ThemeMode::System));
+        assert_eq!(resolved.theme, ThemeMode::Dark, "the rest of [ui] survives");
+        assert_eq!(resolved.lists.get(&ListedKind::Person), Some(&person));
+        assert_eq!(
+            resolved.lists.get(&ListedKind::Event),
+            Some(&event),
+            "no columns stays no columns"
+        );
+        assert_eq!(resolved.lists.get(&ListedKind::Place), None);
+    }
+
+    #[test]
+    fn a_list_entry_this_version_cannot_read_is_dropped_not_fatal() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ws = dir.path().join("ws");
+        std::fs::create_dir_all(&ws).expect("dir");
+        std::fs::write(
+            ws.join("workspace.toml"),
+            r#"
+database_url = "sqlite://vitni.sqlite3"
+
+[ui]
+theme = "dark"
+
+[ui.lists.person]
+columns = ["birth"]
+
+[ui.lists.galaxy]
+columns = ["stars"]
+
+[ui.lists.event]
+sort = { column = "date", direction = "sideways" }
+"#,
+        )
+        .expect("write manifest");
+
+        let manifest = read_manifest(&ws).expect("an unreadable list entry must not fail the parse");
+        assert_eq!(manifest.ui.theme, Some(ThemeMode::Dark));
+        assert_eq!(
+            manifest.ui.lists.keys().copied().collect::<Vec<_>>(),
+            [ListedKind::Person],
+            "the unknown kind and the malformed sort are dropped"
+        );
     }
 
     #[test]

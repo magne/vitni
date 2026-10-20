@@ -52,7 +52,7 @@ pub fn HelpScreen(topic: Option<HelpTopicId>) -> Element {
         ListPane {
             rows,
             search,
-            sort,
+            sort: rsx! { SortCycle { sort, chrome: SortChrome::resolve(&chrome.0) } },
             selected,
             narrowed: !query.query.is_empty(),
             chrome: help_list_chrome(&chrome.0),
@@ -78,7 +78,6 @@ fn help_list_chrome(chrome: &Chrome) -> ListChrome {
         filter_placeholder: chrome.help_filter(),
         empty: chrome.help_empty(),
         no_match: chrome.help_empty(),
-        sort: SortChrome::resolve(chrome),
     }
 }
 

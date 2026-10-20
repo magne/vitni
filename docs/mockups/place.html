@@ -55,17 +55,30 @@
       <div class="list-toolbar">
         <input class="filter" placeholder="Filter places…">
         <button class="btn sm" title="Filter the list by its columns" aria-expanded="false" aria-controls="filter-editor">Filters</button>
-        <button class="btn sm" title="Change sort order">Sort: ID ↑</button>
+        <span class="menu-anchor"><button class="btn sm" title="Choose and order the columns a row shows" aria-haspopup="dialog" aria-expanded="false">Columns</button></span>
+        <!-- The sort menu open (ADR 0052 §7, #679): the ID order or a column (Tags does not sort), then the
+             direction, which the ID order lacks (both directions disabled while it is chosen). -->
+        <span class="menu-anchor"><button class="btn sm" title="Change sort order" aria-haspopup="menu" aria-expanded="true">Sort: Name ↓</button>
+          <div class="list-menu" role="menu" aria-label="Change sort order">
+            <button class="menu-item" role="menuitemradio" type="button" aria-checked="false" aria-disabled="false"><span class="menu-check" aria-hidden="true"></span><span>ID</span></button>
+            <button class="menu-item" role="menuitemradio" type="button" aria-checked="true" aria-disabled="false"><span class="menu-check" aria-hidden="true">✓</span><span>Name</span></button>
+            <button class="menu-item" role="menuitemradio" type="button" aria-checked="false" aria-disabled="false"><span class="menu-check" aria-hidden="true"></span><span>Type</span></button>
+            <button class="menu-item" role="menuitemradio" type="button" aria-checked="false" aria-disabled="false"><span class="menu-check" aria-hidden="true"></span><span>Enclosed by</span></button>
+            <div class="menu-sep" role="separator"></div>
+            <button class="menu-item" role="menuitemradio" type="button" aria-checked="false" aria-disabled="false"><span class="menu-check" aria-hidden="true"></span><span>Ascending</span></button>
+            <button class="menu-item" role="menuitemradio" type="button" aria-checked="true" aria-disabled="false"><span class="menu-check" aria-hidden="true">✓</span><span>Descending</span></button>
+          </div>
+        </span>
         <button class="btn sm primary" title="New place">+ New</button>
       </div>
       <div class="list-rows">
-        <div class="row sel">
+        <div class="row">
           <div class="avatar">📍</div>
           <div class="row-main">
-            <div class="row-title">New York</div>
-            <div class="row-sub">city · United States</div>
+            <div class="row-title">United States</div>
+            <div class="row-sub">country</div>
           </div>
-          <div class="row-id">P0007</div>
+          <div class="row-id">P0001</div>
         </div>
         <div class="row">
           <div class="avatar">⛪</div>
@@ -74,6 +87,14 @@
             <div class="row-sub">church · New York</div>
           </div>
           <div class="row-id">P0021</div>
+        </div>
+        <div class="row sel">
+          <div class="avatar">📍</div>
+          <div class="row-main">
+            <div class="row-title">New York</div>
+            <div class="row-sub">city · United States</div>
+          </div>
+          <div class="row-id">P0007</div>
         </div>
         <div class="row">
           <div class="avatar">⚰</div>
@@ -90,14 +111,6 @@
             <div class="row-sub">borough · New York</div>
           </div>
           <div class="row-id">P0012</div>
-        </div>
-        <div class="row">
-          <div class="avatar">📍</div>
-          <div class="row-main">
-            <div class="row-title">United States</div>
-            <div class="row-sub muted">country</div>
-          </div>
-          <div class="row-id">P0001</div>
         </div>
       </div>
     </section>

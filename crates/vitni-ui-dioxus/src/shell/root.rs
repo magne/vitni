@@ -40,7 +40,7 @@ pub fn Shell() -> Element {
     let nav = use_context_provider(|| {
         seeded_nav.unwrap_or_else(|| {
             let prefs = try_consume_context::<StartupPrefs>().unwrap_or_default();
-            NavState::with_prefs(prefs.theme_mode, prefs.resolved_theme, prefs.recent)
+            NavState::with_prefs(prefs.theme_mode, prefs.resolved_theme, prefs.recent, prefs.lists)
         })
     });
     // A notice left by the restart that mounted this shell (e.g. a restore replaced the workspace).

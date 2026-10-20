@@ -16,6 +16,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use unic_langid::LanguageIdentifier;
+use vitni_db::ListedKind;
 
 use crate::config::{
     self, AiConfig, Config, IdFormats, LocaleDefaults, MapConfig, OperatorConfig, PluginTrustConfig, ShortcutConfig,
@@ -23,7 +24,8 @@ use crate::config::{
 };
 use crate::error::AppError;
 use crate::workspace::{
-    self, IdFormatOverrides, LocaleOverrides, OperatorRecord, PluginPreferences, RecentItem, WindowGeometry,
+    self, IdFormatOverrides, ListPreferences, LocaleOverrides, OperatorRecord, PluginPreferences, RecentItem,
+    WindowGeometry,
 };
 
 /// The app-scoped UI-language override environment variable (ADR 0015 §4) — the highest-priority
@@ -91,7 +93,7 @@ pub struct WorkspaceFunctionality {
 
 /// The client/presentation scope (ADR 0015 §1): how *this* session presents the workspace. The
 /// per-workspace half of the manifest — colour theme, native-window geometry, the "Jump back in"
-/// recent list, and the locale overrides. Local to the client.
+/// recent list, each Explorer list's columns and sort, and the locale overrides. Local to the client.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Presentation {
     /// The pinned colour-theme mode; `None` uses the global default.
@@ -100,6 +102,8 @@ pub struct Presentation {
     pub window: Option<WindowGeometry>,
     /// The recently-opened records, newest first.
     pub recent: Vec<RecentItem>,
+    /// Each Explorer list's chosen columns and sort, by kind (ADR 0052 §7).
+    pub lists: BTreeMap<ListedKind, ListPreferences>,
     /// The language/locale/date/number overrides.
     pub locale: LocaleOverrides,
 }
@@ -266,6 +270,14 @@ pub trait ConfigStore {
     /// [`AppError::Config`] if no workspace directory is set, or [`AppError::Workspace`] if the
     /// manifest cannot be read/written.
     fn store_recent(&self, recent: &[RecentItem]) -> Result<(), AppError>;
+
+    /// Persists one Explorer list's columns and sort into the manifest (read-modify-write).
+    ///
+    /// # Errors
+    ///
+    /// [`AppError::Config`] if no workspace directory is set, or [`AppError::Workspace`] if the
+    /// manifest cannot be read/written.
+    fn store_list_preferences(&self, kind: ListedKind, preferences: &ListPreferences) -> Result<(), AppError>;
 
     /// Loads the `[ai]` provider inventory (ADR 0017 §4). Client/presentation scope: the providers
     /// are machine/user-local, so they live in the global config, not the workspace manifest.
@@ -450,6 +462,7 @@ impl ConfigStore for FileConfigStore {
             theme: manifest.ui.theme,
             window: manifest.ui.window,
             recent: manifest.ui.recent,
+            lists: manifest.ui.lists,
             locale: manifest.locale,
         })
     }
@@ -468,6 +481,10 @@ impl ConfigStore for FileConfigStore {
 
     fn store_recent(&self, recent: &[RecentItem]) -> Result<(), AppError> {
         workspace::save_recent(self.workspace_dir()?, recent)
+    }
+
+    fn store_list_preferences(&self, kind: ListedKind, preferences: &ListPreferences) -> Result<(), AppError> {
+        workspace::save_list_preferences(self.workspace_dir()?, kind, preferences)
     }
 
     fn load_ai_config(&self) -> Result<AiConfig, AppError> {
@@ -545,9 +562,10 @@ mod tests {
 
     use super::{ConfigStore, FileConfigStore};
     use crate::config::{AppDefaults, OperatorConfig, ThemeMode};
-    use crate::workspace::{LocaleOverrides, RecentItem, WindowGeometry, Workspace};
+    use crate::workspace::{ListPreferences, LocaleOverrides, RecentItem, WindowGeometry, Workspace};
     use uuid::Uuid;
     use vitni_core::ids::AgentId;
+    use vitni_db::ListedKind;
 
     fn operator(id: u128) -> OperatorConfig {
         OperatorConfig {
@@ -691,11 +709,19 @@ mod tests {
             label: "Ada".to_owned(),
         }];
         store.store_recent(&recent).expect("recent");
+        let layout = ListPreferences {
+            columns: Some(vec!["death".to_owned()]),
+            sort: None,
+        };
+        store
+            .store_list_preferences(ListedKind::Person, &layout)
+            .expect("list layout");
 
         let presentation = store.load_presentation().expect("load");
         assert_eq!(presentation.theme, Some(ThemeMode::Dark));
         assert_eq!(presentation.window, Some(geometry));
         assert_eq!(presentation.recent, recent);
+        assert_eq!(presentation.lists.get(&ListedKind::Person), Some(&layout));
         assert_eq!(presentation.locale.ui_language, Some("nn-NO".parse().expect("langid")));
     }
 

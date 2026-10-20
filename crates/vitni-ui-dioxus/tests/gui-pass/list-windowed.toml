@@ -67,6 +67,11 @@ label = "Tab: the Filters button"
 [[step]]
 do = "key"
 chord = "Tab"
+label = "Tab: the Columns button"
+
+[[step]]
+do = "key"
+chord = "Tab"
 label = "Tab: the sort button"
 
 [[step]]

@@ -11,7 +11,7 @@ use i18n_embed::fluent::{FluentLanguageLoader, fluent_language_loader};
 use i18n_embed_fl::fl;
 use rust_embed::RustEmbed;
 use unic_langid::LanguageIdentifier;
-use vitni_app::{DateFormat, NumberFormat, PlannedField, config};
+use vitni_app::{DateFormat, NumberFormat, PlannedField, SortDirection, config};
 use vitni_ui::{RowSort, ShortcutGroup};
 
 #[derive(RustEmbed)]
@@ -190,6 +190,52 @@ impl Chrome {
             RowSort::IdAsc => fl!(self.loader, "sort-id-asc"),
             RowSort::TitleAsc => fl!(self.loader, "sort-name-asc"),
             RowSort::TitleDesc => fl!(self.loader, "sort-name-desc"),
+        }
+    }
+
+    /// The Explorer's sort-menu trigger for a column sort (e.g. "Sort: Birth ↓").
+    #[must_use]
+    pub fn sort_column_label(&self, column: &str, direction: SortDirection) -> String {
+        match direction {
+            SortDirection::Ascending => fl!(self.loader, "sort-column-asc", column = column),
+            SortDirection::Descending => fl!(self.loader, "sort-column-desc", column = column),
+        }
+    }
+
+    /// The sort menu's `human_id` order item ("ID").
+    #[must_use]
+    pub fn sort_by_id(&self) -> String {
+        fl!(self.loader, "sort-by-id")
+    }
+
+    /// The sort menu's direction item.
+    #[must_use]
+    pub fn sort_direction(&self, direction: SortDirection) -> String {
+        match direction {
+            SortDirection::Ascending => fl!(self.loader, "sort-ascending"),
+            SortDirection::Descending => fl!(self.loader, "sort-descending"),
+        }
+    }
+
+    /// The Explorer's *Columns* menu trigger and the menu's accessible name.
+    #[must_use]
+    pub fn list_columns(&self) -> String {
+        fl!(self.loader, "list-columns")
+    }
+
+    /// The *Columns* trigger's `title`.
+    #[must_use]
+    pub fn list_columns_title(&self) -> String {
+        fl!(self.loader, "list-columns-title")
+    }
+
+    /// A *Columns* menu move button's accessible name: earlier ("Move Birth up") or later.
+    #[must_use]
+    pub fn list_column_move(&self, column: &str, earlier: bool) -> String {
+        if earlier {
+            fl!(self.loader, "list-column-up", column = column)
+        } else {
+            fl!(self.loader, "list-column-down", column = column)
         }
     }
 

@@ -7,7 +7,7 @@
 use dioxus::prelude::*;
 use vitni_ui::{ListedRows, RowSort, RowVm, RowsPage};
 use vitni_ui_dioxus::components::{BadgeSpec, TabItem};
-use vitni_ui_dioxus::master_detail::{DetailContainer, ListChrome, ListPane, MasterDetail, SortChrome};
+use vitni_ui_dioxus::master_detail::{DetailContainer, ListChrome, ListPane, MasterDetail, SortChrome, SortCycle};
 
 fn sort_chrome() -> SortChrome {
     SortChrome {
@@ -43,7 +43,6 @@ fn chrome() -> ListChrome {
         filter_placeholder: "Filter people…".to_owned(),
         empty: "No persons yet.".to_owned(),
         no_match: "No records match.".to_owned(),
-        sort: sort_chrome(),
     }
 }
 
@@ -57,7 +56,7 @@ fn screen() -> Element {
         ListPane {
             rows: ListedRows::whole(rows()),
             search,
-            sort,
+            sort: rsx! { SortCycle { sort, chrome: sort_chrome() } },
             selected,
             chrome: chrome(),
             tools: rsx! { button { class: "btn sm", "Filters" } },
@@ -108,7 +107,7 @@ fn list_pane_carries_search_and_listbox_roles() {
 }
 
 #[test]
-fn list_pane_offers_a_cycling_sort_button() {
+fn a_sort_cycle_in_the_sort_slot_names_the_current_order() {
     let html = render();
     // The toolbar carries a sort-cycle button (person.html specimen): a labelled button with the
     // current order and a "Change sort order" title. The default order is id ascending.
@@ -195,7 +194,14 @@ fn LongList(total: usize, fetched: usize, narrowed: bool) -> Element {
         rows: many_rows(fetched),
     });
     rsx! {
-        ListPane { rows, search, sort, selected, chrome: chrome(), narrowed }
+        ListPane {
+            rows,
+            search,
+            sort: rsx! { SortCycle { sort, chrome: sort_chrome() } },
+            selected,
+            chrome: chrome(),
+            narrowed,
+        }
     }
 }
 

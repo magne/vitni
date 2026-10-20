@@ -3,17 +3,18 @@
 //! (#590), so a window anywhere in it names the pages it needs, and `[`/`]` steps over the whole result,
 //! fetched or not.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 use vitni_app::{
     AppError, ColumnType, FilterValue, ListPage, ListQuery, ListedKind, ListedPage, Workspace, list_citations_page,
     list_dna_matches_page, list_dna_tests_page, list_events_page, list_families_page, list_media_page, list_notes_page,
     list_persons_page, list_places_page, list_repositories_page, list_research_notes_page, list_sources_page,
-    list_tags_query, reference_id,
+    list_tags, list_tags_query, reference_id,
 };
 
 use crate::i18n::Localizer;
 use crate::list::RowVm;
+use crate::list_layout::cells_line;
 use crate::list_window::WINDOW_ROWS;
 use crate::navigation::Category;
 use crate::view_model::{
@@ -190,58 +191,75 @@ pub async fn list_page(
 ) -> Result<RowsPage, AppError> {
     let window = page_window(page);
     let offset = page * PAGE_ROWS;
+    let line = Line {
+        loc,
+        query,
+        tags: tag_names(workspace, query).await?,
+    };
     let rows = match query.kind {
-        ListedKind::Person => paged(&list_persons_page(workspace, query, window).await?, offset, |s| {
-            person_row(s, loc)
-        }),
-        ListedKind::Family => paged(&list_families_page(workspace, query, window).await?, offset, |s| {
-            family_row(s, loc)
-        }),
-        ListedKind::Event => paged(&list_events_page(workspace, query, window).await?, offset, |s| {
+        ListedKind::Person => paged(
+            &list_persons_page(workspace, query, window).await?,
+            offset,
+            &line,
+            |s| person_row(s, loc),
+        ),
+        ListedKind::Family => paged(
+            &list_families_page(workspace, query, window).await?,
+            offset,
+            &line,
+            |s| family_row(s, loc),
+        ),
+        ListedKind::Event => paged(&list_events_page(workspace, query, window).await?, offset, &line, |s| {
             event_row(s, loc)
         }),
-        ListedKind::Place => paged(&list_places_page(workspace, query, window).await?, offset, |s| {
+        ListedKind::Place => paged(&list_places_page(workspace, query, window).await?, offset, &line, |s| {
             place_row(s, loc)
         }),
-        ListedKind::Source => paged(&list_sources_page(workspace, query, window).await?, offset, |s| {
-            source_row(s, loc)
-        }),
-        ListedKind::Citation => paged(&list_citations_page(workspace, query, window).await?, offset, |s| {
-            citation_row(s, loc)
-        }),
-        ListedKind::Repository => paged(&list_repositories_page(workspace, query, window).await?, offset, |s| {
-            repository_row(s, loc)
-        }),
-        ListedKind::Media => paged(&list_media_page(workspace, query, window).await?, offset, |s| {
+        ListedKind::Source => paged(
+            &list_sources_page(workspace, query, window).await?,
+            offset,
+            &line,
+            |s| source_row(s, loc),
+        ),
+        ListedKind::Citation => paged(
+            &list_citations_page(workspace, query, window).await?,
+            offset,
+            &line,
+            |s| citation_row(s, loc),
+        ),
+        ListedKind::Repository => paged(
+            &list_repositories_page(workspace, query, window).await?,
+            offset,
+            &line,
+            |s| repository_row(s, loc),
+        ),
+        ListedKind::Media => paged(&list_media_page(workspace, query, window).await?, offset, &line, |s| {
             media_row(s, loc)
         }),
-        ListedKind::Note => paged(&list_notes_page(workspace, query, window).await?, offset, |s| {
+        ListedKind::Note => paged(&list_notes_page(workspace, query, window).await?, offset, &line, |s| {
             note_row(s, loc)
         }),
         ListedKind::ResearchNote => paged(
             &list_research_notes_page(workspace, query, window).await?,
             offset,
+            &line,
             |s| research_note_row(s, loc),
         ),
-        ListedKind::DnaTest => paged(&list_dna_tests_page(workspace, query, window).await?, offset, |s| {
-            dna_test_row(s, loc)
+        ListedKind::DnaTest => paged(
+            &list_dna_tests_page(workspace, query, window).await?,
+            offset,
+            &line,
+            |s| dna_test_row(s, loc),
+        ),
+        ListedKind::DnaMatch => paged(
+            &list_dna_matches_page(workspace, query, window).await?,
+            offset,
+            &line,
+            |s| dna_match_row(s, loc),
+        ),
+        ListedKind::Tag => paged(&list_tags_query(workspace, query).await?, 0, &line, |tag| {
+            tag_row(tag, loc)
         }),
-        ListedKind::DnaMatch => paged(&list_dna_matches_page(workspace, query, window).await?, offset, |s| {
-            dna_match_row(s, loc)
-        }),
-        ListedKind::Tag => {
-            let tags = list_tags_query(workspace, query).await?;
-            let total = tags.len();
-            let items = tags.iter().map(|tag| tag_row(tag, loc)).collect();
-            paged(
-                &ListedPage {
-                    items,
-                    total: u64::try_from(total).unwrap_or(u64::MAX),
-                },
-                0,
-                Clone::clone,
-            )
-        }
     };
     Ok(rows)
 }
@@ -268,12 +286,47 @@ pub async fn resolve_filter(
     Ok(active)
 }
 
-/// A use-case's page as rows starting at `offset`.
-fn paged<T>(page: &ListedPage<T>, offset: usize, row: impl Fn(&T) -> RowVm) -> RowsPage {
+/// What a row's second line is made of: the query's columns, read as the locale reads them.
+struct Line<'a> {
+    loc: &'a Localizer,
+    query: &'a ListQuery,
+    tags: HashMap<String, String>,
+}
+
+/// The tag names a tag column's cells are read by — none when the query shows no tag column.
+async fn tag_names(workspace: &Workspace, query: &ListQuery) -> Result<HashMap<String, String>, AppError> {
+    let shows_tags = query.columns.iter().any(|id| {
+        query
+            .kind
+            .column(id)
+            .is_some_and(|column| column.ty == ColumnType::Tags)
+    });
+    let mut names = HashMap::new();
+    if shows_tags {
+        for tag in list_tags(workspace).await? {
+            if let Some(name) = tag.name {
+                names.insert(tag.id, name);
+            }
+        }
+    }
+    Ok(names)
+}
+
+/// A use-case's page as rows starting at `offset`, each row's second line its cells (ADR 0052 §7).
+fn paged<T>(page: &ListedPage<T>, offset: usize, line: &Line<'_>, row: impl Fn(&T) -> RowVm) -> RowsPage {
+    let mut rows = Vec::with_capacity(page.items.len());
+    for item in &page.items {
+        let mut built = row(item);
+        built.subtitle = page
+            .cells
+            .get(&built.id)
+            .and_then(|cells| cells_line(line.loc, line.query.kind, &line.query.columns, cells, &line.tags));
+        rows.push(built);
+    }
     RowsPage {
         offset,
         total: usize::try_from(page.total).unwrap_or(usize::MAX),
-        rows: page.items.iter().map(row).collect(),
+        rows,
     }
 }
 

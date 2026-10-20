@@ -504,9 +504,9 @@ pub async fn list_repositories_page(
     query: &ListQuery,
     page: ListPage,
 ) -> Result<ListedPage<RepositorySummary>, AppError> {
-    let (selection, total) = crate::list_query::select(workspace, query, ListedKind::Repository, page).await?;
-    let items = list_repositories_selected(workspace, &selection).await?;
-    Ok(ListedPage { items, total })
+    let selected = crate::list_query::select(workspace, query, ListedKind::Repository, page).await?;
+    let items = list_repositories_selected(workspace, &selected.selection).await?;
+    Ok(selected.into_page(items))
 }
 
 /// The summaries of the records `page` selects, in its order.

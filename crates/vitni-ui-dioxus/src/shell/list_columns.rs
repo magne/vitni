@@ -1,0 +1,191 @@
+//! The Explorer's *Columns* and sort menus (ADR 0052 §7, #679): the toolbar controls that choose which
+//! columns a row shows after its title, in what order, and how the list is sorted. Both edit the
+//! caller's [`ListLayout`]; the Explorer evaluates it into its query and stores it per kind.
+//!
+//! Each menu hangs under its trigger in a `.menu-anchor`, over a click-away `.menu-scrim`, like the
+//! tabstrip's new-record menu. One of the two is open at a time ([`ListMenu`]); Escape closes it.
+
+use dioxus::prelude::*;
+use vitni_app::SortDirection;
+use vitni_ui::{ListLayout, column_toggles, sort_columns};
+
+use crate::shell::{ChromeCtx, data_loc};
+
+/// Which toolbar menu is open.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ListMenu {
+    /// The *Columns* menu.
+    Columns,
+    /// The sort menu.
+    Sort,
+}
+
+/// The *Columns* trigger and, when open, its menu: a checkbox per column the kind can show, the shown
+/// ones first in their order, each with a move-up and a move-down.
+#[component]
+pub fn ColumnsMenu(layout: Signal<ListLayout>, open: Signal<Option<ListMenu>>) -> Element {
+    let chrome = use_context::<ChromeCtx>().0;
+    let loc = data_loc();
+    let shown = open() == Some(ListMenu::Columns);
+    let toggles = column_toggles(&loc, &layout.read());
+    let label = chrome.list_columns();
+    rsx! {
+        span { class: "menu-anchor",
+            button {
+                class: "btn sm",
+                r#type: "button",
+                title: "{chrome.list_columns_title()}",
+                aria_haspopup: "dialog",
+                aria_expanded: if shown { "true" } else { "false" },
+                onclick: move |_| open.set(if shown { None } else { Some(ListMenu::Columns) }),
+                "{label}"
+            }
+            if shown {
+                Scrim { open }
+                div {
+                    class: "list-menu",
+                    role: "dialog",
+                    aria_label: "{label}",
+                    onkeydown: move |event| close_on_escape(&event, open),
+                    for toggle in toggles {
+                        div { key: "{toggle.id}", class: "list-menu-column",
+                            label { r#for: "list-column-{toggle.id}",
+                                input {
+                                    r#type: "checkbox",
+                                    id: "list-column-{toggle.id}",
+                                    checked: toggle.shown,
+                                    onchange: move |_| layout.write().toggle(toggle.id),
+                                }
+                                span { "{toggle.label}" }
+                            }
+                            if toggle.shown {
+                                MoveButton { layout, column: toggle.id, label: toggle.label.clone(), earlier: true }
+                                MoveButton { layout, column: toggle.id, label: toggle.label.clone(), earlier: false }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// One shown column's move-up or move-down button.
+#[component]
+fn MoveButton(layout: Signal<ListLayout>, column: &'static str, label: String, earlier: bool) -> Element {
+    let chrome = use_context::<ChromeCtx>().0;
+    rsx! {
+        button {
+            class: "btn sm ghost",
+            r#type: "button",
+            aria_label: "{chrome.list_column_move(&label, earlier)}",
+            onclick: move |_| layout.write().shift(column, earlier),
+            if earlier { "↑" } else { "↓" }
+        }
+    }
+}
+
+/// The sort trigger, naming the current sort, and when open its menu: the `human_id` order, each
+/// column the kind can be sorted by, then the direction.
+#[component]
+pub fn SortMenu(layout: Signal<ListLayout>, open: Signal<Option<ListMenu>>) -> Element {
+    let chrome = use_context::<ChromeCtx>().0;
+    let loc = data_loc();
+    let shown = open() == Some(ListMenu::Sort);
+    let sort = layout.read().sort.clone();
+    let current = match &sort {
+        Some(sort) => chrome.sort_column_label(&loc.list_column_label(&sort.column), sort.direction),
+        None => chrome.sort_label(vitni_ui::RowSort::IdAsc),
+    };
+    let columns = sort_columns(&loc, layout.read().kind);
+    let sorted_by = sort.as_ref().map(|sort| sort.column.clone());
+    let direction = sort.as_ref().map(|sort| sort.direction);
+    rsx! {
+        span { class: "menu-anchor",
+            button {
+                class: "btn sm",
+                r#type: "button",
+                title: "{chrome.sort_order_title()}",
+                aria_haspopup: "menu",
+                aria_expanded: if shown { "true" } else { "false" },
+                onclick: move |_| open.set(if shown { None } else { Some(ListMenu::Sort) }),
+                "{current}"
+            }
+            if shown {
+                Scrim { open }
+                div {
+                    class: "list-menu",
+                    role: "menu",
+                    aria_label: "{chrome.sort_order_title()}",
+                    onkeydown: move |event| close_on_escape(&event, open),
+                    SortItem {
+                        label: chrome.sort_by_id(),
+                        checked: sorted_by.is_none(),
+                        onpick: move |()| layout.write().sort_by(None),
+                    }
+                    for (id, label) in columns {
+                        SortItem {
+                            key: "{id}",
+                            label,
+                            checked: sorted_by.as_deref() == Some(id),
+                            onpick: move |()| layout.write().sort_by(Some(id)),
+                        }
+                    }
+                    div { class: "menu-sep", role: "separator" }
+                    for way in [SortDirection::Ascending, SortDirection::Descending] {
+                        SortItem {
+                            key: "{way:?}",
+                            label: chrome.sort_direction(way),
+                            checked: direction == Some(way),
+                            disabled: direction.is_none(),
+                            onpick: move |()| layout.write().sort_direction(way),
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// One radio item of the sort menu: a check mark when chosen.
+#[component]
+fn SortItem(label: String, checked: bool, #[props(default)] disabled: bool, onpick: EventHandler<()>) -> Element {
+    rsx! {
+        button {
+            class: "menu-item",
+            role: "menuitemradio",
+            r#type: "button",
+            aria_checked: if checked { "true" } else { "false" },
+            aria_disabled: if disabled { "true" } else { "false" },
+            onclick: move |_| {
+                if !disabled {
+                    onpick.call(());
+                }
+            },
+            span { class: "menu-check", aria_hidden: "true", if checked { "✓" } }
+            span { "{label}" }
+        }
+    }
+}
+
+/// The click-away catcher behind an open menu.
+#[component]
+fn Scrim(open: Signal<Option<ListMenu>>) -> Element {
+    let chrome = use_context::<ChromeCtx>().0;
+    rsx! {
+        button {
+            class: "menu-scrim",
+            r#type: "button",
+            aria_label: "{chrome.close()}",
+            onclick: move |_| open.set(None),
+        }
+    }
+}
+
+/// Closes the open menu on Escape.
+fn close_on_escape(event: &KeyboardEvent, mut open: Signal<Option<ListMenu>>) {
+    if event.key() == Key::Escape {
+        event.prevent_default();
+        open.set(None);
+    }
+}

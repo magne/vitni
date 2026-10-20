@@ -916,9 +916,9 @@ pub async fn list_families_page(
     query: &ListQuery,
     page: ListPage,
 ) -> Result<ListedPage<FamilySummary>, AppError> {
-    let (selection, total) = crate::list_query::select(workspace, query, ListedKind::Family, page).await?;
-    let items = list_families_selected(workspace, &selection).await?;
-    Ok(ListedPage { items, total })
+    let selected = crate::list_query::select(workspace, query, ListedKind::Family, page).await?;
+    let items = list_families_selected(workspace, &selected.selection).await?;
+    Ok(selected.into_page(items))
 }
 
 /// The summaries of the records `page` selects, in its order.

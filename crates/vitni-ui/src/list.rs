@@ -2,9 +2,7 @@
 //! by (ADR 0008). A [`RowVm`] is one entity rendered as a list row — already-localized strings so a
 //! renderer stays dumb — and [`visible_rows`] applies a [`RowQuery`] (search + sort) purely to a list
 //! held in memory (the Help topics). An entity list is searched, filtered and sorted by the store
-//! instead ([`crate::listed`]).
-
-use vitni_app::{ListSort, ListedKind, SortDirection};
+//! instead ([`crate::listed`]), laid out by its [`ListLayout`](crate::ListLayout).
 
 /// One entity as a row in a list view: an already-localized title and optional subtitle/avatar,
 /// keyed by its stable user-facing id.
@@ -70,21 +68,6 @@ impl RowSort {
             Self::TitleDesc => Self::IdAsc,
         }
     }
-
-    /// The store sort for a list of `kind`: none for the id order, the kind's title column for a name
-    /// order.
-    #[must_use]
-    pub fn query_sort(self, kind: ListedKind) -> Option<ListSort> {
-        let direction = match self {
-            Self::IdAsc => return None,
-            Self::TitleAsc => SortDirection::Ascending,
-            Self::TitleDesc => SortDirection::Descending,
-        };
-        Some(ListSort {
-            column: kind.title_column().id.to_owned(),
-            direction,
-        })
-    }
 }
 
 /// The search and sort of a list held in memory.
@@ -114,8 +97,6 @@ pub fn visible_rows(rows: &[RowVm], q: &RowQuery) -> Vec<RowVm> {
 
 #[cfg(test)]
 mod tests {
-    use vitni_app::{ListSort, ListedKind, SortDirection};
-
     use super::{RowQuery, RowSort, RowVm, visible_rows};
 
     fn rows() -> Vec<RowVm> {
@@ -204,25 +185,9 @@ mod tests {
     }
 
     #[test]
-    fn the_sort_button_cycles_through_the_orders_the_store_can_serve() {
+    fn the_sort_button_cycles_through_the_orders() {
         assert_eq!(RowSort::IdAsc.next(), RowSort::TitleAsc);
         assert_eq!(RowSort::TitleAsc.next(), RowSort::TitleDesc);
         assert_eq!(RowSort::TitleDesc.next(), RowSort::IdAsc);
-    }
-
-    #[test]
-    fn a_name_order_sorts_the_store_by_the_kinds_title_column() {
-        assert_eq!(RowSort::IdAsc.query_sort(ListedKind::Person), None);
-        assert_eq!(
-            RowSort::TitleDesc.query_sort(ListedKind::Source),
-            Some(ListSort {
-                column: "title".to_owned(),
-                direction: SortDirection::Descending,
-            })
-        );
-        assert_eq!(
-            RowSort::TitleAsc.query_sort(ListedKind::Event).map(|sort| sort.column),
-            Some("type".to_owned())
-        );
     }
 }

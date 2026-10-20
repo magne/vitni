@@ -852,6 +852,8 @@ filter-op-has-all-of = har alle
 filter-op-has-none-of = har ingen av
 filter-chip = { $column } { $op } { $value }
 filter-chip-bare = { $column } { $op }
+# A number cell in an Explorer row reads with its column: `Children 3` (ADR 0052 §7)
+list-cell-number = { $column } { $value }
 filter-range = { $from } – { $to }
 filter-error-missing = Skriv inn en verdi
 filter-error-date = Ikke en dato — prøv 1800, 1800-05 eller 12 mai 1800

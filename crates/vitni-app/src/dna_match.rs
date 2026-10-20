@@ -374,9 +374,9 @@ pub async fn list_dna_matches_page(
     query: &ListQuery,
     page: ListPage,
 ) -> Result<ListedPage<DnaMatchSummary>, AppError> {
-    let (selection, total) = crate::list_query::select(workspace, query, ListedKind::DnaMatch, page).await?;
-    let items = list_dna_matches_selected(workspace, &selection).await?;
-    Ok(ListedPage { items, total })
+    let selected = crate::list_query::select(workspace, query, ListedKind::DnaMatch, page).await?;
+    let items = list_dna_matches_selected(workspace, &selected.selection).await?;
+    Ok(selected.into_page(items))
 }
 
 /// The summaries of the records `page` selects, in its order.
