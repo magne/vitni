@@ -4,12 +4,13 @@
 //! provides the result as context. Screens read [`AppCtx`] for the services and localizers and hold
 //! the active [`Screen`] as navigation state.
 
+use std::collections::BTreeMap;
 use std::rc::Rc;
 
 use dioxus::prelude::*;
 use vitni_app::{
-    AppError, ConfigStore, FileConfigStore, RecentItem, ShortcutConfig, ThemeMode, WindowGeometry, config,
-    read_resolved_locale, read_resolved_surety_labels, workspace,
+    AppError, ConfigStore, FileConfigStore, ListPreferences, ListedKind, RecentItem, ShortcutConfig, ThemeMode,
+    WindowGeometry, config, read_resolved_locale, read_resolved_surety_labels, workspace,
 };
 use vitni_plugin_host::PluginHost;
 use vitni_ui::Localizer;
@@ -90,6 +91,8 @@ pub struct StartupPrefs {
     pub geometry: Option<WindowGeometry>,
     /// The persisted "Jump back in" list (recently-opened records, newest first).
     pub recent: Vec<RecentItem>,
+    /// The persisted Explorer list layouts (columns and sort), by kind.
+    pub lists: BTreeMap<ListedKind, ListPreferences>,
     /// The client-scope `[shortcuts]` rebound-chord overrides (ADR 0030 §3).
     pub shortcuts: ShortcutConfig,
 }
@@ -101,6 +104,7 @@ impl Default for StartupPrefs {
             resolved_theme: resolve_theme(ThemeMode::System),
             geometry: None,
             recent: Vec::new(),
+            lists: BTreeMap::new(),
             shortcuts: ShortcutConfig::default(),
         }
     }
@@ -120,6 +124,7 @@ pub fn resolve_startup_prefs() -> StartupPrefs {
             resolved_theme: resolve_theme(prefs.theme),
             geometry: prefs.window,
             recent: prefs.recent,
+            lists: prefs.lists,
             shortcuts: config.shortcuts,
         })
     })();

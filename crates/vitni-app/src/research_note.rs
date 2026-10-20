@@ -456,9 +456,9 @@ pub async fn list_research_notes_page(
     query: &ListQuery,
     page: ListPage,
 ) -> Result<ListedPage<ResearchNoteSummary>, AppError> {
-    let (selection, total) = crate::list_query::select(workspace, query, ListedKind::ResearchNote, page).await?;
-    let items = list_research_notes_selected(workspace, &selection).await?;
-    Ok(ListedPage { items, total })
+    let selected = crate::list_query::select(workspace, query, ListedKind::ResearchNote, page).await?;
+    let items = list_research_notes_selected(workspace, &selected.selection).await?;
+    Ok(selected.into_page(items))
 }
 
 /// The summaries of the records `page` selects, in its order.

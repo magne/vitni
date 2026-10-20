@@ -3011,6 +3011,12 @@ impl Localizer {
         fl!(self.loader, "filter-chip-bare", column = column, op = op)
     }
 
+    /// A number cell in an Explorer row, read with its column: `Children 3`.
+    #[must_use]
+    pub fn list_number_cell(&self, column: &str, value: &str) -> String {
+        fl!(self.loader, "list-cell-number", column = column, value = value)
+    }
+
     /// A *between* filter's range: `1800 – 1850`.
     #[must_use]
     pub fn filter_range(&self, from: &str, to: &str) -> String {

@@ -28,6 +28,17 @@ sort-id-asc = Sortering: ID ↑
 sort-name-asc = Sortering: Navn ↑
 sort-name-desc = Sortering: Navn ↓
 
+# Kolonnevelger og kolonnesortering i utforskeren (ADR 0052 §7, #679)
+list-columns = Kolonner
+list-columns-title = Velg og ordne kolonnene en rad viser
+list-column-up = Flytt { $column } opp
+list-column-down = Flytt { $column } ned
+sort-column-asc = Sortering: { $column } ↑
+sort-column-desc = Sortering: { $column } ↓
+sort-by-id = ID
+sort-ascending = Stigende
+sort-descending = Synkende
+
 # Filterlinje i utforskeren (ADR 0052 §2–4, #678)
 list-no-match = Ingen poster passer.
 list-filters = Filtre

@@ -81,8 +81,6 @@ pub struct ListChrome {
     pub empty: String,
     /// The message of a list whose search or filters match nothing.
     pub no_match: String,
-    /// The already-localized labels for the toolbar sort-cycle button.
-    pub sort: SortChrome,
 }
 
 /// The already-localized strings for the list toolbar's sort-cycle button: its `title` plus one label
@@ -124,8 +122,9 @@ impl SortChrome {
 
 /// A searchable, keyboard-operable entity list.
 ///
-/// The toolbar carries a search box, the caller's `tools` (the Explorer's *Filters* button) and the
-/// sort-cycle button; the caller's `bar` (the Explorer's filter chips and editor) sits under it. The
+/// The toolbar carries a search box, the caller's `tools` (the Explorer's *Filters* and *Columns*
+/// buttons) and its `sort` control (the Explorer's sort menu, Help's [`SortCycle`]); the caller's `bar`
+/// (the Explorer's filter chips and editor) sits under it. The
 /// body is a `listbox` of rows with roving focus (↑/↓ move the tab stop, Enter/Space activate the row).
 /// The caller owns the `search`, `sort` and `selected` signals and evaluates them into `rows`: the
 /// Explorer through the store's list query (ADR 0052 §4), Help over its topics in memory. Creating a
@@ -141,8 +140,8 @@ pub fn ListPane(
     rows: ReadSignal<ListedRows>,
     /// The search text.
     search: Signal<String>,
-    /// The sort order.
-    sort: Signal<RowSort>,
+    /// The sort control, last in the toolbar.
+    sort: Element,
     /// The selected row id.
     selected: Signal<Option<String>>,
     /// The localized chrome strings (labels, placeholder).
@@ -157,7 +156,7 @@ pub fn ListPane(
     /// Fired with the pages the mounted window needs and `rows` lacks.
     #[props(default)]
     onmissing: Option<Callback<Vec<usize>>>,
-    /// Extra toolbar controls, between the search box and the sort button.
+    /// Extra toolbar controls, between the search box and the sort control.
     #[props(default)]
     tools: Option<Element>,
     /// Content under the toolbar, above the rows.
@@ -177,22 +176,31 @@ pub fn ListPane(
                 oninput: move |event: FormEvent| search.set(event.value()),
             }
             {tools}
-            button {
-                class: "btn sm",
-                r#type: "button",
-                title: "{chrome.sort.title}",
-                onclick: move |_| {
-                    let next = sort().next();
-                    sort.set(next);
-                },
-                "{chrome.sort.label(sort())}"
-            }
+            {sort}
         }
         {bar}
         if empty {
             p { class: "empty", "{message}" }
         } else {
             ListRows { rows, label: chrome.list_label.clone(), selected, onselect, onmissing }
+        }
+    }
+}
+
+/// A sort button for a list held in memory: each press moves `sort` to the next [`RowSort`] in the
+/// cycle, and the button names the current one.
+#[component]
+pub fn SortCycle(sort: Signal<RowSort>, chrome: SortChrome) -> Element {
+    rsx! {
+        button {
+            class: "btn sm",
+            r#type: "button",
+            title: "{chrome.title}",
+            onclick: move |_| {
+                let next = sort().next();
+                sort.set(next);
+            },
+            "{chrome.label(sort())}"
         }
     }
 }

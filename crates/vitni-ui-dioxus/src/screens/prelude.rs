@@ -30,7 +30,7 @@ pub use crate::components::{
     SidePanel, SidePanelActions, SourceLink, Switch, TabItem, Table, TextField, TextInput, TextInputKind,
     date_draft_field, draft_card, draft_picker_field, merged_from_chip, or_dash, picker_options, record_picker,
 };
-pub use crate::master_detail::{DetailContainer, ListChrome, ListPane, SortChrome};
+pub use crate::master_detail::{DetailContainer, ListChrome, ListPane, SortChrome, SortCycle};
 pub use crate::services::{
     ScreenData, commit_citation_change_set, commit_dna_match_change_set, commit_dna_test_change_set,
     commit_event_change_set, commit_family_change_set, commit_media_change_set, commit_new_record,

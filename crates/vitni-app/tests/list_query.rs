@@ -312,6 +312,53 @@ async fn a_query_returns_typed_cells_for_its_columns() {
     );
 }
 
+#[tokio::test]
+async fn a_page_carries_each_rows_cells_under_its_human_id() {
+    let (ws, _dir) = workspace().await;
+    let ola = person(&ws, "Ola", "Olsen", Some(1790)).await;
+    let per = person(&ws, "Per", "Hansen", None).await;
+    let query = ListQuery {
+        columns: vec!["surname".to_owned(), "birth".to_owned()],
+        ..ListQuery::new(ListedKind::Person)
+    };
+
+    let page = list_persons_page(&ws, &query, ListPage::ALL).await.expect("page");
+
+    let ola_cells = page.cells.get(&ola).expect("Ola's cells");
+    assert_eq!(ola_cells[0], Some(ListCell::Text("Olsen".to_owned())));
+    assert!(matches!(&ola_cells[1], Some(ListCell::Date(_))), "{ola_cells:?}");
+    assert_eq!(page.cells.get(&per).expect("Per's cells")[1], None, "no birth, no cell");
+    let bare = list_persons_page(&ws, &ListQuery::new(ListedKind::Person), ListPage::ALL)
+        .await
+        .expect("bare page");
+    assert_eq!(
+        bare.cells.get(&ola),
+        Some(&Vec::new()),
+        "no columns asked, none returned"
+    );
+}
+
+#[tokio::test]
+async fn a_tag_page_carries_its_cells_under_the_tag_id() {
+    let (ws, _dir) = workspace().await;
+    create_tag(&ws, &session(), "Verified".to_owned(), Provenance::default(), &[])
+        .await
+        .expect("tag");
+    let query = ListQuery {
+        columns: vec!["name".to_owned()],
+        ..ListQuery::new(ListedKind::Tag)
+    };
+
+    let page = list_tags_query(&ws, &query).await.expect("tags");
+
+    assert_eq!(page.total, 1);
+    let tag = &page.items[0];
+    assert_eq!(
+        page.cells.get(&tag.id),
+        Some(&vec![Some(ListCell::Text("Verified".to_owned()))])
+    );
+}
+
 #[test]
 fn a_query_serializes_by_column_and_operator_name() {
     let query = ListQuery {
@@ -363,6 +410,7 @@ async fn a_tag_query_runs_over_the_whole_vocabulary_in_its_order() {
     let names: Vec<_> = list_tags_query(&ws, &query)
         .await
         .expect("tags")
+        .items
         .into_iter()
         .map(|tag| tag.name.unwrap_or_default())
         .collect();

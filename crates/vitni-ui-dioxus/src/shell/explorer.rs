@@ -12,13 +12,14 @@
 use std::collections::BTreeSet;
 
 use dioxus::prelude::*;
-use vitni_app::ListQuery;
-use vitni_ui::{ActiveFilter, Category, ListedRows, RecordRef, RowSort, RowVm, listed_kind};
+use vitni_app::{ConfigStore as _, FileConfigStore, ListQuery};
+use vitni_ui::{ActiveFilter, Category, ListLayout, ListedRows, RecordRef, RowVm, listed_kind};
 
 use crate::app::AppCtx;
-use crate::master_detail::{ListChrome, ListPane, SortChrome};
+use crate::master_detail::{ListChrome, ListPane};
 use crate::screens::use_record_step;
 use crate::services::load_list_page;
+use crate::shell::list_columns::{ColumnsMenu, ListMenu, SortMenu};
 use crate::shell::list_filters::{FilterBar, FilterEditing, FiltersButton};
 use crate::shell::nav_state::{NavState, entity_category};
 
@@ -45,8 +46,10 @@ pub fn Explorer() -> Element {
 }
 
 /// The list for one entity `category`, read from the store a page at a time (ADR 0052 §4): owns the
-/// search, sort and filter signals that make up its [`ListQuery`], the [`ListedRows`] read so far, and
-/// the `selected` signal. The first page is a resource over the query and
+/// search, filter and layout signals that make up its [`ListQuery`], the [`ListedRows`] read so far,
+/// and the `selected` signal. The layout — the columns a row shows and the sort (ADR 0052 §7) — starts
+/// from [`NavState::lists`], seeded from `workspace.toml`, and is written back there on each change.
+/// The first page is a resource over the query and
 /// [`NavState::data_version`] (the rail-count idiom in `shell/root.rs`), so a new search, sort or
 /// filter, or a create/edit/undo elsewhere, reads the list again from the top; the pages after it are
 /// read as the window scrolls to them, and for a `[`/`]` step onto one. Selecting a row opens it in
@@ -71,7 +74,6 @@ fn ExplorerList(category: Category) -> Element {
         filter_placeholder: chrome.list_filter(&entity),
         empty: list_empty(loc, category),
         no_match: chrome.list_no_match(),
-        sort: SortChrome::resolve(chrome),
     };
     let mut selected = use_signal(|| None::<String>);
     // Keep the row highlight in sync with the active record tab — but only when the active record is
@@ -84,14 +86,33 @@ fn ExplorerList(category: Category) -> Element {
         );
     });
     let search = use_signal(String::new);
-    let sort = use_signal(RowSort::default);
     let filters = use_signal(Vec::<ActiveFilter>::new);
     let editing = use_signal(|| None::<FilterEditing>);
-    let query = use_memo(move || ListQuery {
-        search: search(),
-        filters: filters.read().iter().map(|active| active.filter.clone()).collect(),
-        sort: sort().query_sort(kind),
-        ..ListQuery::new(kind)
+    let layout = use_signal(|| ListLayout::resolve(kind, nav.lists.peek().get(&kind)));
+    let menu = use_signal(|| None::<ListMenu>);
+    let dir = services.dir.clone();
+    // Written only when it differs from what is stored, so mounting the list never writes.
+    use_effect(move || {
+        let current = layout.read().clone();
+        if current == ListLayout::resolve(kind, nav.lists.peek().get(&kind)) {
+            return;
+        }
+        let preferences = current.preferences();
+        let store = FileConfigStore::for_workspace(dir.clone());
+        if let Err(error) = store.store_list_preferences(kind, &preferences) {
+            tracing::warn!(%error, "could not persist the list layout");
+        }
+        nav.lists.write().insert(kind, preferences);
+    });
+    let query = use_memo(move || {
+        let layout = layout.read();
+        ListQuery {
+            search: search(),
+            filters: filters.read().iter().map(|active| active.filter.clone()).collect(),
+            sort: layout.sort.clone(),
+            columns: layout.columns.clone(),
+            ..ListQuery::new(kind)
+        }
     });
     let mut rows = use_signal(ListedRows::default);
     let refused_rows = use_signal(ListedRows::default);
@@ -169,7 +190,7 @@ fn ExplorerList(category: Category) -> Element {
         ListPane {
             rows: shown,
             search,
-            sort,
+            sort: rsx! { SortMenu { layout, open: menu } },
             selected,
             chrome,
             narrowed,
@@ -179,7 +200,10 @@ fn ExplorerList(category: Category) -> Element {
                 label: row.title,
             }),
             onmissing: fetch,
-            tools: rsx! { FiltersButton { count: filters.read().len(), editing } },
+            tools: rsx! {
+                FiltersButton { count: filters.read().len(), editing }
+                ColumnsMenu { layout, open: menu }
+            },
             bar: rsx! { FilterBar { kind, filters, editing } },
         }
     }

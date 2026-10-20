@@ -292,6 +292,7 @@ pub use vitni_core::ids::AgentId;
 pub use vitni_core::ids::ImportRunId;
 pub use vitni_core::ids::PersonId;
 pub use vitni_core::ids::PlaceId;
+pub use vitni_core::ids::TagId;
 pub use vitni_core::import_run::{
     AbandonReason, ImportCounts, ImportRunError, ImportRunStatus, NewImportRun, ResolutionDecision, ResolvedItem,
 };
@@ -328,12 +329,12 @@ pub use vitni_db::{
     SortDirection, SortKey, UnreadableEvent, choice_key,
 };
 pub use workspace::{
-    BackupSettings, IdFormatLayers, LayerKind, LocaleOverrides, OperatorRecord, PluginPreferences, PreferenceLayers,
-    RECENT_LIMIT, RecentItem, ResolvedLocale, ResolvedUiPreferences, SuretyLayers, ThemeLayers, UiPreferences,
-    WindowGeometry, Workspace, WorkspaceId, WorkspaceManifest, person_id_format_layers, push_recent,
+    BackupSettings, IdFormatLayers, LayerKind, ListPreferences, LocaleOverrides, OperatorRecord, PluginPreferences,
+    PreferenceLayers, RECENT_LIMIT, RecentItem, ResolvedLocale, ResolvedUiPreferences, SuretyLayers, ThemeLayers,
+    UiPreferences, WindowGeometry, Workspace, WorkspaceId, WorkspaceManifest, person_id_format_layers, push_recent,
     read_plugin_preferences, read_pre_restore_backup, read_preference_layers, read_resolved_locale,
-    read_resolved_surety_labels, read_surety_label_overrides, read_ui_preferences, save_locale_overrides,
-    save_plugin_enabled, save_plugin_grants, save_pre_restore_backup, save_recent, save_surety_label_overrides,
-    save_theme_mode, save_window_geometry, surety_layers, theme_layers,
+    read_resolved_surety_labels, read_surety_label_overrides, read_ui_preferences, save_list_preferences,
+    save_locale_overrides, save_plugin_enabled, save_plugin_grants, save_pre_restore_backup, save_recent,
+    save_surety_label_overrides, save_theme_mode, save_window_geometry, surety_layers, theme_layers,
 };
 pub use workspace_registry::{WorkspaceSummary, list_workspaces, register_workspace};

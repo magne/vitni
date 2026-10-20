@@ -27,6 +27,7 @@ pub mod i18n;
 pub mod import_payload;
 pub mod intent;
 pub mod list;
+pub mod list_layout;
 pub mod list_window;
 pub mod listed;
 pub mod navigation;
@@ -62,6 +63,7 @@ pub use intent::{
     unpin_publisher,
 };
 pub use list::{RowQuery, RowSort, RowVm, visible_rows};
+pub use list_layout::{ColumnToggle, ListLayout, cells_line, column_toggles, default_columns, sort_columns};
 pub use list_window::{ListWindow, WINDOW_ROWS};
 pub use listed::{
     ListedRows, PAGE_ROWS, RowsPage, list_page, listed_category, listed_kind, page_window, resolve_filter,

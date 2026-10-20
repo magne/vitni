@@ -11,7 +11,7 @@ use std::fmt;
 use std::rc::Rc;
 
 use dioxus::prelude::*;
-use vitni_app::{DecidableKind, RecentItem, RunResume, ThemeMode, push_recent};
+use vitni_app::{DecidableKind, ListPreferences, ListedKind, RecentItem, RunResume, ThemeMode, push_recent};
 use vitni_ui::{
     Category, Destination, NavHistory, NavLocation, NavRecord, ProvenanceDraft, RecordDraft, RecordRef, Tool,
 };
@@ -439,6 +439,9 @@ pub struct NavState {
     /// The recently-opened records (newest first, capped), driving the dashboard "Jump back in" list.
     /// Seeded from the workspace manifest at startup and persisted on change.
     pub recent: Signal<Vec<RecentItem>>,
+    /// Each Explorer list's chosen columns and sort, by kind (ADR 0052 §7). Seeded from the workspace
+    /// manifest at startup; the Explorer writes a change back to both.
+    pub lists: Signal<BTreeMap<ListedKind, ListPreferences>>,
     /// The record `⌘Z` should undo, or `None` when no undo is armed. Set by [`Self::request_undo`] for
     /// the active record only; the detail pane whose `(category, human_id)` this names observes it
     /// (`use_record_undo`), retracts the newest undoable assertion of its already-loaded change log,
@@ -544,15 +547,25 @@ impl NavState {
     /// Creates the shell state on the Dashboard with no record open, following the OS theme.
     #[must_use]
     pub fn new() -> Self {
-        Self::with_prefs(ThemeMode::System, resolve_theme(ThemeMode::System), Vec::new())
+        Self::with_prefs(
+            ThemeMode::System,
+            resolve_theme(ThemeMode::System),
+            Vec::new(),
+            BTreeMap::new(),
+        )
     }
 
     /// Creates the shell state seeded with the resolved startup theme and persisted recent list:
     /// `mode` is the persisted preference, `resolved` the concrete palette it resolves to (already
     /// computed by the caller so the shell and the pre-launch window background agree), `recent` the
-    /// "Jump back in" list read from the workspace manifest.
+    /// "Jump back in" list and `lists` the Explorer list layouts, both read from the workspace manifest.
     #[must_use]
-    pub fn with_prefs(mode: ThemeMode, resolved: Theme, recent: Vec<RecentItem>) -> Self {
+    pub fn with_prefs(
+        mode: ThemeMode,
+        resolved: Theme,
+        recent: Vec<RecentItem>,
+        lists: BTreeMap<ListedKind, ListPreferences>,
+    ) -> Self {
         let mut history = NavHistory::default();
         history.push(NavLocation {
             destination: Destination::Category(Category::Dashboard),
@@ -570,6 +583,7 @@ impl NavState {
             theme_mode: Signal::new(mode),
             theme: Signal::new(resolved),
             recent: Signal::new(recent),
+            lists: Signal::new(lists),
             pending_undo: Signal::new(None),
             pending_step: Signal::new(None),
             palette_seed: Signal::new(String::new()),

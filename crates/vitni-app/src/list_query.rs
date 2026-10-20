@@ -7,6 +7,8 @@
 //! values by id, never by a localized label or display name, so it survives a language switch and a
 //! rename (§3).
 
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 use vitni_core::date::{DateModifier, DatePoint, GenealogicalDate, GenealogicalDateBody};
 use vitni_core::dna::{DnaProvider, DnaTestType};
@@ -14,8 +16,8 @@ use vitni_core::dna_match::MatchStatus;
 use vitni_core::enums::{EventType, NoteType, PlaceType, RepositoryType, Sex};
 use vitni_core::provenance::Confidence;
 use vitni_db::{
-    ColumnType, ListPage, ListPredicate, ListResult, ListSpec, ListTest, ListWindow, ListedKind, SortDirection,
-    choice_name,
+    ColumnType, ListCell, ListPage, ListPredicate, ListResult, ListSpec, ListTest, ListWindow, ListedKind,
+    SortDirection, choice_name,
 };
 
 use crate::error::AppError;
@@ -279,6 +281,9 @@ pub struct ListedPage<T> {
     pub items: Vec<T>,
     /// Every record the query matches, the page aside.
     pub total: u64,
+    /// Each item's cells for the query's columns, in their order, keyed by the item's `human_id` (a
+    /// tag, which has none, by its id). A frontend reads a row's chosen columns here (ADR 0052 §7).
+    pub cells: HashMap<String, Vec<Option<ListCell>>>,
 }
 
 /// Evaluates `query` over the store: the rows in `window`, each with typed cells for the query's
@@ -384,7 +389,28 @@ impl Selection {
     pub(crate) const ALL: Self = Self::Page(ListPage::ALL);
 }
 
-/// The ids of the records `query` lists in `page`, and its total — for a use-case listing `kind`.
+/// What a paged list use-case reads for a query: the records it picked, their total, and their cells.
+pub(crate) struct Selected {
+    /// The records picked, in the query's order.
+    pub(crate) selection: Selection,
+    /// Every record the query matches.
+    total: u64,
+    /// Each picked row's cells, by its list key (see [`ListedPage::cells`]).
+    cells: HashMap<String, Vec<Option<ListCell>>>,
+}
+
+impl Selected {
+    /// The page of `items`, read for this selection.
+    pub(crate) fn into_page<T>(self, items: Vec<T>) -> ListedPage<T> {
+        ListedPage {
+            items,
+            total: self.total,
+            cells: self.cells,
+        }
+    }
+}
+
+/// The records `query` lists in `page`, their total and their cells — for a use-case listing `kind`.
 ///
 /// # Errors
 ///
@@ -395,7 +421,7 @@ pub(crate) async fn select(
     query: &ListQuery,
     kind: ListedKind,
     page: ListPage,
-) -> Result<(Selection, u64), AppError> {
+) -> Result<Selected, AppError> {
     if query.kind != kind {
         return Err(ListQueryError::KindMismatch {
             expected: kind,
@@ -407,13 +433,18 @@ pub(crate) async fn select(
         offset: page.offset,
         limit: page.limit,
     };
-    let bare = ListQuery {
-        columns: Vec::new(),
-        ..query.clone()
-    };
-    let result = query_list(workspace, &bare, window).await?;
-    let ids = result.rows.into_iter().map(|row| row.id).collect();
-    Ok((Selection::Ids(ids), result.total.unwrap_or_default()))
+    let result = query_list(workspace, query, window).await?;
+    let mut ids = Vec::with_capacity(result.rows.len());
+    let mut cells = HashMap::with_capacity(result.rows.len());
+    for row in result.rows {
+        cells.insert(row.human_id.unwrap_or_else(|| row.id.clone()), row.cells);
+        ids.push(row.id);
+    }
+    Ok(Selected {
+        selection: Selection::Ids(ids),
+        total: result.total.unwrap_or_default(),
+        cells,
+    })
 }
 
 /// `views` in the order of `ids`, the ones not named dropped.

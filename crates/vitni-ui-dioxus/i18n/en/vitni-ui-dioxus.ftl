@@ -28,6 +28,17 @@ sort-id-asc = Sort: ID ↑
 sort-name-asc = Sort: Name ↑
 sort-name-desc = Sort: Name ↓
 
+# Explorer column chooser and column sort (ADR 0052 §7, #679)
+list-columns = Columns
+list-columns-title = Choose and order the columns a row shows
+list-column-up = Move { $column } up
+list-column-down = Move { $column } down
+sort-column-asc = Sort: { $column } ↑
+sort-column-desc = Sort: { $column } ↓
+sort-by-id = ID
+sort-ascending = Ascending
+sort-descending = Descending
+
 # Explorer filter bar (ADR 0052 §2–4, #678)
 list-no-match = No records match.
 list-filters = Filters

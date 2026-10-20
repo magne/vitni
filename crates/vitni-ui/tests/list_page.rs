@@ -8,11 +8,11 @@
 use uuid::Uuid;
 use vitni_app::{
     Agent, AgentId, AgentKind, AppDefaults, AppError, ColumnType, EventType, EvidenceLevel, FilterOp, FilterValue,
-    ListFilter, ListQuery, ListQueryError, ListWindow, ListedKind, MutationMeta, NewEvent, NewPerson, NewPlace,
-    OperatorConfig, PersonNameParts, PlaceType, Provenance, Session, Workspace, WorkspaceDefaults, create_event,
-    create_person, create_place, create_tag, link_place, query_list,
+    ListFilter, ListQuery, ListQueryError, ListSort, ListWindow, ListedKind, MutationMeta, NewEvent, NewPerson,
+    NewPlace, OperatorConfig, PersonNameParts, PlaceType, Provenance, Session, SortDirection, Workspace,
+    WorkspaceDefaults, create_event, create_person, create_place, create_tag, link_place, query_list, tag_person,
 };
-use vitni_ui::{FilterDraft, Localizer, PAGE_ROWS, RowSort, choice_options, list_page, resolve_filter};
+use vitni_ui::{FilterDraft, Localizer, PAGE_ROWS, choice_options, list_page, resolve_filter};
 
 fn operator() -> OperatorConfig {
     OperatorConfig {
@@ -89,7 +89,10 @@ async fn a_later_page_starts_at_its_offset_in_the_sorted_result() {
         person(&ws, &format!("Given{index:03}"), "Olsen").await;
     }
     let query = ListQuery {
-        sort: RowSort::TitleDesc.query_sort(ListedKind::Person),
+        sort: Some(ListSort {
+            column: "name".to_owned(),
+            direction: SortDirection::Descending,
+        }),
         ..ListQuery::new(ListedKind::Person)
     };
 
@@ -113,7 +116,10 @@ async fn the_tag_list_is_read_whole_from_the_first_row() {
     }
     let query = ListQuery {
         search: "verif".to_owned(),
-        sort: RowSort::TitleAsc.query_sort(ListedKind::Tag),
+        sort: Some(ListSort {
+            column: "name".to_owned(),
+            direction: SortDirection::Ascending,
+        }),
         ..ListQuery::new(ListedKind::Tag)
     };
 
@@ -226,4 +232,73 @@ async fn a_picked_record_is_resolved_to_the_id_the_query_holds() {
         page.rows.iter().map(|row| row.id.as_str()).collect::<Vec<_>>(),
         [baptism.as_str()]
     );
+}
+
+#[tokio::test]
+async fn a_rows_second_line_is_its_chosen_columns_an_empty_cell_skipped() {
+    let (ws, loc, _dir) = setup().await;
+    let fana = create_place(
+        &ws,
+        &session(),
+        NewPlace {
+            human_id: None,
+            place_type: PlaceType::Parish,
+            name: Some("Fana".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("place");
+    let mut events = Vec::new();
+    for event_type in [EventType::Baptism, EventType::Burial] {
+        let new = NewEvent {
+            human_id: None,
+            event_type,
+        };
+        events.push(
+            create_event(&ws, &session(), new, Provenance::default(), &[])
+                .await
+                .expect("event"),
+        );
+    }
+    link_place(&ws, &session(), &events[0], &fana, MutationMeta::default())
+        .await
+        .expect("link");
+    let query = ListQuery {
+        columns: vec!["description".to_owned(), "place".to_owned()],
+        ..ListQuery::new(ListedKind::Event)
+    };
+
+    let page = list_page(&ws, &loc, &query, 0).await.expect("page");
+
+    let lines: Vec<Option<&str>> = page.rows.iter().map(|row| row.subtitle.as_deref()).collect();
+    assert_eq!(lines, [Some("Fana"), None], "no description and no place leave no line");
+    let bare = list_page(&ws, &loc, &ListQuery::new(ListedKind::Event), 0)
+        .await
+        .expect("bare page");
+    assert!(
+        bare.rows.iter().all(|row| row.subtitle.is_none()),
+        "no columns, no line"
+    );
+}
+
+#[tokio::test]
+async fn a_tag_column_reads_the_tags_by_name() {
+    let (ws, loc, _dir) = setup().await;
+    let ola = person(&ws, "Ola", "Olsen").await;
+    let tag = create_tag(&ws, &session(), "To verify".to_owned(), Provenance::default(), &[])
+        .await
+        .expect("tag");
+    tag_person(&ws, &session(), &ola, &tag, false, MutationMeta::default())
+        .await
+        .expect("tag ola");
+    let query = ListQuery {
+        columns: vec!["tags".to_owned()],
+        ..ListQuery::new(ListedKind::Person)
+    };
+
+    let page = list_page(&ws, &loc, &query, 0).await.expect("page");
+
+    assert_eq!(page.rows[0].subtitle.as_deref(), Some("To verify"));
 }

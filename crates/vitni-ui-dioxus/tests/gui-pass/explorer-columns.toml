@@ -1,0 +1,168 @@
+# #679: the Explorer's Columns and sort menus change what a row shows after its title and how the list
+# is sorted, and both are kept per kind in workspace.toml `[ui.lists.<kind>]` (ADR 0052 §7). SSR renders
+# the menus but cannot prove a tick reaches the store's query and comes back as a different row line,
+# nor that the layout is written to disk: this hides the Places list's Type column, shows Tags and moves
+# it first, sorts by name descending, quits, and reads the manifest the GUI left behind.
+description = "The Explorer's Columns and sort menus change the rows and persist per kind (#679)"
+
+[[step]]
+do = "click"
+at = { role = "listitem", text = "Places" }
+label = "rail: Places"
+
+[[step]]
+do = "shot"
+name = "defaults"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Columns", within = "explorer" }
+label = "toolbar: Columns"
+
+[[step]]
+do = "shot"
+name = "columns-open"
+
+[[step]]
+do = "key"
+chord = "Escape"
+label = "Escape from the trigger closes the Columns menu"
+
+[[step]]
+do = "shot"
+name = "columns-escaped"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Columns", within = "explorer" }
+label = "toolbar: Columns again"
+
+[[step]]
+do = "click"
+at = { id = "list-column-type" }
+label = "Columns: untick Type"
+
+[[step]]
+do = "click"
+at = { id = "list-column-tags" }
+label = "Columns: tick Tags"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Move Tags up" }
+label = "Columns: move Tags before Enclosed by"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Close", within = "explorer" }
+label = "click away: the scrim closes the Columns menu"
+
+[[step]]
+do = "shot"
+name = "columns-chosen"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Sort: ID", within = "explorer" }
+label = "toolbar: sort menu"
+
+[[step]]
+do = "click"
+at = { role = "menuitemradio", text = "Name" }
+label = "sort: Name"
+
+[[step]]
+do = "click"
+at = { role = "menuitemradio", text = "Descending" }
+label = "sort: Descending"
+
+[[step]]
+do = "shot"
+name = "sort-open"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Close", within = "explorer" }
+label = "click away: the scrim closes the sort menu"
+
+[[step]]
+do = "shot"
+name = "sorted"
+
+[[step]]
+do = "click"
+at = { role = "searchbox", within = "explorer" }
+label = "focus the list's search box, so the quit chord reaches the app"
+
+[[step]]
+do = "key"
+chord = "ctrl+q"
+label = "⌘Q with nothing dirty: quit_now runs with no confirm"
+
+[[step]]
+do = "await-exit"
+label = "wait for the GUI process to exit"
+
+[[assert]]
+kind = "present"
+shot = "defaults"
+element = { role = "option", text = "Kristiansand Municipality", within = "explorer" }
+because = "by default a place row shows its type after its title"
+
+[[assert]]
+kind = "present"
+shot = "columns-open"
+element = { role = "dialog", text = "Enclosed by" }
+because = "Columns opens the menu of the kind's columns"
+
+[[assert]]
+kind = "absent"
+shot = "columns-escaped"
+element = { role = "dialog", text = "Enclosed by" }
+because = "Escape closes the menu with focus still on its trigger"
+
+[[assert]]
+kind = "absent"
+shot = "columns-chosen"
+element = { role = "dialog", text = "Enclosed by" }
+because = "a click away closes the menu"
+
+[[assert]]
+kind = "absent"
+shot = "columns-chosen"
+element = { role = "option", text = "Kristiansand Municipality", within = "explorer" }
+because = "with Type hidden the row no longer shows it, so the query came back with other columns"
+
+[[assert]]
+kind = "present"
+shot = "sort-open"
+element = { role = "menuitemradio", text = "Enclosed by", within = "explorer" }
+because = "the sort menu stays open while a direction is picked"
+
+[[assert]]
+kind = "present"
+shot = "sorted"
+element = { role = "button", text = "Sort: Name ↓", within = "explorer" }
+because = "the sort trigger names the chosen column and direction"
+
+[[assert]]
+kind = "manifest"
+contains = "[ui.lists.place]"
+because = "a changed layout is written to workspace.toml under its kind"
+
+[[assert]]
+kind = "manifest"
+contains = '''
+columns = [
+    "tags",
+    "enclosed-by",
+]'''
+because = "the chosen columns are stored in their order"
+
+[[assert]]
+kind = "manifest"
+contains = '''
+[ui.lists.place.sort]
+column = "name"
+direction = "descending"'''
+because = "the sort is stored with its direction"

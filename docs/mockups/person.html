@@ -16,7 +16,23 @@
       <div class="list-toolbar">
         <input class="filter" placeholder="Filter people…">
         <button class="btn sm" title="Filter the list by its columns" aria-expanded="true" aria-controls="filter-editor">Filters<span class="badge">1</span></button>
-        <button class="btn sm" title="Change sort order">Sort: ID ↑</button>
+        <!-- Columns and sort (ADR 0052 §7, #679). A row shows its title, then the chosen columns' values in
+             order joined by " · ", an empty one skipped — a number with its column's name ("Children 3").
+             *Columns* ticks the kind's columns (not the title, which every row shows) and ↑/↓ orders the
+             shown ones (disabled at either end); the sort menu picks the ID order or a column (not Tags) and a direction. Both
+             menus hang full-width under the toolbar over a click-away scrim; Esc closes them. The layout
+             is kept per kind in workspace.toml [ui.lists.<kind>]. The People default is Birth, Death. -->
+        <span class="menu-anchor"><button class="btn sm" title="Choose and order the columns a row shows" aria-haspopup="dialog" aria-expanded="true">Columns</button>
+          <div class="list-menu" role="dialog" aria-label="Columns">
+            <div class="list-menu-column"><label for="list-column-birth"><input type="checkbox" id="list-column-birth" checked><span>Birth</span></label><button class="btn sm ghost" type="button" aria-label="Move Birth up" disabled>↑</button><button class="btn sm ghost" type="button" aria-label="Move Birth down">↓</button></div>
+            <div class="list-menu-column"><label for="list-column-death"><input type="checkbox" id="list-column-death" checked><span>Death</span></label><button class="btn sm ghost" type="button" aria-label="Move Death up">↑</button><button class="btn sm ghost" type="button" aria-label="Move Death down" disabled>↓</button></div>
+            <div class="list-menu-column"><label for="list-column-given"><input type="checkbox" id="list-column-given"><span>Given name</span></label></div>
+            <div class="list-menu-column"><label for="list-column-surname"><input type="checkbox" id="list-column-surname"><span>Surname</span></label></div>
+            <div class="list-menu-column"><label for="list-column-sex"><input type="checkbox" id="list-column-sex"><span>Sex</span></label></div>
+            <div class="list-menu-column"><label for="list-column-tags"><input type="checkbox" id="list-column-tags"><span>Tags</span></label></div>
+          </div>
+        </span>
+        <span class="menu-anchor"><button class="btn sm" title="Change sort order" aria-haspopup="menu" aria-expanded="false">Sort: ID ↑</button></span>
         <button class="btn sm primary" title="New person">+ New</button>
       </div>
       <!-- Filter bar (ADR 0052 §2–3, #678). The search box matches the kind's text columns and the ID;
@@ -74,7 +90,7 @@
             <div class="avatar" aria-hidden="true">JS</div>
             <div class="row-main">
               <div class="row-title">Smith, John</div>
-              <div class="row-sub">1850 – 1920 · New York</div>
+              <div class="row-sub">1850 · 1920</div>
             </div>
             <div class="row-id">I0042</div>
           </div>
@@ -82,7 +98,7 @@
             <div class="avatar" aria-hidden="true">MD</div>
             <div class="row-main">
               <div class="row-title">Doe, Mary</div>
-              <div class="row-sub">1852 – 1921 · New York</div>
+              <div class="row-sub">1852 · 1921</div>
             </div>
             <div class="row-id">I0043</div>
           </div>
@@ -90,7 +106,7 @@
             <div class="avatar" aria-hidden="true">JS</div>
             <div class="row-main">
               <div class="row-title">Smith, Jonathan</div>
-              <div class="row-sub">1878 – 1955</div>
+              <div class="row-sub">1878 · 1955</div>
             </div>
             <div class="row-id">I0061</div>
           </div>
@@ -98,7 +114,7 @@
             <div class="avatar" aria-hidden="true">ES</div>
             <div class="row-main">
               <div class="row-title">Smith, Elizabeth</div>
-              <div class="row-sub">1881 – 1960</div>
+              <div class="row-sub">1881 · 1960</div>
             </div>
             <div class="row-id">I0062</div>
           </div>
@@ -106,7 +122,6 @@
             <div class="avatar" aria-hidden="true">?</div>
             <div class="row-main">
               <div class="row-title">Smith, infant</div>
-              <div class="row-sub muted">no dates</div>
             </div>
             <div class="row-id">I0070</div>
           </div>
