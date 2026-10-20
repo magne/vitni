@@ -185,7 +185,8 @@ pub fn sort_columns(loc: &Localizer, kind: ListedKind) -> Vec<(&'static str, Str
 }
 
 /// The row line `cells` make for `columns` of `kind`: each non-empty cell's text, joined by ` · `;
-/// `None` when every cell is empty. `tags` names a tag by its id.
+/// `None` when every cell is empty. `tags` names a tag by its id; a tag it cannot name reads as
+/// unnamed, never as its id.
 #[must_use]
 pub fn cells_line<S: BuildHasher>(
     loc: &Localizer,
@@ -223,8 +224,7 @@ fn cell_text<S: BuildHasher>(
         ListCell::Tags(ids) => {
             let mut names = Vec::with_capacity(ids.len());
             for id in ids {
-                let id = id.to_string();
-                names.push(tags.get(&id).cloned().unwrap_or(id));
+                names.push(loc.display_name(tags.get(&id.to_string()).map(String::as_str)));
             }
             names.join(", ")
         }
@@ -404,6 +404,20 @@ mod tests {
             cells_line(&loc(), ListedKind::Person, &columns, &cells, &tags).as_deref(),
             Some("1850 · female · To verify")
         );
+        let unnamed = TagId::from_uuid(Uuid::from_u128(8));
+        let line = cells_line(
+            &loc(),
+            ListedKind::Person,
+            &ids(&["tags"]),
+            &[Some(ListCell::Tags(vec![unnamed]))],
+            &tags,
+        )
+        .expect("a tag cell");
+        assert!(
+            !line.contains(&unnamed.to_string()),
+            "a tag's id is never shown: {line}"
+        );
+        assert_eq!(line, loc().display_name(None));
         let family = cells_line(
             &loc(),
             ListedKind::Family,

@@ -90,6 +90,13 @@ fn the_columns_menu_ticks_the_shown_columns_in_their_order() {
         assert!(html.contains(needle), "expected {needle:?}:\n{html}");
     }
     assert_eq!(html.matches("checked").count(), 2, "two columns ticked:\n{html}");
+    let disabled: Vec<&str> = html
+        .match_indices("disabled")
+        .map(|(at, _)| &html[html[..at].rfind("aria-label=").unwrap_or(0)..at])
+        .collect();
+    assert_eq!(disabled.len(), 2, "one move at each end is disabled:\n{html}");
+    assert!(disabled[0].contains("Move Death up"), "{disabled:?}");
+    assert!(disabled[1].contains("Move Sex down"), "{disabled:?}");
 }
 
 #[test]

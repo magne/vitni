@@ -24,6 +24,20 @@ do = "shot"
 name = "columns-open"
 
 [[step]]
+do = "key"
+chord = "Escape"
+label = "Escape from the trigger closes the Columns menu"
+
+[[step]]
+do = "shot"
+name = "columns-escaped"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Columns", within = "explorer" }
+label = "toolbar: Columns again"
+
+[[step]]
 do = "click"
 at = { id = "list-column-type" }
 label = "Columns: untick Type"
@@ -100,6 +114,12 @@ kind = "present"
 shot = "columns-open"
 element = { role = "dialog", text = "Enclosed by" }
 because = "Columns opens the menu of the kind's columns"
+
+[[assert]]
+kind = "absent"
+shot = "columns-escaped"
+element = { role = "dialog", text = "Enclosed by" }
+because = "Escape closes the menu with focus still on its trigger"
 
 [[assert]]
 kind = "absent"

@@ -19,13 +19,13 @@
         <!-- Columns and sort (ADR 0052 §7, #679). A row shows its title, then the chosen columns' values in
              order joined by " · ", an empty one skipped — a number with its column's name ("Children 3").
              *Columns* ticks the kind's columns (not the title, which every row shows) and ↑/↓ orders the
-             shown ones; the sort menu picks the ID order or a column (not Tags) and a direction. Both
+             shown ones (disabled at either end); the sort menu picks the ID order or a column (not Tags) and a direction. Both
              menus hang full-width under the toolbar over a click-away scrim; Esc closes them. The layout
              is kept per kind in workspace.toml [ui.lists.<kind>]. The People default is Birth, Death. -->
         <span class="menu-anchor"><button class="btn sm" title="Choose and order the columns a row shows" aria-haspopup="dialog" aria-expanded="true">Columns</button>
           <div class="list-menu" role="dialog" aria-label="Columns">
-            <div class="list-menu-column"><label for="list-column-birth"><input type="checkbox" id="list-column-birth" checked><span>Birth</span></label><button class="btn sm ghost" type="button" aria-label="Move Birth up">↑</button><button class="btn sm ghost" type="button" aria-label="Move Birth down">↓</button></div>
-            <div class="list-menu-column"><label for="list-column-death"><input type="checkbox" id="list-column-death" checked><span>Death</span></label><button class="btn sm ghost" type="button" aria-label="Move Death up">↑</button><button class="btn sm ghost" type="button" aria-label="Move Death down">↓</button></div>
+            <div class="list-menu-column"><label for="list-column-birth"><input type="checkbox" id="list-column-birth" checked><span>Birth</span></label><button class="btn sm ghost" type="button" aria-label="Move Birth up" disabled>↑</button><button class="btn sm ghost" type="button" aria-label="Move Birth down">↓</button></div>
+            <div class="list-menu-column"><label for="list-column-death"><input type="checkbox" id="list-column-death" checked><span>Death</span></label><button class="btn sm ghost" type="button" aria-label="Move Death up">↑</button><button class="btn sm ghost" type="button" aria-label="Move Death down" disabled>↓</button></div>
             <div class="list-menu-column"><label for="list-column-given"><input type="checkbox" id="list-column-given"><span>Given name</span></label></div>
             <div class="list-menu-column"><label for="list-column-surname"><input type="checkbox" id="list-column-surname"><span>Surname</span></label></div>
             <div class="list-menu-column"><label for="list-column-sex"><input type="checkbox" id="list-column-sex"><span>Sex</span></label></div>

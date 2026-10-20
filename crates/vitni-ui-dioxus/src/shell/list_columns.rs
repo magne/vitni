@@ -3,7 +3,8 @@
 //! caller's [`ListLayout`]; the Explorer evaluates it into its query and stores it per kind.
 //!
 //! Each menu hangs under its trigger in a `.menu-anchor`, over a click-away `.menu-scrim`, like the
-//! tabstrip's new-record menu. One of the two is open at a time ([`ListMenu`]); Escape closes it.
+//! tabstrip's new-record menu. One of the two is open at a time ([`ListMenu`]); Escape closes it, from the
+//! trigger as well as from inside the menu.
 
 use dioxus::prelude::*;
 use vitni_app::SortDirection;
@@ -28,9 +29,10 @@ pub fn ColumnsMenu(layout: Signal<ListLayout>, open: Signal<Option<ListMenu>>) -
     let loc = data_loc();
     let shown = open() == Some(ListMenu::Columns);
     let toggles = column_toggles(&loc, &layout.read());
+    let last = layout.read().columns.len().saturating_sub(1);
     let label = chrome.list_columns();
     rsx! {
-        span { class: "menu-anchor",
+        span { class: "menu-anchor", onkeydown: move |event| close_on_escape(&event, open),
             button {
                 class: "btn sm",
                 r#type: "button",
@@ -46,8 +48,7 @@ pub fn ColumnsMenu(layout: Signal<ListLayout>, open: Signal<Option<ListMenu>>) -
                     class: "list-menu",
                     role: "dialog",
                     aria_label: "{label}",
-                    onkeydown: move |event| close_on_escape(&event, open),
-                    for toggle in toggles {
+                    for (index, toggle) in toggles.into_iter().enumerate() {
                         div { key: "{toggle.id}", class: "list-menu-column",
                             label { r#for: "list-column-{toggle.id}",
                                 input {
@@ -59,8 +60,20 @@ pub fn ColumnsMenu(layout: Signal<ListLayout>, open: Signal<Option<ListMenu>>) -
                                 span { "{toggle.label}" }
                             }
                             if toggle.shown {
-                                MoveButton { layout, column: toggle.id, label: toggle.label.clone(), earlier: true }
-                                MoveButton { layout, column: toggle.id, label: toggle.label.clone(), earlier: false }
+                                MoveButton {
+                                    layout,
+                                    column: toggle.id,
+                                    label: toggle.label.clone(),
+                                    earlier: true,
+                                    disabled: index == 0,
+                                }
+                                MoveButton {
+                                    layout,
+                                    column: toggle.id,
+                                    label: toggle.label.clone(),
+                                    earlier: false,
+                                    disabled: index == last,
+                                }
                             }
                         }
                     }
@@ -70,15 +83,22 @@ pub fn ColumnsMenu(layout: Signal<ListLayout>, open: Signal<Option<ListMenu>>) -
     }
 }
 
-/// One shown column's move-up or move-down button.
+/// One shown column's move-up or move-down button, disabled at that end of the shown columns.
 #[component]
-fn MoveButton(layout: Signal<ListLayout>, column: &'static str, label: String, earlier: bool) -> Element {
+fn MoveButton(
+    layout: Signal<ListLayout>,
+    column: &'static str,
+    label: String,
+    earlier: bool,
+    disabled: bool,
+) -> Element {
     let chrome = use_context::<ChromeCtx>().0;
     rsx! {
         button {
             class: "btn sm ghost",
             r#type: "button",
             aria_label: "{chrome.list_column_move(&label, earlier)}",
+            disabled,
             onclick: move |_| layout.write().shift(column, earlier),
             if earlier { "↑" } else { "↓" }
         }
@@ -101,7 +121,7 @@ pub fn SortMenu(layout: Signal<ListLayout>, open: Signal<Option<ListMenu>>) -> E
     let sorted_by = sort.as_ref().map(|sort| sort.column.clone());
     let direction = sort.as_ref().map(|sort| sort.direction);
     rsx! {
-        span { class: "menu-anchor",
+        span { class: "menu-anchor", onkeydown: move |event| close_on_escape(&event, open),
             button {
                 class: "btn sm",
                 r#type: "button",
@@ -117,7 +137,6 @@ pub fn SortMenu(layout: Signal<ListLayout>, open: Signal<Option<ListMenu>>) -> E
                     class: "list-menu",
                     role: "menu",
                     aria_label: "{chrome.sort_order_title()}",
-                    onkeydown: move |event| close_on_escape(&event, open),
                     SortItem {
                         label: chrome.sort_by_id(),
                         checked: sorted_by.is_none(),
@@ -182,10 +201,12 @@ fn Scrim(open: Signal<Option<ListMenu>>) -> Element {
     }
 }
 
-/// Closes the open menu on Escape.
+/// Closes the open menu on Escape, and keeps the key from the shell dispatcher, which would close an
+/// overlay instead; with no menu open the key goes on.
 fn close_on_escape(event: &KeyboardEvent, mut open: Signal<Option<ListMenu>>) {
-    if event.key() == Key::Escape {
+    if event.key() == Key::Escape && open.peek().is_some() {
         event.prevent_default();
+        event.stop_propagation();
         open.set(None);
     }
 }
