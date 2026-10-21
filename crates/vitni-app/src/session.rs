@@ -15,6 +15,7 @@ use vitni_core::provenance::{Agent, AgentKind, AssertionMeta, EventContext, Evid
 
 use crate::aggregates::for_each_aggregate;
 use crate::origin_gate::{DryRun, PendingRun};
+use crate::saved_search::SavedSearchId;
 use crate::use_case::Provenance;
 
 /// Per-invocation context carrying the operator identity and the impure id/clock sources.
@@ -102,6 +103,12 @@ impl Session {
     #[must_use]
     pub fn new_assertion_id(&self) -> AssertionId {
         AssertionId::from_uuid(Uuid::now_v7())
+    }
+
+    /// Mints the id of a new saved search (UUID v7, ADR 0052 §8).
+    #[must_use]
+    pub fn new_saved_search_id(&self) -> SavedSearchId {
+        SavedSearchId::from_uuid(Uuid::now_v7())
     }
 
     /// Mints the lineage id of a new file-lineage dataset (`gedcom:<uuid>` — ADR 0037 §3).

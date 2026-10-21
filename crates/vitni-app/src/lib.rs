@@ -174,8 +174,8 @@ pub use import_run::{
 };
 pub use linked_records::{LinkedRecord, LinkedRecords, OriginRef, linked_records, record_url, unlink_person};
 pub use list_query::{
-    FilterOp, FilterValue, ListFilter, ListQuery, ListQueryError, ListSort, ListedPage, query_list, record_target,
-    reference_id,
+    FilterOp, FilterValue, ListFilter, ListQuery, ListQueryError, ListSort, ListedPage, ReferenceLabel, query_list,
+    record_target, reference_id, reference_label,
 };
 pub use map_source::{MapBasemap, MapSource, google_viewport_copyright, refresh_map_attribution, resolve_map_source};
 pub use match_queue::{
@@ -241,6 +241,12 @@ pub use research_note::{
     create_research_note, list_research_notes, list_research_notes_about, list_research_notes_for_subject,
     list_research_notes_page, remove_subject_from_research_note, set_research_note_body,
     set_restrictions as set_research_note_restrictions, show_research_note, tag_research_note,
+};
+pub use saved_search::{
+    ClauseGap, SavedSearchError, SavedSearchId, SavedSearchList, SavedSearchResolution, SavedSearchSummary,
+    StaleClause, UnreadableSavedSearch, delete_saved_search, list_saved_searches, rename_saved_search,
+    resolve_saved_search, resolve_saved_search_id, runnable_saved_query, same_saved_name, save_saved_search,
+    update_saved_search,
 };
 pub use secret_env::require_secret_env;
 pub use session::Session;

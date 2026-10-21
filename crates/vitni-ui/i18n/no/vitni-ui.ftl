@@ -1618,3 +1618,9 @@ similar-hint = Kanskje den samme som { $record } ({ $score } %)
 similar-draft-side = Ny
 similar-panel-title = Lignende poster
 similar-none = Fant ingen lignende poster.
+
+err-saved-search-empty-name = et lagret søk trenger et navn
+err-saved-search-duplicate-name = et lagret søk med navnet `{ $name }` finnes allerede
+err-saved-search-not-found = fant ikke noe lagret søk `{ $reference }`
+err-saved-search-removed = det lagrede søket finnes ikke lenger
+err-saved-search-broken = det lagrede søket `{ $name }` kan ikke kjøres

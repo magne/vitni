@@ -298,7 +298,7 @@ async fn a_query_returns_typed_cells_for_its_columns() {
     let (ws, _dir) = workspace().await;
     person(&ws, "Ola", "Olsen", Some(1790)).await;
     let query = ListQuery {
-        columns: vec!["name".to_owned(), "birth".to_owned()],
+        columns: Some(vec!["name".to_owned(), "birth".to_owned()]),
         ..ListQuery::new(ListedKind::Person)
     };
     let window = ListWindow::Offset { offset: 0, limit: None };
@@ -318,7 +318,7 @@ async fn a_page_carries_each_rows_cells_under_its_human_id() {
     let ola = person(&ws, "Ola", "Olsen", Some(1790)).await;
     let per = person(&ws, "Per", "Hansen", None).await;
     let query = ListQuery {
-        columns: vec!["surname".to_owned(), "birth".to_owned()],
+        columns: Some(vec!["surname".to_owned(), "birth".to_owned()]),
         ..ListQuery::new(ListedKind::Person)
     };
 
@@ -345,7 +345,7 @@ async fn a_tag_page_carries_its_cells_under_the_tag_id() {
         .await
         .expect("tag");
     let query = ListQuery {
-        columns: vec!["name".to_owned()],
+        columns: Some(vec!["name".to_owned()]),
         ..ListQuery::new(ListedKind::Tag)
     };
 
@@ -367,7 +367,7 @@ fn a_query_serializes_by_column_and_operator_name() {
             column: "birth".to_owned(),
             direction: SortDirection::Descending,
         }),
-        columns: vec!["birth".to_owned()],
+        columns: Some(vec!["birth".to_owned()]),
         ..persons(vec![filter(
             "sex",
             FilterOp::IsAnyOf,

@@ -52,6 +52,7 @@ mod person;
 mod place;
 mod repository;
 mod research_note;
+mod saved_search;
 mod similar;
 mod source;
 mod tag;
@@ -529,6 +530,7 @@ impl Localizer {
             AppError::MatchData(data) => self.match_data_error(data),
             AppError::Backup(backup) => self.backup_error(backup),
             AppError::ListQuery(query) => self.list_query_error(query),
+            AppError::SavedSearch(error) => self.saved_search_error(error),
             AppError::Db(db) => self.db_error(db),
         }
     }

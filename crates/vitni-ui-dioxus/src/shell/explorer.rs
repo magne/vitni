@@ -110,7 +110,7 @@ fn ExplorerList(category: Category) -> Element {
             search: search(),
             filters: filters.read().iter().map(|active| active.filter.clone()).collect(),
             sort: layout.sort.clone(),
-            columns: layout.columns.clone(),
+            columns: Some(layout.columns.clone()),
             ..ListQuery::new(kind)
         }
     });

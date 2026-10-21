@@ -1621,3 +1621,9 @@ similar-hint = Possibly the same as { $record } ({ $score }%)
 similar-draft-side = New
 similar-panel-title = Similar records
 similar-none = No similar records found.
+
+err-saved-search-empty-name = a saved search needs a name
+err-saved-search-duplicate-name = a saved search named `{ $name }` already exists
+err-saved-search-not-found = no saved search `{ $reference }`
+err-saved-search-removed = the saved search no longer exists
+err-saved-search-broken = the saved search `{ $name }` cannot run

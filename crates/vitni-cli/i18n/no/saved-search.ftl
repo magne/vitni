@@ -1,0 +1,9 @@
+err-saved-search-empty-name = et lagret søk trenger et navn
+err-saved-search-duplicate-name = et lagret søk med navnet `{ $name }` finnes allerede
+err-saved-search-not-found = fant ikke noe lagret søk `{ $reference }`
+err-saved-search-removed = det lagrede søket finnes ikke lenger
+err-saved-search-broken = det lagrede søket `{ $name }` kan ikke kjøres
+err-saved-search-broken-clause = vilkår { $position } (`{ $clause }`): { $reason }
+err-saved-search-broken-clause-nameless = vilkår { $position }: nevner verken kolonne eller operator
+err-saved-search-broken-clause-no-column = vilkår { $position } (`{ $clause }`): nevner ingen kolonne
+err-saved-search-broken-clause-no-operator = vilkår { $position } (`{ $clause }`): nevner ingen operator

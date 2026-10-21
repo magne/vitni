@@ -16,7 +16,7 @@ use vitni_core::dna_match::MatchStatus;
 use vitni_core::enums::{EventType, NoteType, PlaceType, RepositoryType, Sex};
 use vitni_core::provenance::Confidence;
 use vitni_db::{
-    ColumnType, ListCell, ListPage, ListPredicate, ListResult, ListSpec, ListTest, ListWindow, ListedKind,
+    ColumnType, ListCell, ListColumn, ListPage, ListPredicate, ListResult, ListSpec, ListTest, ListWindow, ListedKind,
     SortDirection, choice_name,
 };
 
@@ -122,7 +122,7 @@ impl std::fmt::Display for FilterOp {
 /// A filter's value; which shape an operator needs follows from it (`between` on a date takes a
 /// [`FilterValue::DateRange`]).
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
-#[serde(tag = "type", content = "value", rename_all = "kebab-case")]
+#[serde(tag = "type", content = "value", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum FilterValue {
     /// No value: `is-empty`.
     #[default]
@@ -153,6 +153,7 @@ pub enum FilterValue {
 
 /// One filter clause: a column, an operator, and the value it compares with.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ListFilter {
     /// The column id.
     pub column: String,
@@ -187,9 +188,10 @@ pub struct ListQuery {
     /// The sort; `None` orders by `human_id`.
     #[serde(default)]
     pub sort: Option<ListSort>,
-    /// The column ids each row returns, in order.
+    /// The column ids each row returns, in order. `None` names none, leaving a frontend its own default
+    /// columns; `Some` of an empty list is a deliberate choice to show none. Both return no cells.
     #[serde(default)]
-    pub columns: Vec<String>,
+    pub columns: Option<Vec<String>>,
 }
 
 impl ListQuery {
@@ -201,7 +203,7 @@ impl ListQuery {
             search: String::new(),
             filters: Vec::new(),
             sort: None,
-            columns: Vec::new(),
+            columns: None,
         }
     }
 }
@@ -315,13 +317,7 @@ pub async fn reference_id(
         column: column.to_owned(),
         value: reference.to_owned(),
     };
-    let ty = kind
-        .column(column)
-        .ok_or_else(|| ListQueryError::UnknownColumn {
-            kind,
-            column: column.to_owned(),
-        })?
-        .ty;
+    let ty = catalogue_column(kind, column)?.ty;
     let store = workspace.store();
     let found = match (ty, record_target(kind, column)) {
         (ColumnType::Tags, _) => {
@@ -362,6 +358,80 @@ pub async fn reference_id(
     Ok(found
         .or_else(|| uuid::Uuid::parse_str(reference).ok().map(|id| id.to_string()))
         .ok_or_else(unknown)?)
+}
+
+/// What a stored record id names, so a frontend shows a name and never an id (ADR 0052 §3).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReferenceLabel {
+    /// The record's `human_id`.
+    pub human_id: String,
+    /// The record's title; `None` when it has none, so a frontend does not repeat the `human_id`.
+    pub title: Option<String>,
+}
+
+/// The record kinds a reference column can name, each with its own title lookup.
+#[derive(Clone, Copy)]
+enum Lookup {
+    Person,
+    Place,
+    Source,
+    DnaTest,
+}
+
+/// The label of the record that `id` names in `kind`'s `column`; `None` when nothing has that id
+/// (a deleted record), or the column holds no record reference.
+///
+/// # Errors
+///
+/// [`AppError::ListQuery`] for a column `kind` lacks, or a store error.
+pub async fn reference_label(
+    workspace: &Workspace,
+    kind: ListedKind,
+    column: &str,
+    id: &str,
+) -> Result<Option<ReferenceLabel>, AppError> {
+    catalogue_column(kind, column)?;
+    let store = workspace.store();
+    let Some(target) = record_target(kind, column) else {
+        return Ok(None);
+    };
+    let (aggregate_type, lookup) = match target {
+        ListedKind::Person => ("person", Lookup::Person),
+        ListedKind::Place => ("place", Lookup::Place),
+        ListedKind::Source => ("source", Lookup::Source),
+        ListedKind::DnaTest => ("dna_test", Lookup::DnaTest),
+        ListedKind::Family
+        | ListedKind::Event
+        | ListedKind::Citation
+        | ListedKind::Repository
+        | ListedKind::Media
+        | ListedKind::Note
+        | ListedKind::ResearchNote
+        | ListedKind::DnaMatch
+        | ListedKind::Tag => return Ok(None),
+    };
+    let Some(human_id) = store.human_id_of(aggregate_type, id).await? else {
+        return Ok(None);
+    };
+    let title = match lookup {
+        Lookup::Person => store
+            .find_person(&human_id)
+            .await?
+            .and_then(|view| view.names().first().map(|name| name.display())),
+        Lookup::Place => store
+            .find_place(&human_id)
+            .await?
+            .and_then(|view| view.names().first().map(|name| name.text.clone())),
+        Lookup::Source => store
+            .find_source(&human_id)
+            .await?
+            .and_then(|view| view.title().map(str::to_owned)),
+        Lookup::DnaTest => store
+            .find_dna_test(&human_id)
+            .await?
+            .and_then(|view| view.kit_id().map(str::to_owned)),
+    };
+    Ok(Some(ReferenceLabel { human_id, title }))
 }
 
 /// The kind a record column of `kind` refers to; `None` for any other column.
@@ -462,28 +532,35 @@ pub(crate) fn in_order<V>(views: Vec<V>, ids: &[String], id: impl Fn(&V) -> Opti
     ordered
 }
 
+/// Checks `query` against its kind's catalogue without running it.
+///
+/// # Errors
+///
+/// [`ListQueryError`] naming the first clause, sort or column the catalogue cannot take.
+pub(crate) fn validate_query(query: &ListQuery) -> Result<(), ListQueryError> {
+    spec(
+        query,
+        ListWindow::Offset {
+            offset: 0,
+            limit: Some(0),
+        },
+    )
+    .map(drop)
+}
+
 /// The store's form of `query`, checked against its kind's catalogue. A tag or record id naming nothing
 /// needs no check: no row links to it, so it matches nothing, and *has none of* it keeps everyone
 /// (ADR 0052 §10).
 fn spec(query: &ListQuery, window: ListWindow) -> Result<ListSpec, ListQueryError> {
     let kind = query.kind;
-    let column = |id: &str| {
-        kind.column(id).ok_or_else(|| ListQueryError::UnknownColumn {
-            kind,
-            column: id.to_owned(),
-        })
-    };
+    let column = |id: &str| catalogue_column(kind, id);
     let mut filters = Vec::with_capacity(query.filters.len());
     for filter in &query.filters {
-        let ty = column(&filter.column)?.ty;
-        filters.push(ListPredicate {
-            column: filter.column.clone(),
-            test: predicate(kind, filter, ty)?,
-        });
+        filters.push(check_filter(kind, filter)?);
     }
     let sort = match &query.sort {
         Some(sort) => {
-            if column(&sort.column)?.ty == ColumnType::Tags {
+            if !sortable(kind, &sort.column)? {
                 return Err(ListQueryError::Unsortable {
                     column: sort.column.clone(),
                 });
@@ -495,7 +572,8 @@ fn spec(query: &ListQuery, window: ListWindow) -> Result<ListSpec, ListQueryErro
         }
         None => None,
     };
-    for id in &query.columns {
+    let columns = query.columns.clone().unwrap_or_default();
+    for id in &columns {
         column(id)?;
     }
     let search = query.search.trim();
@@ -504,8 +582,30 @@ fn spec(query: &ListQuery, window: ListWindow) -> Result<ListSpec, ListQueryErro
         search: (!search.is_empty()).then(|| search.to_owned()),
         filters,
         sort,
-        columns: query.columns.clone(),
+        columns,
         window,
+    })
+}
+
+/// Whether `kind`'s catalogue column `id` can be sorted on.
+pub(crate) fn sortable(kind: ListedKind, id: &str) -> Result<bool, ListQueryError> {
+    Ok(catalogue_column(kind, id)?.ty != ColumnType::Tags)
+}
+
+/// The column `id` of `kind`'s catalogue.
+fn catalogue_column(kind: ListedKind, id: &str) -> Result<ListColumn, ListQueryError> {
+    kind.column(id).ok_or_else(|| ListQueryError::UnknownColumn {
+        kind,
+        column: id.to_owned(),
+    })
+}
+
+/// The store's form of one filter, checked against `kind`'s catalogue.
+pub(crate) fn check_filter(kind: ListedKind, filter: &ListFilter) -> Result<ListPredicate, ListQueryError> {
+    let ty = catalogue_column(kind, &filter.column)?.ty;
+    Ok(ListPredicate {
+        column: filter.column.clone(),
+        test: predicate(kind, filter, ty)?,
     })
 }
 

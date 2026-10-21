@@ -295,7 +295,7 @@ struct Line<'a> {
 
 /// The tag names a tag column's cells are read by — none when the query shows no tag column.
 async fn tag_names(workspace: &Workspace, query: &ListQuery) -> Result<HashMap<String, String>, AppError> {
-    let shows_tags = query.columns.iter().any(|id| {
+    let shows_tags = query.columns.iter().flatten().any(|id| {
         query
             .kind
             .column(id)
@@ -317,10 +317,15 @@ fn paged<T>(page: &ListedPage<T>, offset: usize, line: &Line<'_>, row: impl Fn(&
     let mut rows = Vec::with_capacity(page.items.len());
     for item in &page.items {
         let mut built = row(item);
-        built.subtitle = page
-            .cells
-            .get(&built.id)
-            .and_then(|cells| cells_line(line.loc, line.query.kind, &line.query.columns, cells, &line.tags));
+        built.subtitle = page.cells.get(&built.id).and_then(|cells| {
+            cells_line(
+                line.loc,
+                line.query.kind,
+                line.query.columns.as_deref().unwrap_or_default(),
+                cells,
+                &line.tags,
+            )
+        });
         rows.push(built);
     }
     RowsPage {

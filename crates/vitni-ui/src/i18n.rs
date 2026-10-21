@@ -26,7 +26,7 @@ use vitni_app::{
     DbError, DnaGenomeBuild, DnaProvider, DnaTestType, EvidenceKind, EvidenceLevel, FactType, FilterOp,
     GenealogicalDate, GenealogicalDateBody, InformationKind, Kinship, ListQueryError, MatchBand, MatchDataError,
     MatchStatus, NameType, NoteType, OperatorKind, PackError, ParticipantRole, RecordRole, RecordValue, RepositoryType,
-    Sex, SourceMediaType, SourceQuality, SuretyLabelOverrides, UsingKind, config,
+    SavedSearchError, Sex, SourceMediaType, SourceQuality, SuretyLabelOverrides, UsingKind, config,
 };
 
 use crate::action::{ActionLabel, Affordance};
@@ -2931,6 +2931,7 @@ impl Localizer {
             AppError::Dataset(dataset) => self.dataset_error(dataset),
             AppError::MatchData(data) => self.match_data_error(data),
             AppError::ListQuery(query) => self.list_query_error(query),
+            AppError::SavedSearch(error) => self.saved_search_error(error),
             AppError::Db(db) => self.db_error(db),
         }
     }
@@ -3078,6 +3079,22 @@ impl Localizer {
                 expected = expected.as_str(),
                 found = found.as_str()
             ),
+        }
+    }
+
+    fn saved_search_error(&self, error: &SavedSearchError) -> String {
+        match error {
+            SavedSearchError::EmptyName => fl!(self.loader, "err-saved-search-empty-name"),
+            SavedSearchError::DuplicateName { name } => {
+                fl!(self.loader, "err-saved-search-duplicate-name", name = name.clone())
+            }
+            SavedSearchError::NotFound { reference } => {
+                fl!(self.loader, "err-saved-search-not-found", reference = reference.clone())
+            }
+            SavedSearchError::Removed => fl!(self.loader, "err-saved-search-removed"),
+            SavedSearchError::Broken { name, .. } => {
+                fl!(self.loader, "err-saved-search-broken", name = name.clone())
+            }
         }
     }
 
