@@ -7,7 +7,7 @@ use vitni_app::{
     list_notes_page, set_note_restrictions, set_note_text, set_note_type, show_note, tag_note,
 };
 
-use crate::args::{ListArgs, NoteTypeArg, RestrictionsArgs};
+use crate::args::{ListArgs, NoteTypeArg, RestrictionsArgs, narrows};
 use crate::commands::similar::hint_similar;
 use crate::i18n::Localizer;
 
@@ -175,7 +175,7 @@ async fn list(workspace: &Workspace, window: &ListArgs, localizer: &Localizer) -
     if notes.is_empty() {
         println!(
             "{}",
-            localizer.empty_page(page, window.narrows(), localizer.note_list_empty())
+            localizer.empty_page(page, narrows(&query), localizer.note_list_empty())
         );
         return Ok(());
     }

@@ -19,6 +19,7 @@ pub mod plugin;
 pub mod repository;
 pub mod research_note;
 pub mod review;
+pub mod saved_search;
 pub mod similar;
 pub mod source;
 pub mod tag;

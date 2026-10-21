@@ -9,7 +9,7 @@ use vitni_app::{
     show_source, tag_source,
 };
 
-use crate::args::{ListArgs, RestrictionsArgs, SourceMediaTypeArg};
+use crate::args::{ListArgs, RestrictionsArgs, SourceMediaTypeArg, narrows};
 use crate::commands::similar::hint_similar;
 use crate::i18n::Localizer;
 
@@ -272,7 +272,7 @@ async fn list(workspace: &Workspace, window: &ListArgs, localizer: &Localizer) -
     if sources.is_empty() {
         println!(
             "{}",
-            localizer.empty_page(page, window.narrows(), localizer.source_list_empty())
+            localizer.empty_page(page, narrows(&query), localizer.source_list_empty())
         );
         return Ok(());
     }

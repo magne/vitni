@@ -8,7 +8,7 @@ use vitni_app::{
     set_media_checksum, set_media_file_path, set_media_restrictions, set_media_web_path, show_media, tag_media,
 };
 
-use crate::args::{ListArgs, RestrictionsArgs};
+use crate::args::{ListArgs, RestrictionsArgs, narrows};
 use crate::commands::similar::hint_similar;
 use crate::i18n::Localizer;
 
@@ -240,7 +240,7 @@ async fn list(workspace: &Workspace, window: &ListArgs, localizer: &Localizer) -
     if media.is_empty() {
         println!(
             "{}",
-            localizer.empty_page(page, window.narrows(), localizer.media_list_empty())
+            localizer.empty_page(page, narrows(&query), localizer.media_list_empty())
         );
         return Ok(());
     }

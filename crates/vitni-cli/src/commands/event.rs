@@ -8,7 +8,7 @@ use vitni_app::{
     list_events_page, set_event_description, set_event_restrictions, set_event_type, show_event, tag_event,
 };
 
-use crate::args::{EventTypeArg, ListArgs, RestrictionsArgs};
+use crate::args::{EventTypeArg, ListArgs, RestrictionsArgs, narrows};
 use crate::commands::similar::hint_similar;
 use crate::i18n::Localizer;
 
@@ -247,7 +247,7 @@ async fn list(workspace: &Workspace, window: &ListArgs, localizer: &Localizer) -
     if events.is_empty() {
         println!(
             "{}",
-            localizer.empty_page(page, window.narrows(), localizer.event_list_empty())
+            localizer.empty_page(page, narrows(&query), localizer.event_list_empty())
         );
         return Ok(());
     }

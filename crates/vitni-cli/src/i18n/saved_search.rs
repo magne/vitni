@@ -1,11 +1,53 @@
 //! Localized text for [`SavedSearchError`] (ADR 0052 §8).
 
 use i18n_embed_fl::fl;
-use vitni_app::{ClauseGap, SavedSearchError, StaleClause};
+use vitni_app::{ClauseGap, SavedSearchError, StaleClause, UnreadableSavedSearch};
 
 use super::Localizer;
 
 impl Localizer {
+    /// `Saved Olsens`.
+    #[must_use]
+    pub fn saved_search_saved(&self, name: &str) -> String {
+        fl!(self.loader, "saved-search-saved", name = name)
+    }
+
+    /// `Deleted Olsens`.
+    #[must_use]
+    pub fn saved_search_deleted(&self, name: &str) -> String {
+        fl!(self.loader, "saved-search-deleted", name = name)
+    }
+
+    /// What `saved-search list` prints when there is nothing to list.
+    #[must_use]
+    pub fn saved_search_list_empty(&self) -> String {
+        fl!(self.loader, "saved-search-list-empty")
+    }
+
+    /// One saved search: its name and the kind it lists.
+    #[must_use]
+    pub fn saved_search_line(&self, name: &str, kind: &str) -> String {
+        fl!(self.loader, "saved-search-line", name = name, kind = kind)
+    }
+
+    /// One entry this version cannot read, by its position in `[[saved_searches]]`.
+    #[must_use]
+    pub fn saved_search_unreadable_line(&self, entry: &UnreadableSavedSearch) -> String {
+        let Some(name) = &entry.name else {
+            return fl!(
+                self.loader,
+                "saved-search-unreadable-line-nameless",
+                position = entry.position
+            );
+        };
+        fl!(
+            self.loader,
+            "saved-search-unreadable-line",
+            position = entry.position,
+            name = name.clone()
+        )
+    }
+
     pub(super) fn saved_search_error(&self, error: &SavedSearchError) -> String {
         match error {
             SavedSearchError::EmptyName => fl!(self.loader, "err-saved-search-empty-name"),

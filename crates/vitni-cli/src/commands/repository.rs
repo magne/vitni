@@ -8,7 +8,7 @@ use vitni_app::{
     set_repository_name, set_repository_restrictions, set_repository_type, show_repository, tag_repository,
 };
 
-use crate::args::{ListArgs, RepositoryTypeArg, RestrictionsArgs};
+use crate::args::{ListArgs, RepositoryTypeArg, RestrictionsArgs, narrows};
 use crate::commands::similar::hint_similar;
 use crate::i18n::Localizer;
 
@@ -242,7 +242,7 @@ async fn list(workspace: &Workspace, window: &ListArgs, localizer: &Localizer) -
     if repositories.is_empty() {
         println!(
             "{}",
-            localizer.empty_page(page, window.narrows(), localizer.repository_list_empty())
+            localizer.empty_page(page, narrows(&query), localizer.repository_list_empty())
         );
         return Ok(());
     }
