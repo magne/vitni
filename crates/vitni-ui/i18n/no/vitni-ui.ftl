@@ -852,6 +852,16 @@ filter-op-has-all-of = har alle
 filter-op-has-none-of = har ingen av
 filter-chip = { $column } { $op } { $value }
 filter-chip-bare = { $column } { $op }
+filter-deleted-tag = slettet etikett
+filter-deleted-record = slettet post
+filter-stale-unknown-column = denne kolonnen finnes ikke lenger
+filter-stale-unknown-operator = denne operatoren er ikke tilgjengelig for kolonnen
+filter-stale-wrong-value = verdien passer ikke til operatoren
+filter-stale-unknown-choice = denne verdien finnes ikke for kolonnen
+filter-stale-clause = { $clause } ({ $reason })
+filter-stale-clause-nameless = vilkåret nevner verken kolonne eller operator
+filter-stale-no-column = vilkåret nevner ingen kolonne
+filter-stale-no-operator = vilkåret nevner ingen operator
 # A number cell in an Explorer row reads with its column: `Children 3` (ADR 0052 §7)
 list-cell-number = { $column } { $value }
 filter-range = { $from } – { $to }

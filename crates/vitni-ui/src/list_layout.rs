@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 use std::hash::BuildHasher;
 
-use vitni_app::{ColumnType, ListCell, ListPreferences, ListSort, ListedKind, SortDirection};
+use vitni_app::{ColumnType, ListCell, ListPreferences, ListQuery, ListSort, ListedKind, SortDirection};
 
 use crate::i18n::Localizer;
 use crate::view_model::choice_options;
@@ -128,6 +128,35 @@ impl ListLayout {
     }
 }
 
+/// The layout a saved search brings to the list: its columns and sort where it stores them, the
+/// kind's defaults (the default columns, the `human_id` order) where it does not, so applying one
+/// restores what was saved whatever the list showed before. Every id is checked against the
+/// catalogue, so a retired column drops. A sort the catalogue cannot take is dropped when the saved
+/// search is resolved and falls back to the `human_id` order.
+#[must_use]
+pub fn saved_layout(query: &ListQuery) -> ListLayout {
+    let preferences = ListPreferences {
+        columns: query.columns.clone(),
+        sort: query.sort.clone(),
+    };
+    ListLayout::resolve(query.kind, Some(&preferences))
+}
+
+/// The preferences to write for `current`, or `None` when nothing needs writing: `current` is what is
+/// stored already, or is the layout a saved search applied (which belongs to the saved search, not to
+/// the list's own preferences).
+#[must_use]
+pub fn layout_to_store(
+    current: &ListLayout,
+    stored: &ListLayout,
+    applied: Option<&ListLayout>,
+) -> Option<ListPreferences> {
+    if current == stored || applied == Some(current) {
+        return None;
+    }
+    Some(current.preferences())
+}
+
 /// Whether `kind` can be sorted by `column`: every catalogue column but a tag set.
 fn is_sortable(kind: ListedKind, column: &str) -> bool {
     kind.column(column).is_some_and(|found| found.ty != ColumnType::Tags)
@@ -238,9 +267,14 @@ mod tests {
     use std::collections::HashMap;
 
     use uuid::Uuid;
-    use vitni_app::{DateParts, ListCell, ListPreferences, ListSort, ListedKind, SortDirection, TagId, gregorian_date};
+    use vitni_app::{
+        DateParts, ListCell, ListPreferences, ListQuery, ListSort, ListedKind, SortDirection, TagId, gregorian_date,
+    };
 
-    use super::{ColumnToggle, ListLayout, cells_line, column_toggles, default_columns, sort_columns};
+    use super::{
+        ColumnToggle, ListLayout, cells_line, column_toggles, default_columns, layout_to_store, saved_layout,
+        sort_columns,
+    };
     use crate::i18n::Localizer;
 
     fn loc() -> Localizer {
@@ -444,5 +478,78 @@ mod tests {
             cells_line(&loc(), ListedKind::Person, &columns, &[None, None], &tags),
             None
         );
+    }
+
+    fn person_layout(columns: &[&str], sort: Option<ListSort>) -> ListLayout {
+        ListLayout {
+            kind: ListedKind::Person,
+            columns: ids(columns),
+            sort,
+        }
+    }
+
+    #[test]
+    fn a_layout_equal_to_the_stored_one_is_not_written() {
+        let stored = person_layout(&["birth", "death"], None);
+        let applied = person_layout(&["sex"], None);
+        assert_eq!(layout_to_store(&stored.clone(), &stored, Some(&applied)), None);
+        assert_eq!(layout_to_store(&stored.clone(), &stored, None), None);
+    }
+
+    #[test]
+    fn a_layout_a_saved_search_applied_is_not_written() {
+        let stored = person_layout(&["birth", "death"], None);
+        let applied = person_layout(&["sex"], Some(sort("birth", SortDirection::Descending)));
+        assert_eq!(layout_to_store(&applied.clone(), &stored, Some(&applied)), None);
+    }
+
+    #[test]
+    fn a_layout_the_user_changed_after_applying_is_written() {
+        let stored = person_layout(&["birth", "death"], None);
+        let applied = person_layout(&["sex"], None);
+        let current = person_layout(&["sex", "death"], None);
+        assert_eq!(
+            layout_to_store(&current, &stored, Some(&applied)),
+            Some(current.preferences())
+        );
+        assert_eq!(layout_to_store(&current, &stored, None), Some(current.preferences()));
+    }
+
+    #[test]
+    fn a_saved_query_without_columns_or_sort_brings_the_kind_defaults() {
+        let query = ListQuery::new(ListedKind::Person);
+        assert_eq!(saved_layout(&query), ListLayout::resolve(ListedKind::Person, None));
+    }
+
+    #[test]
+    fn a_saved_query_columns_and_sort_come_through_minus_retired_ids() {
+        let query = ListQuery {
+            columns: Some(ids(&["death", "eye-colour", "name"])),
+            sort: Some(sort("birth", SortDirection::Descending)),
+            ..ListQuery::new(ListedKind::Person)
+        };
+        let layout = saved_layout(&query);
+        assert_eq!(layout.columns, ids(&["death"]), "unknown and title columns dropped");
+        assert_eq!(layout.sort, Some(sort("birth", SortDirection::Descending)));
+    }
+
+    #[test]
+    fn a_search_saved_with_every_column_hidden_comes_back_with_none() {
+        let hidden = person_layout(&[], None);
+        let query = ListQuery {
+            columns: Some(hidden.columns.clone()),
+            ..ListQuery::new(ListedKind::Person)
+        };
+        assert_eq!(saved_layout(&query).columns, hidden.columns);
+    }
+
+    #[test]
+    fn a_saved_sort_the_catalogue_cannot_take_falls_back_to_no_sort() {
+        let query = ListQuery {
+            columns: Some(ids(&["death"])),
+            sort: Some(sort("tags", SortDirection::Ascending)),
+            ..ListQuery::new(ListedKind::Person)
+        };
+        assert_eq!(saved_layout(&query).sort, None);
     }
 }

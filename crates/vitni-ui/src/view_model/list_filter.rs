@@ -8,16 +8,17 @@
 //! so editing a chip reopens exactly what was typed and a tag or record shows by the name it was picked
 //! by, while the query holds only its id (ADR 0052 §3).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use vitni_app::{
     Calendar, ColumnType, DateParts, DnaProvider, DnaTestType, EventType, FilterOp, FilterValue, GenealogicalDate,
-    ListFilter, ListedKind, MatchStatus, NoteType, RepositoryType, Sex, choice_key, gregorian_date,
+    ListFilter, ListedKind, MatchStatus, NoteType, RepositoryType, SavedSearchId, SavedSearchList, Sex,
+    UnreadableSavedSearch, choice_key, gregorian_date, same_saved_name,
 };
 
 use crate::i18n::Localizer;
 use crate::presentation::ConfidenceLevel;
-use crate::view_model::{NEW_PLACE_TYPES, parse_date_point};
+use crate::view_model::{DateDraft, NEW_PLACE_TYPES, parse_date_point};
 
 /// One catalogue column, labelled, as the editor's column select offers it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -65,6 +66,8 @@ pub struct FilterDraft {
     pub values: Vec<String>,
     /// The name each chosen tag or record id was picked by.
     pub labels: BTreeMap<String, String>,
+    /// The chosen record ids that name no record any more; their label is display text only.
+    pub deleted_records: BTreeSet<String>,
 }
 
 /// An applied clause: what the query holds, and the draft it was read from.
@@ -113,6 +116,7 @@ impl FilterDraft {
             second: String::new(),
             values: Vec::new(),
             labels: BTreeMap::new(),
+            deleted_records: BTreeSet::new(),
         }
     }
 
@@ -147,6 +151,33 @@ impl FilterDraft {
             },
             draft: self.clone(),
         })
+    }
+
+    /// The draft that reads back as `filter` over `kind`, the inverse of [`Self::apply`] for the values
+    /// a clause holds as typed: text, dates and numbers. The ids of a tag, choice or record value, and a
+    /// record column's text, are left for the caller to label.
+    #[must_use]
+    pub fn from_filter(kind: ListedKind, filter: &ListFilter) -> Self {
+        let mut draft = Self::new(kind).with_column(kind, &filter.column).with_op(filter.op);
+        match &filter.value {
+            FilterValue::None | FilterValue::Values(_) => {}
+            FilterValue::Text(text) => {
+                if draft.value_type(kind) != Some(ColumnType::Record) {
+                    draft.first.clone_from(text);
+                }
+            }
+            FilterValue::Date(date) => draft.first = DateDraft::from_value(date, String::new()).start,
+            FilterValue::DateRange { from, to } => {
+                draft.first = DateDraft::from_value(from, String::new()).start;
+                draft.second = DateDraft::from_value(to, String::new()).start;
+            }
+            FilterValue::Number(number) => draft.first = number.to_string(),
+            FilterValue::NumberRange { from, to } => {
+                draft.first = from.to_string();
+                draft.second = to.to_string();
+            }
+        }
+        draft
     }
 
     fn date_value(&self) -> Result<FilterValue, FilterDraftError> {
@@ -289,6 +320,104 @@ pub fn filter_chip_label(loc: &Localizer, kind: ListedKind, active: &ActiveFilte
         }
     };
     loc.filter_chip(&column, &op, &value)
+}
+
+/// One saved search in the Explorer's *Saved* menu.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SavedEntryVm {
+    /// The saved search.
+    pub id: SavedSearchId,
+    /// Its name.
+    pub name: String,
+    /// Whether it is the one applied to the list now.
+    pub applied: bool,
+}
+
+/// The Explorer's *Saved* menu for one kind (ADR 0052 §8).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SavedMenuVm {
+    /// This kind's readable saved searches, in stored order.
+    pub entries: Vec<SavedEntryVm>,
+    /// The entries this version cannot read, listed disabled by name.
+    pub unreadable: Vec<UnreadableSavedSearch>,
+    /// Whether *Update*, *Rename* and *Delete* are offered: the applied saved search is still listed.
+    pub acts_on_applied: bool,
+}
+
+/// The *Saved* menu of `kind`'s list, with `applied` marked. *Update*, *Rename* and *Delete* act on the
+/// applied search, so they are offered only while it is still in the list.
+#[must_use]
+pub fn saved_menu(list: &SavedSearchList, kind: ListedKind, applied: Option<SavedSearchId>) -> SavedMenuVm {
+    let mut entries = Vec::new();
+    for search in &list.searches {
+        if search.kind == kind {
+            entries.push(SavedEntryVm {
+                id: search.id,
+                name: search.name.clone(),
+                applied: applied == Some(search.id),
+            });
+        }
+    }
+    let acts_on_applied = entries.iter().any(|entry| entry.applied);
+    SavedMenuVm {
+        entries,
+        unreadable: list.unreadable.clone(),
+        acts_on_applied,
+    }
+}
+
+/// What the inline name field is for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NamingMode {
+    /// *Save as new*.
+    New,
+    /// *Rename* of the applied search.
+    Rename,
+}
+
+/// Why a name was refused.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NameProblem {
+    /// Nothing but whitespace.
+    Empty,
+    /// Another saved search has it, compared ignoring case.
+    Duplicate,
+}
+
+/// The inline name field's state.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SavedNaming {
+    /// Whether it names a new search or renames the applied one.
+    pub mode: NamingMode,
+    /// What has been typed.
+    pub name: String,
+    /// Why the name was refused, once it was tried.
+    pub problem: Option<NameProblem>,
+}
+
+/// Why `name` cannot name a saved search: it is empty, or another one has it (ignoring case and
+/// surrounding space); an entry this version cannot read still holds its name. `own` is the search being
+/// renamed, which may keep its own name.
+#[must_use]
+pub fn name_problem(list: &SavedSearchList, name: &str, own: Option<SavedSearchId>) -> Option<NameProblem> {
+    if name.trim().is_empty() {
+        return Some(NameProblem::Empty);
+    }
+    for search in &list.searches {
+        if Some(search.id) != own && same_saved_name(&search.name, name) {
+            return Some(NameProblem::Duplicate);
+        }
+    }
+    for unreadable in &list.unreadable {
+        if unreadable
+            .name
+            .as_deref()
+            .is_some_and(|taken| same_saved_name(taken, name))
+        {
+            return Some(NameProblem::Duplicate);
+        }
+    }
+    None
 }
 
 /// `values` as options, keyed as the list table stores them ([`choice_key`]).
@@ -466,6 +595,55 @@ mod tests {
         );
     }
 
+    fn filter(column: &str, op: FilterOp, value: FilterValue) -> ListFilter {
+        ListFilter {
+            column: column.to_owned(),
+            op,
+            value,
+        }
+    }
+
+    #[test]
+    fn a_saved_text_clause_reads_back_as_its_text() {
+        let saved = filter("surname", FilterOp::Contains, FilterValue::Text("anne".to_owned()));
+
+        let draft = FilterDraft::from_filter(ListedKind::Person, &saved);
+
+        assert_eq!(
+            (draft.column.as_str(), draft.op, draft.first.as_str()),
+            ("surname", FilterOp::Contains, "anne")
+        );
+    }
+
+    #[test]
+    fn a_saved_record_clause_leaves_its_text_for_the_caller_to_label() {
+        let saved = filter("place", FilterOp::Is, FilterValue::Text("some-id".to_owned()));
+
+        let draft = FilterDraft::from_filter(ListedKind::Event, &saved);
+
+        assert_eq!(draft.first, "");
+    }
+
+    #[test]
+    fn a_saved_date_clause_reads_back_as_its_year() {
+        let saved = filter("birth", FilterOp::Before, FilterValue::Date(year(1800)));
+
+        let draft = FilterDraft::from_filter(ListedKind::Person, &saved);
+
+        assert_eq!((draft.op, draft.first.as_str()), (FilterOp::Before, "1800"));
+        assert_eq!(draft.apply(ListedKind::Person).map(|active| active.filter), Ok(saved));
+    }
+
+    #[test]
+    fn a_saved_number_clause_reads_back_as_its_number() {
+        let saved = filter("children", FilterOp::GreaterThan, FilterValue::Number(2.0));
+
+        let draft = FilterDraft::from_filter(ListedKind::Family, &saved);
+
+        assert_eq!((draft.op, draft.first.as_str()), (FilterOp::GreaterThan, "2"));
+        assert_eq!(draft.apply(ListedKind::Family).map(|active| active.filter), Ok(saved));
+    }
+
     #[test]
     fn a_date_that_does_not_read_is_bad() {
         let mut bad = draft(ListedKind::Person, "birth", FilterOp::After);
@@ -587,5 +765,62 @@ mod tests {
         assert_eq!(chip(ListedKind::Person, &tags), "Tags has none of To verify");
         assert_eq!(chip(ListedKind::Family, &range), "Children between 2 – 5");
         assert_eq!(chip(ListedKind::Person, &empty), "Death is empty");
+    }
+
+    fn summary(n: u128, name: &str, kind: ListedKind) -> vitni_app::SavedSearchSummary {
+        vitni_app::SavedSearchSummary {
+            id: vitni_app::SavedSearchId::from_uuid(uuid::Uuid::from_u128(n)),
+            name: name.to_owned(),
+            kind,
+        }
+    }
+
+    fn list_of(searches: Vec<vitni_app::SavedSearchSummary>) -> vitni_app::SavedSearchList {
+        vitni_app::SavedSearchList {
+            searches,
+            unreadable: vec![vitni_app::UnreadableSavedSearch {
+                position: 2,
+                name: Some("Broken".to_owned()),
+            }],
+        }
+    }
+
+    #[test]
+    fn the_saved_menu_disables_update_rename_and_delete_with_nothing_applied() {
+        let list = list_of(vec![summary(1, "Born before 1800", ListedKind::Person)]);
+        let menu = saved_menu(&list, ListedKind::Person, None);
+        assert!(!menu.acts_on_applied, "{menu:?}");
+        assert_eq!(menu.entries.len(), 1);
+        assert_eq!(menu.entries[0].name, "Born before 1800");
+        assert!(!menu.entries[0].applied);
+    }
+
+    #[test]
+    fn the_saved_menu_enables_them_for_an_applied_search_and_marks_it() {
+        let list = list_of(vec![
+            summary(1, "Born before 1800", ListedKind::Person),
+            summary(2, "Untagged places", ListedKind::Place),
+        ]);
+        let applied = vitni_app::SavedSearchId::from_uuid(uuid::Uuid::from_u128(1));
+        let menu = saved_menu(&list, ListedKind::Person, Some(applied));
+        assert!(menu.acts_on_applied, "{menu:?}");
+        assert_eq!(menu.entries.len(), 1, "only this kind's searches");
+        assert!(menu.entries[0].applied);
+    }
+
+    #[test]
+    fn the_saved_menu_offers_no_actions_on_an_applied_search_that_is_gone() {
+        let list = list_of(vec![summary(1, "Born before 1800", ListedKind::Person)]);
+        let gone = vitni_app::SavedSearchId::from_uuid(uuid::Uuid::from_u128(9));
+        let menu = saved_menu(&list, ListedKind::Person, Some(gone));
+        assert!(!menu.acts_on_applied, "{menu:?}");
+    }
+
+    #[test]
+    fn the_saved_menu_lists_an_unreadable_entry_by_name() {
+        let menu = saved_menu(&list_of(Vec::new()), ListedKind::Person, None);
+        assert_eq!(menu.entries.len(), 0);
+        assert_eq!(menu.unreadable.len(), 1);
+        assert_eq!(menu.unreadable[0].position, 2);
     }
 }

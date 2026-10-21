@@ -323,6 +323,114 @@ impl Chrome {
         fl!(self.loader, "filter-delete", filter = filter)
     }
 
+    /// The Explorer *Saved* control's accessible name, tooltip and the menu's name.
+    #[must_use]
+    pub fn saved_title(&self) -> String {
+        fl!(self.loader, "saved-title")
+    }
+
+    /// The *Save as new* menu item.
+    #[must_use]
+    pub fn saved_save_new(&self) -> String {
+        fl!(self.loader, "saved-save-new")
+    }
+
+    /// The *Update* menu item.
+    #[must_use]
+    pub fn saved_update(&self) -> String {
+        fl!(self.loader, "saved-update")
+    }
+
+    /// The *Rename* menu item.
+    #[must_use]
+    pub fn saved_rename(&self) -> String {
+        fl!(self.loader, "saved-rename")
+    }
+
+    /// The *Delete* menu item.
+    #[must_use]
+    pub fn saved_delete(&self) -> String {
+        fl!(self.loader, "saved-delete")
+    }
+
+    /// The inline name field's label.
+    #[must_use]
+    pub fn saved_name(&self) -> String {
+        fl!(self.loader, "saved-name")
+    }
+
+    /// The inline name field's *Save* button.
+    #[must_use]
+    pub fn saved_save(&self) -> String {
+        fl!(self.loader, "saved-save")
+    }
+
+    /// The inline name field's *Cancel* button.
+    #[must_use]
+    pub fn saved_cancel(&self) -> String {
+        fl!(self.loader, "saved-cancel")
+    }
+
+    /// The inline error for an empty name.
+    #[must_use]
+    pub fn saved_name_empty(&self) -> String {
+        fl!(self.loader, "saved-name-empty")
+    }
+
+    /// The inline error for a name another saved search has.
+    #[must_use]
+    pub fn saved_name_duplicate(&self) -> String {
+        fl!(self.loader, "saved-name-duplicate")
+    }
+
+    /// The list message while a marked clause stops the search from running.
+    #[must_use]
+    pub fn saved_marked_notice(&self) -> String {
+        fl!(self.loader, "saved-marked-notice")
+    }
+
+    /// The notice for saving a search whose marked clause would be dropped.
+    #[must_use]
+    pub fn saved_marked_blocks_save(&self) -> String {
+        fl!(self.loader, "saved-marked-blocks-save")
+    }
+
+    /// The label of a saved search entry with no readable name.
+    #[must_use]
+    pub fn saved_unreadable(&self, position: usize) -> String {
+        fl!(self.loader, "saved-unreadable", position = position)
+    }
+
+    /// The label of an unreadable saved search entry whose name is readable.
+    #[must_use]
+    pub fn saved_unreadable_named(&self, name: &str) -> String {
+        fl!(self.loader, "saved-unreadable-named", name = name)
+    }
+
+    /// The notice after a new saved search is stored.
+    #[must_use]
+    pub fn saved_saved(&self, name: &str) -> String {
+        fl!(self.loader, "saved-saved", name = name)
+    }
+
+    /// The notice after a saved search's query is replaced.
+    #[must_use]
+    pub fn saved_updated(&self, name: &str) -> String {
+        fl!(self.loader, "saved-updated", name = name)
+    }
+
+    /// The notice after a saved search is renamed.
+    #[must_use]
+    pub fn saved_renamed(&self, name: &str) -> String {
+        fl!(self.loader, "saved-renamed", name = name)
+    }
+
+    /// The notice after a saved search is deleted.
+    #[must_use]
+    pub fn saved_deleted(&self, name: &str) -> String {
+        fl!(self.loader, "saved-deleted", name = name)
+    }
+
     /// The "New" button label for a list.
     #[must_use]
     pub fn list_new(&self) -> String {
@@ -548,6 +656,12 @@ impl Chrome {
     #[must_use]
     pub fn palette_group_commands(&self) -> String {
         fl!(self.loader, "palette-group-commands")
+    }
+
+    /// The "Saved searches" palette group heading.
+    #[must_use]
+    pub fn palette_group_saved_searches(&self) -> String {
+        fl!(self.loader, "palette-group-saved-searches")
     }
 
     /// The "Recent" palette group heading.

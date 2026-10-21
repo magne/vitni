@@ -10,18 +10,24 @@
 //! when [`entity_category`] is `Some`, so a tool/Dashboard/Help destination shows no list at all.
 
 use std::collections::BTreeSet;
+use std::rc::Rc;
 
 use dioxus::prelude::*;
-use vitni_app::{ConfigStore as _, FileConfigStore, ListQuery};
-use vitni_ui::{ActiveFilter, Category, ListLayout, ListedRows, RecordRef, RowVm, listed_kind};
+use vitni_app::{ListQuery, ListedKind, SavedSearchId, SavedSearchList};
+use vitni_ui::{
+    ActiveFilter, Category, ListLayout, ListedRows, RecordRef, RowVm, RowsPage, SavedNaming, StaleClauseVm, listed_kind,
+};
 
-use crate::app::AppCtx;
+use crate::app::{AppCtx, AppState};
 use crate::master_detail::{ListChrome, ListPane};
 use crate::screens::use_record_step;
-use crate::services::load_list_page;
-use crate::shell::list_columns::{ColumnsMenu, ListMenu, SortMenu};
+use crate::services::{Services, load_list_page, load_saved_search, load_saved_searches};
+use crate::shell::list_columns::{ColumnsMenu, ListMenu, SortMenu, persist_list_layout};
 use crate::shell::list_filters::{FilterBar, FilterEditing, FiltersButton};
 use crate::shell::nav_state::{NavState, entity_category};
+use crate::shell::saved_menu::{
+    ExplorerQuery, ResolvedSaved, SavedAction, SavedChange, SavedMenu, finish_saved_run, first_page_unless_marked,
+};
 
 /// The Explorer column. Renders the active entity category's list, or nothing when the active
 /// destination is not an entity category (a tool, the Dashboard, or Help — the guard also mirrors
@@ -48,7 +54,8 @@ pub fn Explorer() -> Element {
 /// The list for one entity `category`, read from the store a page at a time (ADR 0052 §4): owns the
 /// search, filter and layout signals that make up its [`ListQuery`], the [`ListedRows`] read so far,
 /// and the `selected` signal. The layout — the columns a row shows and the sort (ADR 0052 §7) — starts
-/// from [`NavState::lists`], seeded from `workspace.toml`, and is written back there on each change.
+/// from [`NavState::lists`], seeded from `workspace.toml`, and is written back there on each change, except a
+/// layout a saved search applied, which belongs to the saved search.
 /// The first page is a resource over the query and
 /// [`NavState::data_version`] (the rail-count idiom in `shell/root.rs`), so a new search, sort or
 /// filter, or a create/edit/undo elsewhere, reads the list again from the top; the pages after it are
@@ -90,19 +97,22 @@ fn ExplorerList(category: Category) -> Element {
     let editing = use_signal(|| None::<FilterEditing>);
     let layout = use_signal(|| ListLayout::resolve(kind, nav.lists.peek().get(&kind)));
     let menu = use_signal(|| None::<ListMenu>);
+    let list_query = ExplorerQuery {
+        search,
+        filters,
+        stale: use_signal(Vec::<StaleClauseVm>::new),
+        layout,
+        applied_layout: use_signal(|| None::<ListLayout>),
+        applied: use_signal(|| None),
+        editing,
+    };
+    let stale = list_query.stale;
     let dir = services.dir.clone();
-    // Written only when it differs from what is stored, so mounting the list never writes.
+    // Written only when it differs from what is stored and is not a saved search's layout, so neither
+    // mounting the list nor applying a saved search writes.
     use_effect(move || {
         let current = layout.read().clone();
-        if current == ListLayout::resolve(kind, nav.lists.peek().get(&kind)) {
-            return;
-        }
-        let preferences = current.preferences();
-        let store = FileConfigStore::for_workspace(dir.clone());
-        if let Err(error) = store.store_list_preferences(kind, &preferences) {
-            tracing::warn!(%error, "could not persist the list layout");
-        }
-        nav.lists.write().insert(kind, preferences);
+        persist_list_layout(nav, &dir, &current, list_query.applied_layout);
     });
     let query = use_memo(move || {
         let layout = layout.read();
@@ -114,8 +124,83 @@ fn ExplorerList(category: Category) -> Element {
             ..ListQuery::new(kind)
         }
     });
+    let saved = use_saved_searches(&state, kind, list_query, menu, query);
+    let PagedRows {
+        rows,
+        first,
+        generation,
+        fetch,
+    } = use_paged_rows(&nav, services, query, stale, chrome.saved_marked_notice());
+    use_record_step(nav, category, rows, selected, fetch);
+    let narrowed = !search.read().is_empty() || !filters.read().is_empty();
+    // A query the store refuses keeps the toolbar, so the search or clause behind it can be changed.
+    let refused = match &*first.read() {
+        None if *generation.read() == 0 => return rsx! { p { class: "loading", "{loading}" } },
+        Some((_, Err(message))) => Some(message.clone()),
+        None | Some((_, Ok(_))) => None,
+    };
+    let (chrome, narrowed) = match refused {
+        Some(message) => (
+            ListChrome {
+                empty: message,
+                ..list_chrome
+            },
+            false,
+        ),
+        None => (list_chrome, narrowed),
+    };
+    rsx! {
+        ListPane {
+            rows,
+            search,
+            sort: rsx! { SortMenu { layout, open: menu } },
+            selected,
+            chrome,
+            narrowed,
+            onselect: move |row: RowVm| nav.open_record(RecordRef {
+                category,
+                human_id: row.id,
+                label: row.title,
+            }),
+            onmissing: fetch,
+            tools: rsx! {
+                FiltersButton { count: filters.read().len() + stale.read().len(), editing }
+                ColumnsMenu { layout, open: menu }
+                SavedMenu {
+                    kind,
+                    list: saved.list,
+                    applied: list_query.applied,
+                    open: menu,
+                    naming: saved.naming,
+                    onapply: saved.apply,
+                    onact: saved.act,
+                }
+            },
+            bar: rsx! { FilterBar { kind, filters, stale, editing } },
+        }
+    }
+}
+
+/// The rows of the list and how they are read: the first page for the current query, and later pages on
+/// demand.
+struct PagedRows {
+    rows: Signal<ListedRows>,
+    first: Resource<(ListQuery, Result<RowsPage, String>)>,
+    generation: Signal<u64>,
+    fetch: Callback<Vec<usize>>,
+}
+
+/// Reads the first page of `query` (unless a clause is marked, then `marked_notice` is the answer) and
+/// the pages after it as they are asked for.
+fn use_paged_rows(
+    nav: &NavState,
+    services: Services,
+    query: Memo<ListQuery>,
+    stale: Signal<Vec<StaleClauseVm>>,
+    marked_notice: String,
+) -> PagedRows {
+    let nav = *nav;
     let mut rows = use_signal(ListedRows::default);
-    let refused_rows = use_signal(ListedRows::default);
     // The query `rows` answers: a later page is read for it, never for a newer query whose first page
     // has not replaced `rows` yet, so one result never mixes rows from two queries.
     let mut held = use_signal(|| None::<ListQuery>);
@@ -128,20 +213,27 @@ fn ExplorerList(category: Category) -> Element {
         let services = first_services.clone();
         let query = query();
         let _ = nav.data_version.read();
-        async move {
-            let page = load_list_page(services, query.clone(), 0).await;
-            (query, page)
-        }
+        let marked = !stale.read().is_empty();
+        let marked_notice = marked_notice.clone();
+        async move { first_page_unless_marked(services, query, marked, marked_notice).await }
     });
     use_effect(move || {
-        if let Some((query, Ok(page))) = &*first.read() {
-            let mut listed = ListedRows::default();
-            listed.insert(page);
-            *generation.write() += 1;
-            requested.write().clear();
-            held.set(Some(query.clone()));
-            rows.set(listed);
+        let Some((query, result)) = &*first.read() else {
+            return;
+        };
+        *generation.write() += 1;
+        requested.write().clear();
+        // A query that did not run leaves no rows, so stepping between records and reading further pages
+        // never follow the list from before it.
+        let mut listed = ListedRows::default();
+        match result {
+            Ok(page) => {
+                listed.insert(page);
+                held.set(Some(query.clone()));
+            }
+            Err(_) => held.set(None),
         }
+        rows.set(listed);
     });
     let fetch = use_callback(move |pages: Vec<usize>| {
         let reading = *generation.peek();
@@ -167,45 +259,96 @@ fn ExplorerList(category: Category) -> Element {
             });
         }
     });
-    use_record_step(nav, category, rows, selected, fetch);
-    let narrowed = !search.read().is_empty() || !filters.read().is_empty();
-    // A query the store refuses keeps the toolbar, so the search or clause behind it can be changed.
-    let refused = match &*first.read() {
-        None if *generation.read() == 0 => return rsx! { p { class: "loading", "{loading}" } },
-        Some((_, Err(message))) => Some(message.clone()),
-        None | Some((_, Ok(_))) => None,
-    };
-    let (shown, chrome, narrowed) = match refused {
-        Some(message) => (
-            ReadSignal::from(refused_rows),
-            ListChrome {
-                empty: message,
-                ..list_chrome
-            },
-            false,
-        ),
-        None => (ReadSignal::from(rows), list_chrome, narrowed),
-    };
-    rsx! {
-        ListPane {
-            rows: shown,
-            search,
-            sort: rsx! { SortMenu { layout, open: menu } },
-            selected,
-            chrome,
-            narrowed,
-            onselect: move |row: RowVm| nav.open_record(RecordRef {
-                category,
-                human_id: row.id,
-                label: row.title,
-            }),
-            onmissing: fetch,
-            tools: rsx! {
-                FiltersButton { count: filters.read().len(), editing }
-                ColumnsMenu { layout, open: menu }
-            },
-            bar: rsx! { FilterBar { kind, filters, editing } },
+    PagedRows {
+        rows,
+        first,
+        generation,
+        fetch,
+    }
+}
+
+/// The Explorer's saved-search plumbing: what [`SavedMenu`] shows and the callbacks that apply and
+/// change saved searches.
+struct SavedControls {
+    list: Signal<SavedSearchList>,
+    naming: Signal<Option<SavedNaming>>,
+    apply: Callback<SavedSearchId>,
+    act: Callback<SavedAction>,
+}
+
+/// Wires saved searches to one list: the menu's entries (read each time it opens and after a change,
+/// so one saved from the CLI shows), applying one (also for a palette handoff, taken on mount and as it
+/// changes), and the changes the menu asks for.
+fn use_saved_searches(
+    state: &AppState,
+    kind: ListedKind,
+    list_query: ExplorerQuery,
+    mut menu: Signal<Option<ListMenu>>,
+    query: Memo<ListQuery>,
+) -> SavedControls {
+    let services = state.services();
+    let (chrome, loc) = (state.chrome_rc(), state.data_loc_rc());
+    let mut nav = use_context::<NavState>();
+    let mut list = use_signal(SavedSearchList::default);
+    let mut naming = use_signal(|| None::<SavedNaming>);
+    let dir = services.dir.clone();
+    let reload = use_callback(move |()| match load_saved_searches(&dir) {
+        Ok(read) => list.set(read),
+        Err(error) => tracing::warn!(%error, "could not read the saved searches"),
+    });
+    use_effect(move || {
+        if menu() == Some(ListMenu::Saved) {
+            reload.call(());
         }
+    });
+    let apply_services = services.clone();
+    let mut latest_apply = use_signal(|| 0_u64);
+    let apply = use_callback(move |id: SavedSearchId| {
+        menu.set(None);
+        let services = apply_services.clone();
+        let this_apply = *latest_apply.peek() + 1;
+        latest_apply.set(this_apply);
+        spawn(async move {
+            let loaded = load_saved_search(services, id, kind).await;
+            if *latest_apply.peek() != this_apply {
+                return;
+            }
+            let resolved = loaded.map(|(resolution, filters)| ResolvedSaved {
+                id: resolution.search.id,
+                name: resolution.search.name,
+                query: resolution.query,
+                filters,
+            });
+            finish_saved_run(nav, list_query, resolved);
+        });
+    });
+    use_effect(move || {
+        let Some(id) = *nav.saved_search_run.read() else {
+            return;
+        };
+        nav.saved_search_run.set(None);
+        apply.call(id);
+    });
+    let change_services = services.clone();
+    let act = use_callback(move |action: SavedAction| {
+        let change = SavedChange {
+            nav,
+            state: list_query,
+            services: &change_services,
+            query: &query.peek(),
+            localizers: (Rc::clone(&chrome), Rc::clone(&loc)),
+        };
+        if change.perform(action) {
+            naming.set(None);
+            menu.set(None);
+            reload.call(());
+        }
+    });
+    SavedControls {
+        list,
+        naming,
+        apply,
+        act,
     }
 }
 

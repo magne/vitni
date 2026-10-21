@@ -219,9 +219,13 @@ pub fn Chip(
     /// The already-localized accessible name for the label button (used only with `onactivate`).
     #[props(default)]
     activate_label: Option<String>,
+    /// Marks the chip as one that cannot work (a saved search's clause the current columns no longer
+    /// accept: a removed column, an unknown operator, a wrong value or an unknown choice).
+    #[props(default)]
+    stale: bool,
 ) -> Element {
     rsx! {
-        span { class: "chip",
+        span { class: if stale { "chip stale" } else { "chip" },
             if let Some(dot_color) = dot_color {
                 span { class: "dot", style: "background:{dot_color}" }
             } else if let Some(icon) = icon {

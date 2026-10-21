@@ -40,7 +40,7 @@ label = "type: o"
 
 [[step]]
 do = "click"
-at = { role = "button", text = "Save" }
+at = { role = "button", text = "Save", within = "detail-head" }
 label = "New tag: Save"
 
 [[step]]
@@ -65,7 +65,7 @@ label = "Tags tab: + Add tag"
 
 [[step]]
 do = "click"
-at = { role = "button", text = "Save" }
+at = { role = "button", text = "Save", within = "dialog" }
 label = "Add tag panel: Save — the only tag is preselected"
 
 [[step]]

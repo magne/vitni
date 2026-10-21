@@ -33,6 +33,7 @@ pub mod rail;
 pub mod recent_persistence;
 pub mod root;
 pub mod roving;
+pub mod saved_menu;
 pub mod statusbar;
 pub mod tab_label;
 pub mod tabstrip;

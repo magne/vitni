@@ -122,7 +122,7 @@ impl SortChrome {
 
 /// A searchable, keyboard-operable entity list.
 ///
-/// The toolbar carries a search box, the caller's `tools` (the Explorer's *Filters* and *Columns*
+/// The toolbar carries a search box, the caller's `tools` (the Explorer's *Filters*, *Columns* and *Saved*
 /// buttons) and its `sort` control (the Explorer's sort menu, Help's [`SortCycle`]); the caller's `bar`
 /// (the Explorer's filter chips and editor) sits under it. The
 /// body is a `listbox` of rows with roving focus (↑/↓ move the tab stop, Enter/Space activate the row).

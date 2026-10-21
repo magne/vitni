@@ -18,13 +18,15 @@ use i18n_embed::DesktopLanguageRequester;
 use tokio::sync::{mpsc, oneshot};
 use unic_langid::LanguageIdentifier;
 use vitni_app::{
-    AiConfig, BackupReport, BackupRequest, Confidence, Config, ConfigStore, DatasetChoice, DatasetProposal,
+    AiConfig, AppError, BackupReport, BackupRequest, Confidence, Config, ConfigStore, DatasetChoice, DatasetProposal,
     DatasetScope, FileConfigStore, FileDate, IdFormats, ImportRunId, ImportRunSummary, ListQuery, ListedKind,
     LocaleDefaults, MapConfig, MapProvider, MapSource, MatchQuestion, MatchReply, PlanReply, PlanSummary, PluginTrust,
     PluginTrustConfig, PreferenceLayers, ReplaceReport, ReplaceRequest, ResolvedLocale, RestoreReport, RestoreRequest,
-    Session, ShortcutConfig, SuretyLabelOverrides, TagSummary, Workspace, WorkspaceCounts, WorkspaceSummary, config,
-    list_tags, list_workspaces, read_preference_layers, read_resolved_locale, read_resolved_surety_labels,
-    read_surety_label_overrides, workspace_counts,
+    SavedSearchId, SavedSearchList, SavedSearchResolution, Session, ShortcutConfig, SuretyLabelOverrides, TagSummary,
+    Workspace, WorkspaceCounts, WorkspaceSummary, config, delete_saved_search, list_saved_searches, list_tags,
+    list_workspaces, read_preference_layers, read_resolved_locale, read_resolved_surety_labels,
+    read_surety_label_overrides, rename_saved_search, resolve_saved_search_id, save_saved_search, update_saved_search,
+    workspace_counts,
 };
 use vitni_plugin_host::{
     BulkImported, Capability, DeferMatches, ExportTarget, Grants, HostPattern, ImportRunSpec, Invocation, NetPolicy,
@@ -36,8 +38,8 @@ use vitni_ui::{
     DnaTestChangeSetRequest, EventChangeSetRequest, FamilyChangeSetRequest, HistoryEntryVm, ImportTargetChoice, Intent,
     IntentOutcome, Localizer, MediaChangeSetRequest, MergeFailure, NewRecordRequest, NoteChangeSetRequest, Panel,
     PersonChangeSetRequest, PickerHit, PlaceChangeSetRequest, ProvenanceDraft, RepositoryChangeSetRequest,
-    ResearchNoteChangeSetRequest, RowVm, RowsPage, RunRecordVm, RunRecordsVm, SimilarHitVm, SourceChangeSetRequest,
-    SubmitResult, TagChangeSetRequest, list_intent, query_draft,
+    ResearchNoteChangeSetRequest, RowVm, RowsPage, RunRecordVm, RunRecordsVm, SavedFilters, SimilarHitVm,
+    SourceChangeSetRequest, SubmitResult, TagChangeSetRequest, list_intent, query_draft,
 };
 
 use crate::detail_aggregates::for_each_detail_aggregate;
@@ -549,6 +551,51 @@ pub async fn resolve_list_filter(
     vitni_ui::resolve_filter(&workspace, kind, active)
         .await
         .map_err(|error| loc.error(&error))
+}
+
+/// Finds the saved search `id` of `kind`'s list and rebuilds its chips (ADR 0052
+/// §8, §10): read afresh on every apply, so a search deleted or renamed from the CLI is caught.
+pub async fn load_saved_search(
+    services: Services,
+    id: SavedSearchId,
+    kind: ListedKind,
+) -> Result<(SavedSearchResolution, SavedFilters), String> {
+    let loc = services.localizer();
+    let store = FileConfigStore::for_workspace(services.dir.clone());
+    let resolution = resolve_saved_search_id(&store, id, Some(kind)).map_err(|error| loc.error(&error))?;
+    let workspace = services.open().await.map_err(|error| loc.error(&error))?;
+    let filters = vitni_ui::saved_filters(&workspace, &loc, &resolution)
+        .await
+        .map_err(|error| loc.error(&error))?;
+    Ok((resolution, filters))
+}
+
+/// Stores `query` as a new saved search called `name`, minting a session only for the new id (saved searches
+/// are not events and carry no provenance).
+pub fn save_new_saved_search(services: &Services, name: &str, query: &ListQuery) -> Result<SavedSearchId, AppError> {
+    let store = FileConfigStore::for_workspace(services.dir.clone());
+    let session = Session::new(services.config.operator_agent());
+    save_saved_search(&store, &session, name, query)
+}
+
+/// Replaces the query of the saved search `id` with `query`.
+pub fn update_saved_search_query(services: &Services, id: SavedSearchId, query: &ListQuery) -> Result<(), AppError> {
+    update_saved_search(&FileConfigStore::for_workspace(services.dir.clone()), id, query)
+}
+
+/// Gives the saved search `id` the name `name`.
+pub fn rename_saved_search_to(services: &Services, id: SavedSearchId, name: &str) -> Result<(), AppError> {
+    rename_saved_search(&FileConfigStore::for_workspace(services.dir.clone()), id, name)
+}
+
+/// Deletes the saved search `id`.
+pub fn delete_saved_search_by_id(services: &Services, id: SavedSearchId) -> Result<(), AppError> {
+    delete_saved_search(&FileConfigStore::for_workspace(services.dir.clone()), id)
+}
+
+/// Reads the workspace's saved searches from its manifest.
+pub fn load_saved_searches(dir: &std::path::Path) -> Result<SavedSearchList, AppError> {
+    list_saved_searches(&FileConfigStore::for_workspace(dir.to_path_buf()))
 }
 
 /// Loads the first `pages` pages of the records the import run `run` changed, as one list: what an

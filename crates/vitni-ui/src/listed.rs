@@ -6,10 +6,11 @@
 use std::collections::{BTreeMap, HashMap};
 
 use vitni_app::{
-    AppError, ColumnType, FilterValue, ListPage, ListQuery, ListedKind, ListedPage, Workspace, list_citations_page,
-    list_dna_matches_page, list_dna_tests_page, list_events_page, list_families_page, list_media_page, list_notes_page,
-    list_persons_page, list_places_page, list_repositories_page, list_research_notes_page, list_sources_page,
-    list_tags, list_tags_query, reference_id,
+    AppError, ColumnType, FilterValue, ListFilter, ListPage, ListQuery, ListedKind, ListedPage, ReferenceLabel,
+    SavedSearchResolution, Workspace, list_citations_page, list_dna_matches_page, list_dna_tests_page,
+    list_events_page, list_families_page, list_media_page, list_notes_page, list_persons_page, list_places_page,
+    list_repositories_page, list_research_notes_page, list_sources_page, list_tags, list_tags_query, reference_id,
+    reference_label,
 };
 
 use crate::i18n::Localizer;
@@ -18,8 +19,8 @@ use crate::list_layout::cells_line;
 use crate::list_window::WINDOW_ROWS;
 use crate::navigation::Category;
 use crate::view_model::{
-    ActiveFilter, citation_row, dna_match_row, dna_test_row, event_row, family_row, media_row, note_row, person_row,
-    place_row, repository_row, research_note_row, source_row, tag_row,
+    ActiveFilter, FilterDraft, citation_row, dna_match_row, dna_test_row, event_row, family_row, media_row, note_row,
+    person_row, place_row, repository_row, research_note_row, source_row, tag_row,
 };
 
 /// How many rows one fetched page holds: a window's worth, so a window spans at most two pages.
@@ -284,6 +285,153 @@ pub async fn resolve_filter(
         active.filter.value = FilterValue::Text(id);
     }
     Ok(active)
+}
+
+/// A saved clause the catalogue cannot take, as its chip shows it (ADR 0052 §10). It is never an
+/// [`ActiveFilter`]: a [`ListFilter`] holds only an operator the catalogue knows.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StaleClauseVm {
+    /// The column the clause names, as stored (it may no longer exist); empty when the clause names none.
+    pub column: String,
+    /// The localized chip text: the clause's column and operator as stored, and why it cannot run.
+    pub label: String,
+}
+
+/// A saved search's clauses rebuilt for the filter bar.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SavedFilters {
+    /// The clauses that can run, each with the draft that reopens it in the editor.
+    pub applied: Vec<ActiveFilter>,
+    /// The clauses that cannot. While any exists the search must not run.
+    pub stale: Vec<StaleClauseVm>,
+}
+
+/// The filter bar's chips for a resolved saved search (ADR 0052 §3, §10): a tag or record held by id
+/// shows by its name, a deleted one as such, never by its id. The stored id stays in the clause, so a
+/// deleted tag or record still matches nothing.
+///
+/// # Errors
+///
+/// A store/read-model error.
+pub async fn saved_filters(
+    workspace: &Workspace,
+    loc: &Localizer,
+    resolution: &SavedSearchResolution,
+) -> Result<SavedFilters, AppError> {
+    let kind = resolution.query.kind;
+    let mut applied = Vec::with_capacity(resolution.query.filters.len());
+    let mut titles = None;
+    for filter in &resolution.query.filters {
+        let draft = saved_draft(workspace, loc, kind, filter, &mut titles).await?;
+        applied.push(ActiveFilter {
+            filter: filter.clone(),
+            draft,
+        });
+    }
+    let stale = resolution
+        .stale
+        .iter()
+        .map(|clause| StaleClauseVm {
+            column: clause.column.clone().unwrap_or_default(),
+            label: match clause.gap() {
+                Some(gap) => loc.filter_stale_gapped_clause(&clause.named(" "), gap),
+                None => loc.filter_stale_clause(&clause.named(" "), &clause.error),
+            },
+        })
+        .collect();
+    Ok(SavedFilters { applied, stale })
+}
+
+/// The editor draft that reads back as `filter`. `titles` holds the tag titles once a tag clause has
+/// read them, so a saved search lists the tags at most once.
+async fn saved_draft(
+    workspace: &Workspace,
+    loc: &Localizer,
+    kind: ListedKind,
+    filter: &ListFilter,
+    titles: &mut Option<HashMap<String, String>>,
+) -> Result<FilterDraft, AppError> {
+    let mut draft = FilterDraft::from_filter(kind, filter);
+    match &filter.value {
+        FilterValue::None
+        | FilterValue::Date(_)
+        | FilterValue::DateRange { .. }
+        | FilterValue::Number(_)
+        | FilterValue::NumberRange { .. } => {}
+        FilterValue::Text(text) => {
+            if draft.value_type(kind) == Some(ColumnType::Record) {
+                reference_value(workspace, loc, kind, &mut draft, text).await?;
+            }
+        }
+        FilterValue::Values(values) => {
+            if draft.value_type(kind) == Some(ColumnType::Tags) {
+                let titles = match titles {
+                    Some(titles) => titles,
+                    None => titles.insert(tag_titles(workspace).await?),
+                };
+                for value in values {
+                    let text = titles.get(value).cloned().unwrap_or_else(|| loc.filter_deleted_tag());
+                    push_value(&mut draft, value.clone(), text);
+                }
+            } else {
+                for value in values {
+                    reference_value(workspace, loc, kind, &mut draft, value).await?;
+                }
+            }
+        }
+    }
+    Ok(draft)
+}
+
+/// Adds `id` to the draft's values: a record by what names it (it reopens on its `human_id`), a choice
+/// key as it is, and a record nothing has any more as deleted.
+async fn reference_value(
+    workspace: &Workspace,
+    loc: &Localizer,
+    kind: ListedKind,
+    draft: &mut FilterDraft,
+    id: &str,
+) -> Result<(), AppError> {
+    let column = draft.value_type(kind);
+    if column != Some(ColumnType::Record) {
+        draft.values.push(id.to_owned());
+        return Ok(());
+    }
+    let label = reference_label(workspace, kind, &draft.column, id).await?;
+    push_reference(loc, draft, id, label);
+    Ok(())
+}
+
+/// Every existing tag's title by id; a tag without a name has an empty title.
+async fn tag_titles(workspace: &Workspace) -> Result<HashMap<String, String>, AppError> {
+    let mut titles = HashMap::new();
+    for tag in list_tags(workspace).await? {
+        titles.insert(tag.id, tag.name.unwrap_or_default());
+    }
+    Ok(titles)
+}
+
+/// Pushes a record reference as a value of the draft: by its `human_id` when `label` names it, as deleted
+/// (`None`) under its id.
+fn push_reference(loc: &Localizer, draft: &mut FilterDraft, id: &str, label: Option<ReferenceLabel>) {
+    let (value, text) = match label {
+        Some(ReferenceLabel {
+            human_id,
+            title: Some(title),
+        }) => (human_id, title),
+        Some(ReferenceLabel { human_id, title: None }) => (human_id.clone(), human_id),
+        None => {
+            draft.deleted_records.insert(id.to_owned());
+            (id.to_owned(), loc.filter_deleted_record())
+        }
+    };
+    push_value(draft, value, text);
+}
+
+/// Adds `value` to the draft's values, shown as `text`.
+fn push_value(draft: &mut FilterDraft, value: String, text: String) {
+    draft.labels.insert(value.clone(), text);
+    draft.values.push(value);
 }
 
 /// What a row's second line is made of: the query's columns, read as the locale reads them.

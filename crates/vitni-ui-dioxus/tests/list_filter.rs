@@ -9,9 +9,11 @@ use std::rc::Rc;
 use dioxus::prelude::*;
 use unic_langid::LanguageIdentifier;
 use vitni_app::{FilterOp, ListedKind};
-use vitni_ui::{ActiveFilter, FilterDraft, Localizer};
+use vitni_ui::{ActiveFilter, FilterDraft, Localizer, StaleClauseVm};
 use vitni_ui_dioxus::i18n::Chrome;
-use vitni_ui_dioxus::shell::list_filters::{FilterBar, FilterEditing, FiltersButton};
+use vitni_ui_dioxus::shell::list_filters::{
+    FilterBar, FilterEditing, FiltersButton, commit_clause, opening_draft, remove_clause,
+};
 use vitni_ui_dioxus::shell::{ChromeCtx, DataLocCtx};
 
 fn contexts() {
@@ -39,10 +41,11 @@ fn applied() -> Vec<ActiveFilter> {
 fn Bar(editing: Option<FilterEditing>) -> Element {
     contexts();
     let filters = use_signal(applied);
+    let stale = use_signal(Vec::new);
     let editing = use_signal(move || editing);
     rsx! {
         FiltersButton { count: filters.read().len(), editing }
-        FilterBar { kind: ListedKind::Person, filters, editing }
+        FilterBar { kind: ListedKind::Person, filters, stale, editing }
     }
 }
 
@@ -136,4 +139,131 @@ fn a_choice_clause_offers_its_values_as_checkboxes() {
         1,
         "only the chosen value is checked:\n{html}"
     );
+}
+
+#[component]
+fn ReplaceMarked() -> Element {
+    let filters = use_signal(applied);
+    let stale = use_signal(|| {
+        vec![
+            StaleClauseVm {
+                column: "shoe size".to_owned(),
+                label: "shoe size is not a column".to_owned(),
+            },
+            StaleClauseVm {
+                column: "shoe size".to_owned(),
+                label: "other is not a column".to_owned(),
+            },
+        ]
+    });
+    use_hook(move || {
+        let fixed = clause(ListedKind::Person, "sex", FilterOp::IsAnyOf, "", "", &["male"]);
+        commit_clause(FilterEditing::Stale(0), filters, stale, fixed);
+    });
+    let marked: Vec<String> = stale.read().iter().map(|clause| clause.label.clone()).collect();
+    rsx! { "FILTERS:{filters.read().len()} STALE:{marked.join(\"|\")}" }
+}
+
+#[test]
+fn applying_an_edited_marked_clause_replaces_it() {
+    let mut vdom = VirtualDom::new(ReplaceMarked);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+
+    assert!(html.contains("FILTERS:3"), "the corrected clause is applied:\n{html}");
+    assert!(
+        html.contains("STALE:other is not a column"),
+        "only the edited marked clause is gone:\n{html}"
+    );
+}
+
+#[component]
+fn RemoveMarked() -> Element {
+    let filters = use_signal(applied);
+    let stale = use_signal(|| {
+        vec![
+            StaleClauseVm {
+                column: "shoe size".to_owned(),
+                label: "shoe size is not a column".to_owned(),
+            },
+            StaleClauseVm {
+                column: "shoe size".to_owned(),
+                label: "other is not a column".to_owned(),
+            },
+        ]
+    });
+    use_hook(move || remove_clause(FilterEditing::Stale(0), filters, stale));
+    let marked: Vec<String> = stale.read().iter().map(|clause| clause.label.clone()).collect();
+    rsx! { "FILTERS:{filters.read().len()} STALE:{marked.join(\"|\")}" }
+}
+
+#[test]
+fn removing_a_marked_clause_drops_only_that_clause() {
+    let mut vdom = VirtualDom::new(RemoveMarked);
+    vdom.rebuild_in_place();
+    let html = dioxus_ssr::render(&vdom);
+
+    assert!(html.contains("FILTERS:2"), "applied clauses are untouched:\n{html}");
+    assert!(
+        html.contains("STALE:other is not a column"),
+        "only the removed marked clause is gone:\n{html}"
+    );
+}
+
+fn marked(column: &str) -> Vec<StaleClauseVm> {
+    vec![StaleClauseVm {
+        column: column.to_owned(),
+        label: format!("{column} cannot take that condition"),
+    }]
+}
+
+#[test]
+fn editing_a_marked_clause_opens_on_its_column_when_it_still_exists() {
+    let kind = ListedKind::Person;
+    let draft = opening_draft(kind, FilterEditing::Stale(0), &[], &marked("birth"));
+
+    assert_eq!(draft.column, "birth");
+}
+
+#[test]
+fn editing_a_marked_clause_whose_column_is_gone_opens_on_a_new_clause() {
+    let kind = ListedKind::Person;
+    let draft = opening_draft(kind, FilterEditing::Stale(0), &[], &marked("shoe size"));
+
+    assert_eq!(draft, FilterDraft::new(kind));
+}
+
+#[component]
+fn TaggedBar() -> Element {
+    contexts();
+    let filters = use_signal(|| {
+        vec![clause(
+            ListedKind::Person,
+            "tags",
+            FilterOp::IsAnyOf,
+            "",
+            "",
+            &["0000-gone"],
+        )]
+    });
+    let stale = use_signal(Vec::new);
+    let editing = use_signal(|| Some(FilterEditing::Clause(0)));
+    rsx! {
+        FilterBar { kind: ListedKind::Person, filters, stale, editing }
+    }
+}
+
+#[tokio::test]
+async fn a_tag_clause_holding_a_deleted_tag_shows_it_ticked_by_label() {
+    let mut vdom = VirtualDom::new(TaggedBar);
+    vdom.rebuild_in_place();
+    vdom.wait_for_work().await;
+    vdom.render_immediate(&mut dioxus::core::NoOpMutations);
+    let html = dioxus_ssr::render(&vdom);
+
+    assert!(
+        html.contains("<span>deleted tag</span>"),
+        "the dead tag is shown by label:\n{html}"
+    );
+    assert_eq!(html.matches("checked").count(), 1, "and it is ticked:\n{html}");
 }

@@ -3,13 +3,16 @@
 //! caller's [`ListLayout`]; the Explorer evaluates it into its query and stores it per kind.
 //!
 //! Each menu hangs under its trigger in a `.menu-anchor`, over a click-away `.menu-scrim`, like the
-//! tabstrip's new-record menu. One of the two is open at a time ([`ListMenu`]); Escape closes it, from the
-//! trigger as well as from inside the menu.
+//! tabstrip's new-record menu. One of the menus (these two and *Saved*) is open at a time ([`ListMenu`]); Escape
+//! closes it, from the trigger as well as from inside the menu.
+
+use std::path::Path;
 
 use dioxus::prelude::*;
-use vitni_app::SortDirection;
-use vitni_ui::{ListLayout, column_toggles, sort_columns};
+use vitni_app::{ConfigStore as _, FileConfigStore, SortDirection};
+use vitni_ui::{ListLayout, column_toggles, layout_to_store, sort_columns};
 
+use crate::shell::nav_state::NavState;
 use crate::shell::{ChromeCtx, data_loc};
 
 /// Which toolbar menu is open.
@@ -19,6 +22,34 @@ pub enum ListMenu {
     Columns,
     /// The sort menu.
     Sort,
+    /// The *Saved* menu of saved searches.
+    Saved,
+}
+
+/// Writes `layout` to the list's preferences in `dir` and to [`NavState::lists`], unless it is what is
+/// stored already or the layout a saved search applied: applying a search never writes `[ui.lists.<kind>]`.
+/// A layout that differs from the applied one is the user's own, so the applied layout is forgotten and
+/// returning to it later is stored like any other choice.
+pub fn persist_list_layout(
+    mut nav: NavState,
+    dir: &Path,
+    layout: &ListLayout,
+    mut applied: Signal<Option<ListLayout>>,
+) {
+    let kind = layout.kind;
+    let stored = ListLayout::resolve(kind, nav.lists.peek().get(&kind));
+    let preferences = layout_to_store(layout, &stored, applied.peek().as_ref());
+    if applied.peek().as_ref().is_some_and(|saved| saved != layout) {
+        applied.set(None);
+    }
+    let Some(preferences) = preferences else {
+        return;
+    };
+    let store = FileConfigStore::for_workspace(dir.to_path_buf());
+    if let Err(error) = store.store_list_preferences(kind, &preferences) {
+        tracing::warn!(%error, "could not persist the list layout");
+    }
+    nav.lists.write().insert(kind, preferences);
 }
 
 /// The *Columns* trigger and, when open, its menu: a checkbox per column the kind can show, the shown
@@ -168,7 +199,12 @@ pub fn SortMenu(layout: Signal<ListLayout>, open: Signal<Option<ListMenu>>) -> E
 
 /// One radio item of the sort menu: a check mark when chosen.
 #[component]
-fn SortItem(label: String, checked: bool, #[props(default)] disabled: bool, onpick: EventHandler<()>) -> Element {
+pub(crate) fn SortItem(
+    label: String,
+    checked: bool,
+    #[props(default)] disabled: bool,
+    onpick: EventHandler<()>,
+) -> Element {
     rsx! {
         button {
             class: "menu-item",
@@ -189,7 +225,7 @@ fn SortItem(label: String, checked: bool, #[props(default)] disabled: bool, onpi
 
 /// The click-away catcher behind an open menu.
 #[component]
-fn Scrim(open: Signal<Option<ListMenu>>) -> Element {
+pub(crate) fn Scrim(open: Signal<Option<ListMenu>>) -> Element {
     let chrome = use_context::<ChromeCtx>().0;
     rsx! {
         button {
@@ -203,7 +239,7 @@ fn Scrim(open: Signal<Option<ListMenu>>) -> Element {
 
 /// Closes the open menu on Escape, and keeps the key from the shell dispatcher, which would close an
 /// overlay instead; with no menu open the key goes on.
-fn close_on_escape(event: &KeyboardEvent, mut open: Signal<Option<ListMenu>>) {
+pub(crate) fn close_on_escape(event: &KeyboardEvent, mut open: Signal<Option<ListMenu>>) {
     if event.key() == Key::Escape && open.peek().is_some() {
         event.prevent_default();
         event.stop_propagation();
