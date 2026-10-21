@@ -139,6 +139,52 @@ pan/zoom feel or click latency:
   running for the first time with the flip — public repositories get free runner minutes — so the
   documentation that explained why no check ran was rewritten and the README gained a CI badge.
   Publishing to crates.io and registering the Vitni trademark were both left as separate decisions.
+- **`0.10 — Record matching` (milestone complete).** *(Done — #389–#417, #421, #426, #439, #463,
+  #469, #477, #486, #489–#499, #509, #510, #512, #519, #525, #528, #529, #535–#537; PRs #420–#563.)*
+  Import keyed people by an `ExternalId` and nothing else, so a GEDCOM or Gramps id collided across
+  files (#389), a create and its key landed in two commits (#390), and the same person met through two
+  records stayed two people. The milestone made import never duplicate and never guess:
+  - **Origin.** Every assertion records the source record it came from, and an import is an `ImportRun`
+    aggregate (#393, [ADR 0037](../adr/0037-record-origin-and-import-runs.md)). A `record_origins` index
+    resolves a re-import by origin for every aggregate (#394), with tombstones (#395).
+  - **Matching.** A pure Fellegi–Sunter engine in `vitni_core::matching` scores per-kind profiles and
+    keeps per-feature evidence (#396–#400, [ADR 0038](../adr/0038-record-matching-explainable-scoring.md)),
+    measured by `cargo xtask match-eval` over an evaluation corpus (#402). The duplicate check (#401),
+    the similar-record hint on manual entry (#415) and the plugin `find-similar` query (#417) all score
+    through it.
+  - **Identity decisions.** Merge and distinguish are assertions with a `MatchEvidence` snapshot for
+    every kind (#403, #405, #406, [ADR 0039](../adr/0039-identity-decisions-clusters-merge-distinct.md)).
+    A merged person reads as one persona cluster, with its linked records listed (#404, #416, #477).
+  - **Staged import.** Importers submit record graphs through the host-api `staging` interface. The
+    host plans each entity's disposition before anything is written, and commits or resumes the plan
+    (#407, [ADR 0040](../adr/0040-staged-import-plan-review-commit.md)). This is shown as the bulk Plan
+    and Review stages and `vitni import --plan` (#413, #510), the assisted wizard's match stage (#412),
+    a shared compare view (#411) and the possible-matches queue (#414). A GEDCOM or Gramps file is
+    proposed its dataset (#408, #463, #469). Digitalarkivet submits one graph per record and now imports
+    what it used to drop (#409, #410). An assisted import shows what it adds before committing (#509,
+    #512, [ADR 0046](../adr/0046-assisted-import-shows-what-it-adds.md)). Reusing a stored place,
+    source or repository adds what it lacks (#491, #498, #499).
+  - **Backup.** A versioned `.vitni-backup` format, with restore into a new or the current workspace
+    (#391, #426, [ADR 0041](../adr/0041-workspace-backup-and-restore.md),
+    [ADR 0044](../adr/0044-restore-can-replace-the-open-workspace.md)).
+  - **Scale and durability.** Fixes followed the matching work:
+    - A `record_links` index and a `match_pairs` projection replaced reading every profile and the
+      all-pairs scan (#492, #493, #494, [ADR 0047](../adr/0047-record-links-index.md),
+      [ADR 0048](../adr/0048-match-pairs-projection.md)).
+    - Planning stopped loading the whole workspace (#495), and the Dashboard stopped reading every
+      person summary (#519).
+    - Projection and origin-index writes moved into a write journal replayed on open (#486, #489, #490,
+      #536, [ADR 0050](../adr/0050-projections-record-their-last-event.md)).
+    - An unreadable event is reported instead of stopping the workspace (#535,
+      [ADR 0051](../adr/0051-an-unreadable-event-is-reported-not-fatal.md)).
+
+  #388, the duplicated Digitalarkivet census person, was closed as not reproducible: it was different
+  records naming the same people, which is what this milestone matches. #493 was closed by
+  hand once #518 ([ADR 0048](../adr/0048-match-pairs-projection.md)) replaced the scan. Residuals, filed without a
+  milestone:
+  - Import target preparation is still inline in the CLI (#628).
+  - A re-import's sex supersession names no run in History (#629).
+  - Place and Source resolve by origin or by the user's decision only; neither carries an `ExternalId`.
 - **Bulk import in the GUI.** *(Done — `feat/gui-bulk-import`, closes #191.)* `vitni-ui-dioxus` had
   no local-file import flow — only the assisted online wizard — and the CLI's own target selection
   (`--new NAME PATH` / `--into NAME`, prompting when an existing target already holds persons) had no
