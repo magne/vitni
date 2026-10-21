@@ -29,6 +29,13 @@ ignore = [
     "RUSTSEC-2026-0370", # zvariant
     "RUSTSEC-2026-0371", # zbus_names
     "RUSTSEC-2026-0372", # zvariant_derive
+    # basic-toml (unmaintained, NOT vulnerable): pulled by i18n-config 0.4.8 under i18n-embed(-fl), which
+    # has no release off it. Re-evaluate when i18n-config drops it.
+    "RUSTSEC-2026-0374", # basic-toml
+    # webpki-roots 0.26.11 (NOT vulnerable here): a shim that re-exports webpki-roots 1.x, locked at
+    # 1.0.10, which drops the distrusted emSign root. sqlx-core 0.8.6 still requires ^0.26, so the
+    # advisory matches the shim's version only. Re-evaluate when sqlx moves to webpki-roots 1.
+    "RUSTSEC-2026-0381", # webpki-roots 0.26.11 shim
 ]
 
 [licenses]
