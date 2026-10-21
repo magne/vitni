@@ -71,6 +71,7 @@ mod record_origin;
 pub mod repository;
 pub mod repository_change_set;
 pub mod research_note;
+pub mod saved_search;
 pub mod secret_env;
 pub mod session;
 pub mod similar;

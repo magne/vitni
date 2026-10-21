@@ -23,6 +23,7 @@ use crate::config::{
     SuretyLabelOverrides, ThemeMode,
 };
 use crate::error::AppError;
+use crate::saved_search::SavedSearchEntry;
 use crate::workspace::{
     self, IdFormatOverrides, ListPreferences, LocaleOverrides, OperatorRecord, PluginPreferences, RecentItem,
     WindowGeometry,
@@ -78,7 +79,10 @@ pub fn requested_languages_for(
 
 /// The workspace-functionality scope (ADR 0015 §1): the dataset and how it behaves. The per-workspace
 /// half of the manifest — `database_url`, the `id_formats` overrides, the `operators` list, and the
-/// plugin toggles. Shared: for a remote workspace this lives server-side with the data.
+/// plugin toggles. The workspace's saved searches (ADR 0052 §8) belong to this scope too, but are
+/// read and written whole through [`ConfigStore::load_saved_searches`] and
+/// [`ConfigStore::store_saved_searches`]. Shared: for a remote workspace this lives server-side with the
+/// data.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorkspaceFunctionality {
     /// The database backing this workspace (SQLite file ref or Postgres URL), frozen at `init`.
@@ -113,8 +117,8 @@ pub struct Presentation {
 /// files; a database backend plugs into the same trait in Phase 13.
 ///
 /// The scope groups are: **operator** (the acting identity), **workspace-functionality** (the dataset
-/// and how it behaves — the manifest functionality half plus the global registry / app defaults it
-/// belongs to per ADR 0015 §1), and **client/presentation** (how this session presents the workspace —
+/// and how it behaves — the manifest functionality half, the saved searches, plus the global registry / app
+/// defaults it belongs to per ADR 0015 §1), and **client/presentation** (how this session presents the workspace —
 /// the manifest presentation half plus the live app-level presentation default).
 pub trait ConfigStore {
     // ===== Operator scope =====
@@ -203,6 +207,25 @@ pub trait ConfigStore {
     /// [`AppError::Config`] if no workspace directory is set, or [`AppError::Workspace`] if the
     /// manifest cannot be read/written.
     fn store_workspace_functionality(&self, functionality: &WorkspaceFunctionality) -> Result<(), AppError>;
+
+    /// Loads the workspace's saved searches in manifest order (ADR 0052 §8); an entry this version
+    /// cannot read, or that repeats the id of an earlier entry, comes back as
+    /// [`SavedSearchEntry::Unreadable`] so every readable entry's id is unique.
+    ///
+    /// # Errors
+    ///
+    /// [`AppError::Config`] if no workspace directory is set, or [`AppError::Workspace`] if the
+    /// manifest cannot be read.
+    fn load_saved_searches(&self) -> Result<Vec<SavedSearchEntry>, AppError>;
+
+    /// Replaces the workspace's saved searches (read-modify-write, preserving the rest of the
+    /// manifest); unreadable entries are written back unchanged.
+    ///
+    /// # Errors
+    ///
+    /// [`AppError::Config`] if no workspace directory is set, or [`AppError::Workspace`] if the
+    /// manifest cannot be read/written.
+    fn store_saved_searches(&self, entries: &[SavedSearchEntry]) -> Result<(), AppError>;
 
     /// Persists whether plugin `id` is enabled (a manifest override).
     ///
@@ -487,6 +510,14 @@ impl ConfigStore for FileConfigStore {
         workspace::save_list_preferences(self.workspace_dir()?, kind, preferences)
     }
 
+    fn load_saved_searches(&self) -> Result<Vec<SavedSearchEntry>, AppError> {
+        workspace::read_saved_searches(self.workspace_dir()?)
+    }
+
+    fn store_saved_searches(&self, entries: &[SavedSearchEntry]) -> Result<(), AppError> {
+        workspace::save_saved_searches(self.workspace_dir()?, entries)
+    }
+
     fn load_ai_config(&self) -> Result<AiConfig, AppError> {
         Ok(config::load(self.config_path()?)?.ai)
     }
@@ -562,6 +593,8 @@ mod tests {
 
     use super::{ConfigStore, FileConfigStore};
     use crate::config::{AppDefaults, OperatorConfig, ThemeMode};
+    use crate::error::AppError;
+    use crate::saved_search::{SavedSearch, SavedSearchEntry, SavedSearchId, StoredQuery};
     use crate::workspace::{ListPreferences, LocaleOverrides, RecentItem, WindowGeometry, Workspace};
     use uuid::Uuid;
     use vitni_core::ids::AgentId;
@@ -903,5 +936,61 @@ disabled = ["gedcom-import"]
 
         let shortcuts = store.load_shortcuts().expect("shortcuts");
         assert_eq!(shortcuts.bindings.get("quit").map(String::as_str), Some("mod+shift+q"));
+    }
+
+    fn readable_saved_search(n: u128, name: &str) -> SavedSearchEntry {
+        SavedSearchEntry::Readable(SavedSearch {
+            id: SavedSearchId::from_uuid(Uuid::from_u128(n)),
+            name: name.to_owned(),
+            query: StoredQuery {
+                kind: ListedKind::Person,
+                search: "ada".to_owned(),
+                filters: vec![
+                    toml::from_str("column = \"birth\"\nop = \"is-empty\"\nvalue = { type = \"none\" }")
+                        .expect("clause"),
+                ],
+                sort: None,
+                columns: Some(vec!["name".to_owned()]),
+            },
+        })
+    }
+
+    #[test]
+    fn file_store_round_trips_saved_searches_readable_and_unreadable() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ws = dir.path().join("ws");
+        Workspace::init(&ws, &operator(1), &AppDefaults::default(), None).expect("init");
+        let store = FileConfigStore::for_workspace(ws.clone());
+        assert_eq!(store.load_saved_searches().expect("load empty"), Vec::new());
+
+        let raw: toml::Value = toml::from_str("name = \"No id\"\nfuture = 1").expect("raw entry");
+        let entries = vec![
+            readable_saved_search(1, "First"),
+            SavedSearchEntry::from_value(1, &raw),
+            readable_saved_search(2, "Second"),
+        ];
+        assert!(
+            matches!(entries[1], SavedSearchEntry::Unreadable { .. }),
+            "{:?}",
+            entries[1]
+        );
+
+        store.store_saved_searches(&entries).expect("store");
+
+        assert_eq!(store.load_saved_searches().expect("reload"), entries);
+        let text = std::fs::read_to_string(ws.join("workspace.toml")).expect("manifest");
+        assert!(text.contains("[[saved_searches]]"), "{text}");
+    }
+
+    #[test]
+    fn saved_searches_without_a_workspace_directory_are_a_config_error() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = FileConfigStore::new(dir.path().join("config.toml"), None);
+
+        let load = store.load_saved_searches();
+        let store_result = store.store_saved_searches(&[readable_saved_search(1, "First")]);
+
+        assert!(matches!(load, Err(AppError::Config(_))), "{load:?}");
+        assert!(matches!(store_result, Err(AppError::Config(_))), "{store_result:?}");
     }
 }
