@@ -349,6 +349,9 @@ by `similar.rs` before each lookup.
   percentages, which a pair must score above (a pair whose evidence nets to nothing sits exactly at the
   default 50 and is not shown); an unset field falls back field by field to the engine's defaults. A bad value, or a
   pack that does not parse, fails the lookup that needs it, never the workspace open.
+- **`[[saved_searches]]`** in `workspace.toml` holds the saved list queries (ADR 0052 §8): each entry an
+  `id` (UUID v7), a `name` and the query. Names are unique per workspace, compared case-insensitively.
+  Entries are kept as raw tables so an entry this version cannot read stays in the file on rewrite.
 
 ## The matching evaluation corpus
 

@@ -260,7 +260,7 @@ activity feed / History tab / *Why we believe* popover all render it), the opera
 fixture with people instead — every scenario there is measured against its current lists and counts.
 
 The CLI's top-level commands are `init`, `rebuild`, `import`, `export`, `plugin`, plus one
-subcommand-bearing verb per aggregate, generated from `for_each_cli_command!` in
+subcommand-bearing verb per aggregate and the `saved-search` verb (ADR 0052 §8), generated from `for_each_cli_command!` in
 `crates/vitni-cli/src/lib.rs`. Workspace selection is `--workspace`/`VITNI_WORKSPACE`. Every one of
 them is reachable through the `vitni` launcher too, which forwards anything with arguments.
 
