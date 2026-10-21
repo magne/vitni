@@ -46,7 +46,7 @@ label = "key: )"
 
 [[step]]
 do = "click"
-at = { role = "button", text = "Save" }
+at = { role = "button", text = "Save", within = "detail-head" }
 label = "New repository: Save"
 
 [[step]]
@@ -71,7 +71,7 @@ label = "type: the census source's title"
 
 [[step]]
 do = "click"
-at = { role = "button", text = "Save" }
+at = { role = "button", text = "Save", within = "detail-head" }
 label = "New source: Save"
 
 [[step]]

@@ -72,6 +72,11 @@ label = "Tab: the Columns button"
 [[step]]
 do = "key"
 chord = "Tab"
+label = "Tab: the Saved searches button"
+
+[[step]]
+do = "key"
+chord = "Tab"
 label = "Tab: the sort button"
 
 [[step]]

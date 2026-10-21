@@ -10,7 +10,7 @@ use vitni_app::{
 };
 use vitni_core::ids::PersonId;
 
-use crate::args::{ChromosomeSideArg, DnaProviderArg, ListArgs, RestrictionsArgs};
+use crate::args::{ChromosomeSideArg, DnaProviderArg, ListArgs, RestrictionsArgs, narrows};
 use crate::i18n::Localizer;
 
 /// `DnaMatch` subcommands.
@@ -274,7 +274,7 @@ async fn list(workspace: &Workspace, window: &ListArgs, localizer: &Localizer) -
     if matches.is_empty() {
         println!(
             "{}",
-            localizer.empty_page(page, window.narrows(), localizer.dna_match_list_empty())
+            localizer.empty_page(page, narrows(&query), localizer.dna_match_list_empty())
         );
         return Ok(());
     }

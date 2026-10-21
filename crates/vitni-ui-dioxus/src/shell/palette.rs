@@ -1,22 +1,22 @@
 //! The command palette (`⌘K`/`⌘F`, and the top-bar search's Enter).
 //!
 //! Blends records (the loaded entity lists, filtered by the query), commands (create a record, find
-//! duplicates, open a tool/help), and the recently-opened records into one keyboard-navigable
-//! listbox. The decision logic is the framework-free [`vitni_ui::palette`] module; this component
-//! is the thin Dioxus binding: it loads the rows on open (and again after any create/edit/undo, via
-//! [`data_version_ticket`] — #266), filters them per keystroke with [`palette_groups`], and renders
-//! the ARIA combobox/listbox from `search-palette.html`.
+//! duplicates, open a tool/help), saved searches, and the recently-opened records into one
+//! keyboard-navigable listbox. The decision logic is the framework-free [`vitni_ui::palette`]
+//! module; this component is the thin Dioxus binding: it loads the rows on open (and again after
+//! any create/edit/undo, via [`data_version_ticket`] — #266), filters them per keystroke with
+//! [`palette_groups`], and renders the ARIA combobox/listbox from `search-palette.html`.
 
 use dioxus::prelude::*;
-use vitni_app::RecentItem;
+use vitni_app::{RecentItem, SavedSearchId};
 use vitni_ui::{
     Category, Destination, Localizer, PaletteAction, PaletteCommand, PaletteCommandVm, PaletteEntry, PaletteGroupKind,
-    RecordRef, Tool, activate, move_active, palette_commands, palette_groups,
+    RecordRef, Tool, activate, move_active, palette_commands, palette_groups, saved_search_entries,
 };
 
 use crate::app::AppCtx;
 use crate::components::TextInput;
-use crate::services::load_palette_rows;
+use crate::services::{load_palette_rows, load_saved_searches};
 use crate::shell::focus_trap::{DialogFocus, dismiss_on_escape, trap_tab};
 use crate::shell::nav_state::{NavState, Overlay, data_version_ticket};
 use crate::shell::{ChromeCtx, data_loc};
@@ -46,6 +46,7 @@ pub fn CommandPalette() -> Element {
         Some(AppCtx::Ready(state)) => Some(state.services().clone()),
         _ => None,
     };
+    let saved_dir = services.as_ref().map(|services| services.dir.clone());
     let mut query = use_signal(String::new);
     let mut active = use_signal(|| 0_usize);
     // Seed the query from the top-bar search (or clear it for a bare ⌘K) each time the palette opens.
@@ -57,6 +58,7 @@ pub fn CommandPalette() -> Element {
             active.set(0);
         }
     });
+    use_saved_palette_entries(nav, saved_dir);
     // Load every pickable category's rows per open (empty while closed / host-free), and again after
     // any mutation, so a record created while the palette stays open is findable in it (#266).
     let rows = use_resource(move || {
@@ -79,7 +81,13 @@ pub fn CommandPalette() -> Element {
     let commands = command_vms(&chrome, &data_loc());
     let recent = recent_entries(&nav);
     let query_text = query();
-    let groups = palette_groups(&records, &commands, &recent, &query_text);
+    let groups = palette_groups(
+        &records,
+        &commands,
+        &nav.saved_search_entries.read(),
+        &recent,
+        &query_text,
+    );
     let views = group_views(&chrome, &groups);
     let total: usize = views.iter().map(|group| group.options.len()).sum();
     let active_index = if total == 0 { 0 } else { active().min(total - 1) };
@@ -189,6 +197,31 @@ pub fn CommandPalette() -> Element {
     }
 }
 
+/// Reads the saved searches each time the palette opens: one saved or deleted from the CLI does not
+/// bump `data_version`, and the manifest is a small file.
+fn use_saved_palette_entries(mut nav: NavState, saved_dir: Option<std::path::PathBuf>) {
+    use_effect(move || {
+        let Some(dir) = saved_dir.clone() else {
+            return;
+        };
+        if *nav.overlay.read() == Overlay::Palette {
+            nav.saved_search_entries.set(load_saved_entries(&dir));
+        }
+    });
+}
+
+/// The workspace's readable saved searches as palette entries, each with its kind's category. A
+/// manifest that cannot be read yields none, logged: the palette still works without them.
+fn load_saved_entries(dir: &std::path::Path) -> Vec<PaletteEntry> {
+    match load_saved_searches(dir) {
+        Ok(list) => saved_search_entries(&list),
+        Err(error) => {
+            tracing::warn!(%error, "could not read the saved searches for the palette");
+            Vec::new()
+        }
+    }
+}
+
 /// Builds the localized command list (a `PaletteCommandVm` per default [`palette_commands`] entry).
 ///
 /// `Create {entity}…` takes the **singular** noun from the data localizer — the verb needs no
@@ -236,6 +269,7 @@ fn group_views(chrome: &ChromeCtx, groups: &[vitni_ui::PaletteGroup]) -> Vec<Gro
         let heading = match group.kind {
             PaletteGroupKind::Category(category) => chrome.0.rail_label(category.label_id()),
             PaletteGroupKind::Commands => chrome.0.palette_group_commands(),
+            PaletteGroupKind::SavedSearches => chrome.0.palette_group_saved_searches(),
             PaletteGroupKind::Recent => chrome.0.palette_group_recent(),
         };
         let mut options = Vec::new();
@@ -272,6 +306,9 @@ fn option_parts(chrome: &ChromeCtx, entry: &PaletteEntry) -> (String, String, St
                 chrome.0.rail_label(category.label_id())
             ),
         ),
+        PaletteEntry::SavedSearch { name, category, .. } => {
+            ("🔖".to_owned(), name.clone(), chrome.0.rail_label(category.label_id()))
+        }
         PaletteEntry::Command(vm) => (
             command_icon(&vm.command),
             vm.label.clone(),
@@ -294,6 +331,7 @@ fn command_icon(command: &PaletteCommand) -> String {
 fn run_action(nav: &mut NavState, action: PaletteAction) {
     match action {
         PaletteAction::Open(reference) => open_record(nav, reference),
+        PaletteAction::RunSavedSearch { id, category } => run_saved_search(nav, id, category),
         PaletteAction::Run(command) => match command {
             PaletteCommand::Create(category) => nav.request_new_for(category),
             PaletteCommand::ReviewMatches => nav.go_to(Destination::Tool(Tool::Matches)),
@@ -302,6 +340,13 @@ fn run_action(nav: &mut NavState, action: PaletteAction) {
         },
     }
     nav.close_overlay();
+}
+
+/// Runs saved search `id` of `category`'s kind: hands it to that kind's list, which applies it on mount
+/// or as the handoff changes, and shows the list.
+pub fn run_saved_search(nav: &mut NavState, id: SavedSearchId, category: Category) {
+    nav.saved_search_run.set(Some(id));
+    nav.go_to(Destination::Category(category));
 }
 
 /// Navigates to a record's category and opens it as a tab.

@@ -30,7 +30,7 @@ label = "type: TRee-7"
 
 [[step]]
 do = "click"
-at = { role = "button", text = "Save" }
+at = { role = "button", text = "Save", within = "detail-head" }
 label = "New tag: Save"
 
 [[step]]

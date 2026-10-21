@@ -7,7 +7,7 @@ use vitni_app::{
     set_research_note_body, set_research_note_restrictions, show_research_note,
 };
 
-use crate::args::{ListArgs, RestrictionsArgs, SubjectKindArg};
+use crate::args::{ListArgs, RestrictionsArgs, SubjectKindArg, narrows};
 use crate::i18n::Localizer;
 
 /// `ResearchNote` subcommands.
@@ -198,7 +198,7 @@ async fn list(workspace: &Workspace, window: &ListArgs, localizer: &Localizer) -
     if notes.is_empty() {
         println!(
             "{}",
-            localizer.empty_page(page, window.narrows(), localizer.research_note_list_empty())
+            localizer.empty_page(page, narrows(&query), localizer.research_note_list_empty())
         );
         return Ok(());
     }

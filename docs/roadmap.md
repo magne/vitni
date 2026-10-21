@@ -499,7 +499,9 @@ app. Gated by **ADR 0014** (the last deferred plugin-system decision).
   record taking no slot, and `vitni <kind> list` takes `--limit`/`--offset`; the first page of 100 000
   persons reads in ~0.2 ms. A list query (#677, ADR 0052 §4–5) filters, sorts and pages a list table per kind in SQL,
   with typed cells, the total and keyset reads, and `vitni <kind> list` takes `--search`, `--filter` and
-  `--sort`; a sorted page deep in 100 000 persons reads by keyset in ~5 ms.
+  `--sort`; a sorted page deep in 100 000 persons reads by keyset in ~5 ms. Saved searches (#680, ADR 0052
+  §8–10) store a named list query in `workspace.toml`: `vitni <kind> list --saved <name>` runs one, and the
+  `saved-search` verb (`list`, `save`, `delete`) manages them.
 - **Packaging & distribution (Linux-first).** A `cargo xtask package` assembles a release tarball (CLI +
   GUI binaries + the signed first-party fleet as the embedded layer, re-verifying every signature);
   cargo-deb metadata for a `.deb`; and a tag-triggered, zizmor-clean `release.yml` that signs the fleet

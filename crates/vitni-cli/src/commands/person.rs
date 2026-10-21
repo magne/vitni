@@ -7,7 +7,7 @@ use vitni_app::{
     record_birth, set_restrictions, show_person,
 };
 
-use crate::args::{ConfidenceArg, EvidenceArg, ListArgs, ParticipantRoleArg, RestrictionsArgs};
+use crate::args::{ConfidenceArg, EvidenceArg, ListArgs, ParticipantRoleArg, RestrictionsArgs, narrows};
 use crate::commands::similar::hint_similar;
 use crate::i18n::Localizer;
 
@@ -294,7 +294,7 @@ async fn list(workspace: &Workspace, window: &ListArgs, localizer: &Localizer) -
     if people.is_empty() {
         println!(
             "{}",
-            localizer.empty_page(page, window.narrows(), localizer.list_empty())
+            localizer.empty_page(page, narrows(&query), localizer.list_empty())
         );
         return Ok(());
     }

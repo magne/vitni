@@ -55,7 +55,7 @@ label = "picker: portrait.png"
 
 [[step]]
 do = "click"
-at = { role = "button", text = "Save" }
+at = { role = "button", text = "Save", within = "dialog" }
 label = "attach panel: Save"
 
 [[step]]

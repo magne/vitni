@@ -357,6 +357,13 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 .menu-check { width: 1em; flex: none; color: var(--accent); }
 .menu-item[aria-disabled="true"] { color: var(--muted); cursor: not-allowed; }
 .menu-item[aria-disabled="true"]:hover { background: none; }
+/* The Saved menu (ADR 0052 §8, #680): an icon button in the toolbar, its menu in the Columns and sort
+   menus' place. A saved search is a radio item, ticked while it is the applied one; an entry this
+   version cannot read is listed disabled by name; *Save as new* and *Rename* ask for the name in
+   a field inside the menu. A saved search's clause that cannot run is a marked chip. */
+.list-toolbar .icon-btn { flex: none; }
+.saved-naming { display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3); }
+.chip.stale { border-color: var(--err); color: var(--err); }
 .filter-editor {
   display: flex; flex-direction: column; gap: var(--sp-2);
   padding: var(--sp-2) var(--sp-3);

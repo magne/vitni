@@ -20,6 +20,7 @@
           <input class="filter" placeholder="Filter people…">
           <button class="btn sm" title="Filter the list by its columns" aria-expanded="false" aria-controls="filter-editor">Filters</button>
           <span class="menu-anchor"><button class="btn sm" title="Choose and order the columns a row shows" aria-haspopup="dialog" aria-expanded="false">Columns</button></span>
+          <span class="menu-anchor"><button class="icon-btn" type="button" title="Saved searches" aria-label="Saved searches" aria-haspopup="menu" aria-expanded="false">☆</button></span>
           <span class="menu-anchor"><button class="btn sm" title="Change sort order" aria-haspopup="menu" aria-expanded="false">Sort: ID ↑</button></span>
           <button class="btn sm primary" title="New person">+ New</button>
         </div>
@@ -114,6 +115,18 @@
             <span class="p-kind">Command</span>
           </div>
 
+          <div class="nav-group-label" role="presentation" style="padding:var(--sp-2) var(--sp-4) 2px">Saved searches</div>
+          <div class="p-row" role="option" id="palette-opt-saved-1" aria-selected="false">
+            <span style="width:24px;text-align:center">🔖</span>
+            <span>Born before 1800</span>
+            <span class="p-kind">People</span>
+          </div>
+          <div class="p-row" role="option" id="palette-opt-saved-2" aria-selected="false">
+            <span style="width:24px;text-align:center">🔖</span>
+            <span>Untagged places</span>
+            <span class="p-kind">Places</span>
+          </div>
+
           <div class="nav-group-label" role="presentation" style="padding:var(--sp-2) var(--sp-4) 2px">Recent</div>
           <div class="p-row" role="option" id="palette-opt-recent-1" aria-selected="false">
             <span style="width:24px;text-align:center">🕑</span>
@@ -130,7 +143,9 @@
         <div class="muted" style="border-top:1px solid var(--line);padding:var(--sp-2) var(--sp-4);font-size:var(--fs-xs)">
           Specimen: mixed-kind results shown live. Live search and command execution ship. The palette
           loads its records when it opens <b>and again after every create, edit or undo</b>, so a record
-          created while it stays open is findable in it without reopening.
+          created while it stays open is findable in it without reopening. <b>Saved searches</b> follow Commands, each
+          with its kind; running one opens that kind's list with the search applied. They are read each time the
+          palette opens.
         </div>
       </div>
     </div>

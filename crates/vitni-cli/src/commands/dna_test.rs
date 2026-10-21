@@ -8,7 +8,7 @@ use vitni_app::{
     set_dna_test_provider, set_dna_test_restrictions, set_dna_test_type, show_dna_test, tag_dna_test,
 };
 
-use crate::args::{DnaGenomeBuildArg, DnaProviderArg, DnaTestTypeArg, ListArgs, RestrictionsArgs};
+use crate::args::{DnaGenomeBuildArg, DnaProviderArg, DnaTestTypeArg, ListArgs, RestrictionsArgs, narrows};
 use crate::i18n::Localizer;
 
 /// `DnaTest` subcommands.
@@ -225,7 +225,7 @@ async fn list(workspace: &Workspace, window: &ListArgs, localizer: &Localizer) -
     if tests.is_empty() {
         println!(
             "{}",
-            localizer.empty_page(page, window.narrows(), localizer.dna_test_list_empty())
+            localizer.empty_page(page, narrows(&query), localizer.dna_test_list_empty())
         );
         return Ok(());
     }

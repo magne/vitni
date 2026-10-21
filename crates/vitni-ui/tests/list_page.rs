@@ -266,7 +266,7 @@ async fn a_rows_second_line_is_its_chosen_columns_an_empty_cell_skipped() {
         .await
         .expect("link");
     let query = ListQuery {
-        columns: vec!["description".to_owned(), "place".to_owned()],
+        columns: Some(vec!["description".to_owned(), "place".to_owned()]),
         ..ListQuery::new(ListedKind::Event)
     };
 
@@ -294,7 +294,7 @@ async fn a_tag_column_reads_the_tags_by_name() {
         .await
         .expect("tag ola");
     let query = ListQuery {
-        columns: vec!["tags".to_owned()],
+        columns: Some(vec!["tags".to_owned()]),
         ..ListQuery::new(ListedKind::Person)
     };
 

@@ -22,11 +22,11 @@ use unic_langid::LanguageIdentifier;
 use vitni_app::DecidableKind;
 use vitni_app::{
     ActivityDetail, Age, AgeBound, AppError, AssociationRole, BackupError, Calendar, ChangeLogEntry, ChangeValue,
-    ChildParentRelationship, ChromosomeSide, CitingContext, DatasetError, DateModifier, DatePoint, DateQuality,
-    DbError, DnaGenomeBuild, DnaProvider, DnaTestType, EvidenceKind, EvidenceLevel, FactType, FilterOp,
+    ChildParentRelationship, ChromosomeSide, CitingContext, ClauseGap, DatasetError, DateModifier, DatePoint,
+    DateQuality, DbError, DnaGenomeBuild, DnaProvider, DnaTestType, EvidenceKind, EvidenceLevel, FactType, FilterOp,
     GenealogicalDate, GenealogicalDateBody, InformationKind, Kinship, ListQueryError, MatchBand, MatchDataError,
     MatchStatus, NameType, NoteType, OperatorKind, PackError, ParticipantRole, RecordRole, RecordValue, RepositoryType,
-    Sex, SourceMediaType, SourceQuality, SuretyLabelOverrides, UsingKind, config,
+    SavedSearchError, Sex, SourceMediaType, SourceQuality, SuretyLabelOverrides, UsingKind, config,
 };
 
 use crate::action::{ActionLabel, Affordance};
@@ -2931,6 +2931,7 @@ impl Localizer {
             AppError::Dataset(dataset) => self.dataset_error(dataset),
             AppError::MatchData(data) => self.match_data_error(data),
             AppError::ListQuery(query) => self.list_query_error(query),
+            AppError::SavedSearch(error) => self.saved_search_error(error),
             AppError::Db(db) => self.db_error(db),
         }
     }
@@ -3023,6 +3024,46 @@ impl Localizer {
         fl!(self.loader, "filter-range", from = from, to = to)
     }
 
+    /// The value of a saved clause whose tag no longer exists.
+    #[must_use]
+    pub fn filter_deleted_tag(&self) -> String {
+        fl!(self.loader, "filter-deleted-tag")
+    }
+
+    /// The value of a saved clause whose record no longer exists.
+    #[must_use]
+    pub fn filter_deleted_record(&self) -> String {
+        fl!(self.loader, "filter-deleted-record")
+    }
+
+    /// The chip of a saved clause the catalogue cannot take, naming the clause and why.
+    #[must_use]
+    pub fn filter_stale_clause(&self, clause: &str, error: &ListQueryError) -> String {
+        let reason = match error {
+            ListQueryError::UnknownColumn { .. } => fl!(self.loader, "filter-stale-unknown-column"),
+            ListQueryError::UnknownOperator { .. } | ListQueryError::UnsupportedOperator { .. } => {
+                fl!(self.loader, "filter-stale-unknown-operator")
+            }
+            ListQueryError::UnknownChoice { .. } => fl!(self.loader, "filter-stale-unknown-choice"),
+            ListQueryError::WrongValue { .. }
+            | ListQueryError::UnknownReference { .. }
+            | ListQueryError::Unsortable { .. }
+            | ListQueryError::KindMismatch { .. } => fl!(self.loader, "filter-stale-wrong-value"),
+        };
+        fl!(self.loader, "filter-stale-clause", clause = clause, reason = reason)
+    }
+
+    /// The chip of a saved clause that leaves out its column, its operator or both.
+    #[must_use]
+    pub fn filter_stale_gapped_clause(&self, clause: &str, gap: ClauseGap) -> String {
+        let reason = match gap {
+            ClauseGap::Both => return fl!(self.loader, "filter-stale-clause-nameless"),
+            ClauseGap::Column => fl!(self.loader, "filter-stale-no-column"),
+            ClauseGap::Operator => fl!(self.loader, "filter-stale-no-operator"),
+        };
+        fl!(self.loader, "filter-stale-clause", clause = clause, reason = reason)
+    }
+
     /// Why a filter clause in the editor cannot be applied.
     #[must_use]
     pub fn filter_draft_error(&self, error: FilterDraftError) -> String {
@@ -3078,6 +3119,22 @@ impl Localizer {
                 expected = expected.as_str(),
                 found = found.as_str()
             ),
+        }
+    }
+
+    fn saved_search_error(&self, error: &SavedSearchError) -> String {
+        match error {
+            SavedSearchError::EmptyName => fl!(self.loader, "err-saved-search-empty-name"),
+            SavedSearchError::DuplicateName { name } => {
+                fl!(self.loader, "err-saved-search-duplicate-name", name = name.clone())
+            }
+            SavedSearchError::NotFound { reference } => {
+                fl!(self.loader, "err-saved-search-not-found", reference = reference.clone())
+            }
+            SavedSearchError::Removed => fl!(self.loader, "err-saved-search-removed"),
+            SavedSearchError::Broken { name, .. } => {
+                fl!(self.loader, "err-saved-search-broken", name = name.clone())
+            }
         }
     }
 
@@ -4109,6 +4166,29 @@ mod tests {
             replaced: None,
             merged_from: None,
         }
+    }
+
+    #[test]
+    fn a_stale_clause_with_an_unknown_choice_says_so() {
+        use vitni_app::ListQueryError;
+        let loc = Localizer::for_test("en");
+        let choice = ListQueryError::UnknownChoice {
+            column: "sex".into(),
+            value: "x".into(),
+        };
+        let choice = loc.filter_stale_clause("sex is", &choice);
+        assert!(!choice.contains("fit the operator"), "{choice}");
+    }
+
+    #[test]
+    fn a_clause_missing_its_column_or_operator_says_so() {
+        let loc = Localizer::for_test("en");
+        let no_column = loc.filter_stale_gapped_clause("contains", vitni_app::ClauseGap::Column);
+        let no_operator = loc.filter_stale_gapped_clause("surname", vitni_app::ClauseGap::Operator);
+        assert_eq!(no_column, "contains (this clause names no column)");
+        assert_eq!(no_operator, "surname (this clause names no operator)");
+        let nameless = loc.filter_stale_gapped_clause("", vitni_app::ClauseGap::Both);
+        assert_eq!(nameless, "this clause names no column or operator");
     }
 
     #[test]

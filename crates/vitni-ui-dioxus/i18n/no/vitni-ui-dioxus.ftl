@@ -55,6 +55,26 @@ filter-cancel = Avbryt
 filter-edit = Rediger filteret: { $filter }
 filter-delete = Fjern filteret: { $filter }
 
+# Utforskerens lagrede søk (ADR 0052 §8-10, #680)
+saved-title = Lagrede søk
+saved-save-new = Lagre som nytt
+saved-update = Oppdater
+saved-rename = Gi nytt navn
+saved-delete = Slett
+saved-name = Navn
+saved-save = Lagre
+saved-cancel = Avbryt
+saved-name-empty = Gi det lagrede søket et navn.
+saved-name-duplicate = Et lagret søk med dette navnet finnes allerede.
+saved-unreadable = saved_searches[{ $position }]: kan ikke leses
+saved-unreadable-named = { $name }: kan ikke leses
+saved-saved = Lagret søk «{ $name }» er lagret
+saved-updated = Lagret søk «{ $name }» er oppdatert
+saved-renamed = Lagret søk har fått navnet «{ $name }»
+saved-deleted = Lagret søk «{ $name }» er slettet
+saved-marked-notice = Et filter i dette lagrede søket kan ikke kjøres. Rett eller fjern det markerte filteret for å se lista.
+saved-marked-blocks-save = Rett eller fjern det markerte filteret før du lagrer dette søket.
+
 # Komponentramme (tilgjengelige navn for ikonknapper, hopp-lenke)
 skip-to-content = Hopp til innhold
 close = Lukk
@@ -122,6 +142,7 @@ palette-placeholder = Skriv en kommando eller søk…
 palette-combobox-label = Søk i personer, steder, kilder, eller kjør en kommando
 palette-results-label = Søkeresultater og kommandoer
 palette-group-commands = Kommandoer
+palette-group-saved-searches = Lagrede søk
 palette-group-recent = Nylig
 palette-kind-command = Kommando
 palette-kind-recent = Nylig

@@ -10,7 +10,7 @@ use vitni_app::{
 };
 use vitni_core::geo::{GeoCoordinates, Microdegrees};
 
-use crate::args::{ListArgs, PlaceTypeArg, RestrictionsArgs, SuccessionKindArg};
+use crate::args::{ListArgs, PlaceTypeArg, RestrictionsArgs, SuccessionKindArg, narrows};
 use crate::commands::similar::hint_similar;
 use crate::i18n::Localizer;
 
@@ -326,7 +326,7 @@ async fn list(workspace: &Workspace, window: &ListArgs, localizer: &Localizer) -
     if places.is_empty() {
         println!(
             "{}",
-            localizer.empty_page(page, window.narrows(), localizer.place_list_empty())
+            localizer.empty_page(page, narrows(&query), localizer.place_list_empty())
         );
         return Ok(());
     }

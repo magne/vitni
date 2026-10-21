@@ -13,8 +13,8 @@ use std::collections::BTreeMap;
 use dioxus::prelude::*;
 use vitni_app::{ColumnType, FilterOp, ListedKind, record_target};
 use vitni_ui::{
-    ActiveFilter, FilterDraft, FilterDraftError, PickerSelection, choice_options, filter_chip_label, filter_columns,
-    filter_ops, listed_category,
+    ActiveFilter, FilterDraft, FilterDraftError, PickerSelection, StaleClauseVm, choice_options, filter_chip_label,
+    filter_columns, filter_ops, listed_category,
 };
 
 use crate::app::AppCtx;
@@ -31,6 +31,8 @@ pub enum FilterEditing {
     New,
     /// The applied clause at this index.
     Clause(usize),
+    /// The marked clause at this index of the marked clauses, to be replaced by a working one.
+    Stale(usize),
 }
 
 /// The toolbar's *Filters* button: opens the editor on a new clause, or closes it, and counts the
@@ -56,11 +58,13 @@ pub fn FiltersButton(count: usize, editing: Signal<Option<FilterEditing>>) -> El
 }
 
 /// The editor, when a clause is open, then the applied clauses as chips: a chip's label reopens its
-/// clause, its × removes it.
+/// clause, its × removes it. A clause of a saved search that cannot run (ADR 0052 §10) is a marked chip
+/// after them; editing it opens a new clause, which replaces it on *Apply*.
 #[component]
 pub fn FilterBar(
     kind: ListedKind,
     filters: Signal<Vec<ActiveFilter>>,
+    stale: Signal<Vec<StaleClauseVm>>,
     editing: Signal<Option<FilterEditing>>,
 ) -> Element {
     let chrome = use_context::<ChromeCtx>().0;
@@ -69,11 +73,12 @@ pub fn FilterBar(
     for active in filters.read().iter() {
         chips.push(filter_chip_label(&loc, kind, active));
     }
+    let marked: Vec<String> = stale.read().iter().map(|clause| clause.label.clone()).collect();
     rsx! {
         if let Some(target) = editing() {
-            FilterEditor { key: "{target:?}", kind, target, filters, editing }
+            FilterEditor { key: "{target:?}", kind, target, filters, stale, editing }
         }
-        if !chips.is_empty() {
+        if !chips.is_empty() || !marked.is_empty() {
             div { class: "list-filters", role: "group", aria_label: "{chrome.list_filters()}",
                 for (index, label) in chips.into_iter().enumerate() {
                     Chip {
@@ -82,7 +87,21 @@ pub fn FilterBar(
                         onactivate: move |()| editing.set(Some(FilterEditing::Clause(index))),
                         activate_label: chrome.filter_edit(&label),
                         ondelete: move |()| {
-                            filters.write().remove(index);
+                            remove_clause(FilterEditing::Clause(index), filters, stale);
+                            editing.set(None);
+                        },
+                        delete_label: chrome.filter_delete(&label),
+                    }
+                }
+                for (index, label) in marked.into_iter().enumerate() {
+                    Chip {
+                        key: "stale-{index}-{label}",
+                        label: label.clone(),
+                        stale: true,
+                        onactivate: move |()| editing.set(Some(FilterEditing::Stale(index))),
+                        activate_label: chrome.filter_edit(&label),
+                        ondelete: move |()| {
+                            remove_clause(FilterEditing::Stale(index), filters, stale);
                             editing.set(None);
                         },
                         delete_label: chrome.filter_delete(&label),
@@ -90,6 +109,65 @@ pub fn FilterBar(
                 }
             }
         }
+    }
+}
+
+/// Removes the entry at `index` from `list`, ignoring an index that is already gone.
+fn remove_at<T: 'static>(mut list: Signal<Vec<T>>, index: usize) {
+    if index < list.peek().len() {
+        list.write().remove(index);
+    }
+}
+
+/// Removes the clause `target` names, applied or marked; a new clause names nothing yet.
+pub fn remove_clause(target: FilterEditing, filters: Signal<Vec<ActiveFilter>>, stale: Signal<Vec<StaleClauseVm>>) {
+    match target {
+        FilterEditing::Clause(index) => remove_at(filters, index),
+        FilterEditing::Stale(index) => remove_at(stale, index),
+        FilterEditing::New => {}
+    }
+}
+
+/// Puts the editor's applied `active` clause where `target` says: over the clause it edited, or appended,
+/// replacing the marked clause it was opened on.
+pub fn commit_clause(
+    target: FilterEditing,
+    mut filters: Signal<Vec<ActiveFilter>>,
+    stale: Signal<Vec<StaleClauseVm>>,
+    active: ActiveFilter,
+) {
+    let mut applied = filters.write();
+    match target {
+        FilterEditing::Clause(index) if index < applied.len() => applied[index] = active,
+        FilterEditing::Clause(_) | FilterEditing::New => applied.push(active),
+        FilterEditing::Stale(index) => {
+            applied.push(active);
+            remove_at(stale, index);
+        }
+    }
+}
+
+/// The draft the editor opens on: the applied clause being edited, a marked clause's column when the
+/// catalogue still has it, otherwise a new clause over the kind's title column.
+#[must_use]
+pub fn opening_draft(
+    kind: ListedKind,
+    target: FilterEditing,
+    filters: &[ActiveFilter],
+    stale: &[StaleClauseVm],
+) -> FilterDraft {
+    match target {
+        FilterEditing::Clause(index) => filters
+            .get(index)
+            .map_or_else(|| FilterDraft::new(kind), |active| active.draft.clone()),
+        FilterEditing::Stale(index) => {
+            let draft = FilterDraft::new(kind);
+            match stale.get(index) {
+                Some(clause) => draft.with_column(kind, &clause.column),
+                None => draft,
+            }
+        }
+        FilterEditing::New => FilterDraft::new(kind),
     }
 }
 
@@ -109,6 +187,7 @@ fn FilterEditor(
     kind: ListedKind,
     target: FilterEditing,
     filters: Signal<Vec<ActiveFilter>>,
+    stale: Signal<Vec<StaleClauseVm>>,
     editing: Signal<Option<FilterEditing>>,
 ) -> Element {
     let chrome = use_context::<ChromeCtx>().0;
@@ -117,20 +196,10 @@ fn FilterEditor(
         Some(AppCtx::Ready(state)) => Some(state.services().clone()),
         _ => None,
     };
-    let mut draft = use_signal(|| {
-        let applied = match target {
-            FilterEditing::Clause(index) => filters.peek().get(index).map(|active| active.draft.clone()),
-            FilterEditing::New => None,
-        };
-        applied.unwrap_or_else(|| FilterDraft::new(kind))
-    });
+    let mut draft = use_signal(|| opening_draft(kind, target, &filters.peek(), &stale.peek()));
     let mut error = use_signal(|| None::<EditorError>);
     let mut commit = move |active: ActiveFilter| {
-        let mut applied = filters.write();
-        match target {
-            FilterEditing::Clause(index) if index < applied.len() => applied[index] = active,
-            FilterEditing::Clause(_) | FilterEditing::New => applied.push(active),
-        }
+        commit_clause(target, filters, stale, active);
         editing.set(None);
     };
     let apply = move |_| {
@@ -218,14 +287,12 @@ fn FilterEditor(
             }
             div { class: "filter-actions",
                 button { class: "btn sm primary", r#type: "button", onclick: apply, "{chrome.filter_apply()}" }
-                if let FilterEditing::Clause(index) = target {
+                if target != FilterEditing::New {
                     button {
                         class: "btn sm",
                         r#type: "button",
                         onclick: move |_| {
-                            if index < filters.peek().len() {
-                                filters.write().remove(index);
-                            }
+                            remove_clause(target, filters, stale);
                             editing.set(None);
                         },
                         "{chrome.filter_remove()}"
@@ -338,11 +405,16 @@ fn TagValues(draft: Signal<FilterDraft>) -> Element {
             }
         }
     });
+    let loaded = tags.read();
     let mut names = BTreeMap::new();
-    for tag in tags.read().iter().flatten() {
+    for tag in loaded.iter().flatten() {
         names.insert(tag.id.clone(), tag.name.clone().unwrap_or_default());
     }
     let chosen = draft.read().values.clone();
+    if loaded.is_some() {
+        add_deleted_tags(&mut names, &draft.read(), &data_loc().filter_deleted_tag());
+    }
+    drop(loaded);
     rsx! {
         div { class: "filter-values",
             for (id, name) in names {
@@ -355,6 +427,60 @@ fn TagValues(draft: Signal<FilterDraft>) -> Element {
                 }
             }
         }
+    }
+}
+
+/// Adds a row for each chosen tag id that names no tag, labelled `deleted_label`, so the clause's dead
+/// value is visible and can be unticked.
+fn add_deleted_tags(names: &mut BTreeMap<String, String>, draft: &FilterDraft, deleted_label: &str) {
+    for id in &draft.values {
+        if !names.contains_key(id) {
+            names.insert(id.clone(), deleted_label.to_owned());
+        }
+    }
+}
+
+/// What a record clause's draft holds when its editor opens.
+#[derive(Debug, PartialEq, Eq)]
+enum HeldRecord {
+    /// No record.
+    Nothing,
+    /// A record that exists, held by its `human_id`.
+    Picked(PickerSelection),
+    /// A record that no longer exists, shown as this label; its id is not shown.
+    Deleted(String),
+}
+
+/// Reads the record `draft` holds, which is gone when the draft marks it deleted.
+fn held_record(draft: &FilterDraft) -> HeldRecord {
+    let Some(human_id) = draft.values.first() else {
+        return HeldRecord::Nothing;
+    };
+    let title = draft.labels.get(human_id).cloned().unwrap_or_else(|| human_id.clone());
+    if draft.deleted_records.contains(human_id) {
+        return HeldRecord::Deleted(title);
+    }
+    HeldRecord::Picked(PickerSelection {
+        human_id: human_id.clone(),
+        title,
+    })
+}
+
+/// Writes the picker's `selection` into `draft`; with none, the draft goes back to `deleted_draft`
+/// (the clause as it opened on a deleted record) so the dead record stays in its clause.
+fn sync_record_pick(draft: &mut FilterDraft, selection: Option<PickerSelection>, deleted_draft: Option<&FilterDraft>) {
+    if let (None, Some(original)) = (&selection, deleted_draft) {
+        draft.values.clone_from(&original.values);
+        draft.labels.clone_from(&original.labels);
+        draft.deleted_records.clone_from(&original.deleted_records);
+        return;
+    }
+    draft.values.clear();
+    draft.labels.clear();
+    draft.deleted_records.clear();
+    if let Some(selection) = selection {
+        draft.labels.insert(selection.human_id.clone(), selection.title);
+        draft.values.push(selection.human_id);
     }
 }
 
@@ -379,26 +505,107 @@ fn RecordValue(kind: ListedKind, column: String, draft: Signal<FilterDraft>) -> 
         loc.picker_entity(category),
         Vec::new(),
     );
-    use_hook(move || {
-        let held = draft.peek();
-        if let Some(human_id) = held.values.first() {
-            picker.state.write().selection = Some(PickerSelection {
-                human_id: human_id.clone(),
-                title: held.labels.get(human_id).cloned().unwrap_or_else(|| human_id.clone()),
-            });
+    let gone = use_hook(|| match held_record(&draft.peek()) {
+        HeldRecord::Picked(selection) => {
+            picker.state.write().selection = Some(selection);
+            None
         }
+        HeldRecord::Deleted(label) => Some((label, draft.peek().clone())),
+        HeldRecord::Nothing => None,
     });
+    let picked = picker.state.read().selection.is_some();
+    let deleted = gone.as_ref().map(|(label, _)| label.clone());
     use_effect(move || {
         let selection = picker.state.read().selection.clone();
-        let mut current = draft.write();
-        current.values.clear();
-        current.labels.clear();
-        if let Some(selection) = selection {
-            current.labels.insert(selection.human_id.clone(), selection.title);
-            current.values.push(selection.human_id);
-        }
+        let held = gone.as_ref().map(|(_, held)| held);
+        sync_record_pick(&mut draft.write(), selection, held);
     });
     rsx! {
+        if let (Some(label), false) = (deleted, picked) {
+            p { class: "filter-deleted", "{label}" }
+        }
         {record_picker(loc, &picker)}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn draft(value: &str, label: &str) -> FilterDraft {
+        let mut draft = FilterDraft::new(ListedKind::Event);
+        draft.values.push(value.to_owned());
+        draft.labels.insert(value.to_owned(), label.to_owned());
+        draft
+    }
+
+    #[test]
+    fn a_deleted_record_is_held_as_its_label_not_its_id() {
+        let mut gone = draft("0000-dead", "deleted record");
+        gone.deleted_records.insert("0000-dead".to_owned());
+        let held = held_record(&gone);
+        assert_eq!(held, HeldRecord::Deleted("deleted record".to_owned()));
+    }
+
+    #[test]
+    fn an_unchanged_deleted_record_stays_in_its_clause() {
+        let mut gone = draft("0000-dead", "deleted record");
+        gone.deleted_records.insert("0000-dead".to_owned());
+        let mut current = gone.clone();
+        sync_record_pick(&mut current, None, Some(&gone));
+        assert_eq!(current, gone);
+    }
+
+    #[test]
+    fn picking_replaces_a_deleted_record_and_clearing_restores_it() {
+        let mut gone = draft("0000-dead", "deleted record");
+        gone.deleted_records.insert("0000-dead".to_owned());
+        let mut current = gone.clone();
+        let pick = PickerSelection {
+            human_id: "P0001".to_owned(),
+            title: "Ada".to_owned(),
+        };
+        sync_record_pick(&mut current, Some(pick), Some(&gone));
+        assert_eq!(current.values, vec!["P0001".to_owned()]);
+        assert!(current.deleted_records.is_empty());
+        sync_record_pick(&mut current, None, Some(&gone));
+        assert_eq!(current, gone);
+    }
+
+    #[test]
+    fn clearing_a_pick_with_no_deleted_record_empties_the_clause() {
+        let mut current = draft("P0001", "Ada");
+        sync_record_pick(&mut current, None, None);
+        assert!(current.values.is_empty() && current.labels.is_empty());
+    }
+
+    #[test]
+    fn an_existing_record_is_held_by_its_human_id() {
+        let held = held_record(&draft("P0001", "Ada"));
+        let selection = PickerSelection {
+            human_id: "P0001".to_owned(),
+            title: "Ada".to_owned(),
+        };
+        assert_eq!(held, HeldRecord::Picked(selection));
+    }
+
+    #[test]
+    fn a_record_titled_like_the_deleted_label_is_still_picked() {
+        let held = held_record(&draft("L0001", "deleted record"));
+        let selection = PickerSelection {
+            human_id: "L0001".to_owned(),
+            title: "deleted record".to_owned(),
+        };
+        assert_eq!(held, HeldRecord::Picked(selection));
+    }
+
+    #[test]
+    fn a_deleted_tag_gets_a_row_under_its_label() {
+        let mut names = BTreeMap::from([("t1".to_owned(), "Kept".to_owned())]);
+        let mut held = draft("t1", "Kept");
+        held.values.push("gone".to_owned());
+        add_deleted_tags(&mut names, &held, "deleted tag");
+        assert_eq!(names.get("gone").map(String::as_str), Some("deleted tag"));
+        assert_eq!(names.get("t1").map(String::as_str), Some("Kept"));
     }
 }

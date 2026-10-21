@@ -8,10 +8,10 @@ use std::collections::BTreeSet;
 use clap::{Args, ValueEnum};
 use vitni_app::{
     AppError, ChildParentRelationship, ChromosomeSide, ColumnType, Confidence, DnaGenomeBuild, DnaProvider,
-    DnaTestType, EventType, EvidenceKind, FilterOp, FilterValue, GenealogicalDate, InformationKind, ListFilter,
-    ListPage, ListQuery, ListQueryError, ListSort, ListedKind, NoteType, ParticipantRole, PlaceType, RepositoryType,
-    Restriction, SortDirection, SourceMediaType, SourceQuality, SuccessionKind, Workspace, gregorian_date,
-    reference_id,
+    DnaTestType, EventType, EvidenceKind, FileConfigStore, FilterOp, FilterValue, GenealogicalDate, InformationKind,
+    ListFilter, ListPage, ListQuery, ListQueryError, ListSort, ListedKind, NoteType, ParticipantRole, PlaceType,
+    RepositoryType, Restriction, SortDirection, SourceMediaType, SourceQuality, SuccessionKind, Workspace,
+    gregorian_date, reference_id, runnable_saved_query,
 };
 use vitni_core::enums::EvidenceLevel;
 
@@ -577,6 +577,17 @@ pub struct ListArgs {
     /// Skip this many records first.
     #[arg(long, default_value_t = 0)]
     offset: u32,
+    /// Start from the saved search of this name (any case); `--filter` adds to it, `--search` and `--sort` replace
+    /// its own.
+    #[arg(long, value_name = "NAME")]
+    saved: Option<String>,
+    #[command(flatten)]
+    clauses: QueryClauses,
+}
+
+/// The `--search`, `--filter` and `--sort` clauses shared by `list` and `saved-search save`.
+#[derive(Args)]
+pub struct QueryClauses {
     /// List only records whose text columns or id contain this, in any case.
     #[arg(long)]
     search: Option<String>,
@@ -635,6 +646,12 @@ fn parse_sort(raw: &str) -> Result<SortArg, String> {
     })
 }
 
+/// Whether `query` narrows the list, so an empty one means no match.
+#[must_use]
+pub fn narrows(query: &ListQuery) -> bool {
+    !query.search.trim().is_empty() || !query.filters.is_empty()
+}
+
 impl ListArgs {
     /// The page of the list to read.
     #[must_use]
@@ -645,32 +662,85 @@ impl ListArgs {
         }
     }
 
-    /// Whether `--search` or `--filter` narrows the list, so an empty one means no match.
-    #[must_use]
-    pub fn narrows(&self) -> bool {
-        self.search.as_deref().is_some_and(|search| !search.trim().is_empty()) || !self.filters.is_empty()
+    /// The list query for `kind`: the `--saved` search if given, with `--search` and `--sort` replacing its own and
+    /// each `--filter` added, every clause checked against its catalogue: a tag named by its name and a record by
+    /// its `human_id` become their ids.
+    ///
+    /// # Errors
+    ///
+    /// [`AppError::ListQuery`] naming the clause the catalogue cannot take or the kind `--saved` lists instead,
+    /// [`AppError::SavedSearch`] for an unknown or stale saved search, or a store error.
+    pub async fn query(&self, workspace: &Workspace, kind: ListedKind) -> Result<ListQuery, AppError> {
+        let query = match &self.saved {
+            Some(name) => saved_query(workspace, name, kind)?,
+            None => ListQuery::new(kind),
+        };
+        self.clauses.apply(workspace, kind, query).await
     }
+}
 
-    /// The list query for `kind`, each clause checked against its catalogue: a tag named by its name and
-    /// a record by its `human_id` become their ids.
+impl QueryClauses {
+    /// `query` with `--search` and `--sort` replacing its own and each `--filter` added, every clause checked
+    /// against the catalogue of `kind`.
+    async fn apply(
+        &self,
+        workspace: &Workspace,
+        kind: ListedKind,
+        mut query: ListQuery,
+    ) -> Result<ListQuery, AppError> {
+        if let Some(search) = &self.search {
+            query.search.clone_from(search);
+        }
+        for filter in &self.filters {
+            query.filters.push(filter.to_filter(workspace, kind).await?);
+        }
+        if let Some(sort) = &self.sort {
+            query.sort = Some(ListSort {
+                column: sort.column.clone(),
+                direction: sort.direction,
+            });
+        }
+        Ok(query)
+    }
+}
+
+/// The runnable query of the saved search `name`, which must list `kind`.
+fn saved_query(workspace: &Workspace, name: &str, kind: ListedKind) -> Result<ListQuery, AppError> {
+    let store = FileConfigStore::for_workspace(workspace.dir().to_path_buf());
+    runnable_saved_query(&store, name, kind)
+}
+
+/// Reads a record kind as the name `list` prints it by.
+pub fn parse_kind(raw: &str) -> Result<ListedKind, String> {
+    for kind in ListedKind::ALL {
+        if kind.as_str() == raw {
+            return Ok(*kind);
+        }
+    }
+    let kinds: Vec<&str> = ListedKind::ALL.iter().map(|kind| kind.as_str()).collect();
+    Err(format!("expected one of {}, got `{raw}`", kinds.join(", ")))
+}
+
+/// The query a `saved-search save` stores: `--filter`, `--search` and `--sort`, as `list` takes them.
+#[derive(Args)]
+pub struct QueryArgs {
+    /// The kind of record the search lists.
+    #[arg(long, value_parser = parse_kind)]
+    kind: ListedKind,
+    #[command(flatten)]
+    clauses: QueryClauses,
+}
+
+impl QueryArgs {
+    /// The query to store, each clause checked against its catalogue.
     ///
     /// # Errors
     ///
     /// [`AppError::ListQuery`] naming the clause the catalogue cannot take, or a store error.
-    pub async fn query(&self, workspace: &Workspace, kind: ListedKind) -> Result<ListQuery, AppError> {
-        let mut filters = Vec::with_capacity(self.filters.len());
-        for filter in &self.filters {
-            filters.push(filter.to_filter(workspace, kind).await?);
-        }
-        Ok(ListQuery {
-            search: self.search.clone().unwrap_or_default(),
-            filters,
-            sort: self.sort.as_ref().map(|sort| ListSort {
-                column: sort.column.clone(),
-                direction: sort.direction,
-            }),
-            ..ListQuery::new(kind)
-        })
+    pub async fn query(&self, workspace: &Workspace) -> Result<ListQuery, AppError> {
+        self.clauses
+            .apply(workspace, self.kind, ListQuery::new(self.kind))
+            .await
     }
 }
 

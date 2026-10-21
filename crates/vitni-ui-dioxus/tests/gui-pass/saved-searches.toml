@@ -1,0 +1,557 @@
+# #680: saved searches. SSR renders the Saved button, its menu and the palette group, but cannot prove
+# that the live webview saves a search to workspace.toml, that applying one refills the search box and the
+# chips, or that the palette hands a search to its kind's list. This creates three persons, narrows the
+# People list by a search and a clause, saves it as "Annes", clears the list and applies it back from the
+# menu, renames it, runs it from the palette while the Places list is open, then saves a second search,
+# "Temp", and deletes that one, checking the renamed search stays.
+#
+# Not covered here: a saved search with a marked (unrunnable) clause. The harness has no step that writes
+# the manifest before the GUI starts and the fixture seed is shared by every scenario, so that path (the
+# marked chip, no rows, removing it loads the list) is left to the free-function tests over
+# `finish_saved_run` and the SSR tests. No `match` pair is used, so no `wait` outlasts the 6 s notice.
+description = "Saved searches: save, apply, rename, run from the palette and delete (#680)"
+
+[[step]]
+do = "click"
+at = { role = "listitem", text = "People" }
+label = "rail: People"
+
+[[step]]
+do = "key"
+chord = "ctrl+n"
+label = "⌘N: a new Person draft"
+
+[[step]]
+do = "click"
+at = { id = "given" }
+label = "field: Given name"
+
+[[step]]
+do = "text"
+text = "Berit"
+label = "type: Berit"
+
+[[step]]
+do = "click"
+at = { id = "surname" }
+label = "field: Surname"
+
+[[step]]
+do = "text"
+text = "Olsen"
+label = "type: Olsen"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Save", within = "detail-head" }
+label = "New person: Save"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Create a new record" }
+label = "tabstrip: +"
+
+[[step]]
+do = "click"
+at = { role = "menuitem", text = "New person" }
+label = "menu: New person"
+
+[[step]]
+do = "click"
+at = { id = "given" }
+label = "field: Given name"
+
+[[step]]
+do = "text"
+text = "Anne"
+label = "type: Anne"
+
+[[step]]
+do = "click"
+at = { id = "surname" }
+label = "field: Surname"
+
+[[step]]
+do = "text"
+text = "Olsen"
+label = "type: Olsen"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Save", within = "detail-head" }
+label = "New person: Save"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Create a new record" }
+label = "tabstrip: +"
+
+[[step]]
+do = "click"
+at = { role = "menuitem", text = "New person" }
+label = "menu: New person"
+
+[[step]]
+do = "click"
+at = { id = "given" }
+label = "field: Given name"
+
+[[step]]
+do = "text"
+text = "Per"
+label = "type: Per"
+
+[[step]]
+do = "click"
+at = { id = "surname" }
+label = "field: Surname"
+
+[[step]]
+do = "text"
+text = "Hansen"
+label = "type: Hansen"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Save", within = "detail-head" }
+label = "New person: Save"
+
+[[step]]
+do = "click"
+at = { role = "searchbox", within = "explorer" }
+label = "the Explorer search box"
+
+[[step]]
+do = "text"
+text = "olsen"
+label = "type: olsen"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Filters", within = "explorer" }
+label = "toolbar: Filters"
+
+[[step]]
+do = "click"
+at = { id = "filter-column" }
+label = "editor: Column"
+
+[[step]]
+do = "key"
+chord = "Down"
+label = "Down: Given name"
+
+[[step]]
+do = "key"
+chord = "Return"
+label = "Return: choose it"
+
+[[step]]
+do = "click"
+at = { id = "filter-first" }
+label = "editor: Value"
+
+[[step]]
+do = "text"
+text = "anne"
+label = "type: anne"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Apply", within = "explorer" }
+label = "editor: Apply"
+
+[[step]]
+do = "shot"
+name = "narrowed"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Saved searches", within = "explorer" }
+label = "toolbar: Saved"
+
+[[step]]
+do = "shot"
+name = "menu-empty"
+
+[[step]]
+do = "click"
+at = { role = "menuitem", text = "Rename", within = "saved-menu" }
+label = "menu: Rename, disabled with nothing applied"
+
+[[step]]
+do = "shot"
+name = "rename-disabled"
+
+[[step]]
+do = "click"
+at = { role = "menuitem", text = "Save as new", within = "saved-menu" }
+label = "menu: Save as new"
+
+[[step]]
+do = "text"
+text = "Annes"
+label = "type: Annes"
+
+[[step]]
+do = "shot"
+name = "naming"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Save", within = "saved-menu" }
+label = "menu: Save"
+
+[[step]]
+do = "shot"
+name = "saved"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Remove filter", within = "explorer" }
+label = "chip: x"
+
+[[step]]
+do = "click"
+at = { role = "searchbox", within = "explorer" }
+label = "the Explorer search box"
+
+[[step]]
+do = "key"
+chord = "ctrl+a"
+label = "select the search"
+
+[[step]]
+do = "key"
+chord = "BackSpace"
+label = "clear the search"
+
+[[step]]
+do = "shot"
+name = "cleared"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Saved searches", within = "explorer" }
+label = "toolbar: Saved"
+
+[[step]]
+do = "shot"
+name = "menu-one"
+
+[[step]]
+do = "click"
+at = { role = "menuitemradio", text = "Annes", within = "saved-menu" }
+label = "menu: Annes"
+
+[[step]]
+do = "shot"
+name = "applied"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Saved searches", within = "explorer" }
+label = "toolbar: Saved"
+
+[[step]]
+do = "click"
+at = { role = "menuitem", text = "Rename", within = "saved-menu" }
+label = "menu: Rename"
+
+[[step]]
+do = "key"
+chord = "ctrl+a"
+label = "select the name"
+
+[[step]]
+do = "text"
+text = "Olsens"
+label = "type: Olsens"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Save", within = "saved-menu" }
+label = "menu: Save"
+
+[[step]]
+do = "shot"
+name = "renamed"
+
+[[step]]
+do = "click"
+at = { role = "listitem", text = "Places" }
+label = "rail: Places"
+
+[[step]]
+do = "shot"
+name = "places"
+
+[[step]]
+do = "key"
+chord = "ctrl+k"
+label = "palette: open"
+
+[[step]]
+do = "text"
+text = "olsens"
+label = "palette: type olsens"
+
+[[step]]
+do = "shot"
+name = "palette-typed"
+
+[[step]]
+do = "key"
+chord = "Return"
+label = "palette: run the saved search"
+
+[[step]]
+do = "shot"
+name = "palette-run"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Saved searches", within = "explorer" }
+label = "toolbar: Saved"
+
+[[step]]
+do = "click"
+at = { role = "menuitem", text = "Save as new", within = "saved-menu" }
+label = "menu: Save as new"
+
+[[step]]
+do = "text"
+text = "Temp"
+label = "type: Temp"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Save", within = "saved-menu" }
+label = "menu: Save"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Saved searches", within = "explorer" }
+label = "toolbar: Saved"
+
+[[step]]
+do = "shot"
+name = "menu-two"
+
+[[step]]
+do = "click"
+at = { role = "menuitem", text = "Delete", within = "saved-menu" }
+label = "menu: Delete"
+
+[[step]]
+do = "shot"
+name = "deleted"
+
+[[step]]
+do = "click"
+at = { role = "button", text = "Saved searches", within = "explorer" }
+label = "toolbar: Saved"
+
+[[step]]
+do = "shot"
+name = "menu-after-delete"
+
+[[assert]]
+kind = "present"
+shot = "narrowed"
+element = { role = "option", text = "Anne Olsen", within = "explorer" }
+because = "the search and the clause narrow the list"
+
+[[assert]]
+kind = "present"
+shot = "narrowed"
+element = { role = "button", text = "☆", within = "explorer" }
+because = "no saved search is applied yet"
+
+[[assert]]
+kind = "present"
+shot = "menu-empty"
+element = { hook = "saved-menu" }
+because = "the Saved button opens its menu"
+
+[[assert]]
+kind = "absent"
+shot = "rename-disabled"
+element = { id = "saved-name" }
+because = "a disabled action stays focusable and clickable, so only the click guard stops Rename opening its field"
+
+[[assert]]
+kind = "absent"
+shot = "menu-empty"
+element = { role = "menuitemradio", within = "saved-menu" }
+because = "no search is saved yet"
+
+[[assert]]
+kind = "present"
+shot = "naming"
+element = { id = "saved-name" }
+because = "Save as new asks for the name in the menu"
+
+[[assert]]
+kind = "value"
+shot = "naming"
+element = { id = "saved-name" }
+equals = "Annes"
+because = "the name field holds what was typed"
+
+[[assert]]
+kind = "present"
+shot = "saved"
+element = { role = "status", text = "Annes" }
+because = "saving raises a notice"
+
+[[assert]]
+kind = "present"
+shot = "saved"
+element = { role = "button", text = "★", within = "explorer" }
+because = "the applied search turns the button to a filled star"
+
+[[assert]]
+kind = "manifest"
+contains = '[[saved_searches]]'
+because = "saving writes a [[saved_searches]] entry to workspace.toml"
+
+[[assert]]
+kind = "present"
+shot = "cleared"
+element = { role = "option", text = "Per Hansen", within = "explorer" }
+because = "removing the chip and the search lists everyone again"
+
+[[assert]]
+kind = "value"
+shot = "cleared"
+element = { role = "searchbox", within = "explorer" }
+equals = ""
+because = "the search box is empty"
+
+[[assert]]
+kind = "present"
+shot = "menu-one"
+element = { role = "menuitemradio", text = "Annes", within = "saved-menu" }
+because = "the saved search is listed in the menu"
+
+[[assert]]
+kind = "value"
+shot = "applied"
+element = { role = "searchbox", within = "explorer" }
+equals = "olsen"
+because = "applying fills the search box"
+
+[[assert]]
+kind = "present"
+shot = "applied"
+element = { role = "button", text = "Edit filter: Given name contains anne", within = "explorer" }
+because = "applying rebuilds the chip"
+
+[[assert]]
+kind = "present"
+shot = "applied"
+element = { role = "option", text = "Anne Olsen", within = "explorer" }
+because = "the applied list keeps Anne Olsen"
+
+[[assert]]
+kind = "absent"
+shot = "applied"
+element = { role = "option", text = "Berit Olsen", within = "explorer" }
+because = "the applied list leaves out Berit Olsen, who does not match the clause"
+
+[[assert]]
+kind = "absent"
+shot = "applied"
+element = { role = "option", text = "Per Hansen", within = "explorer" }
+because = "the applied list leaves out Per Hansen"
+
+[[assert]]
+kind = "present"
+shot = "applied"
+element = { role = "button", text = "★", within = "explorer" }
+because = "the applied search is marked on the button"
+
+[[assert]]
+kind = "present"
+shot = "renamed"
+element = { role = "status", text = "Olsens" }
+because = "renaming raises a notice"
+
+[[assert]]
+kind = "manifest"
+contains = 'name = "Olsens"'
+because = "the rename reaches workspace.toml"
+
+[[assert]]
+kind = "absent"
+shot = "places"
+element = { role = "option", text = "Anne Olsen", within = "explorer" }
+because = "the Places list shows no person rows"
+
+[[assert]]
+kind = "present"
+shot = "palette-typed"
+element = { role = "option", text = "Olsens", within = "palette-listbox" }
+because = "the palette lists the saved search by name"
+
+[[assert]]
+kind = "present"
+shot = "palette-run"
+element = { role = "option", text = "Anne Olsen", within = "explorer" }
+because = "running it from the palette switches to the People list"
+
+[[assert]]
+kind = "present"
+shot = "palette-run"
+element = { role = "button", text = "Edit filter: Given name contains anne", within = "explorer" }
+because = "the palette run rebuilds the chip"
+
+[[assert]]
+kind = "present"
+shot = "palette-run"
+element = { role = "button", text = "★", within = "explorer" }
+because = "the Saved button shows a search is applied before the menu has been opened"
+
+[[assert]]
+kind = "value"
+shot = "palette-run"
+element = { role = "searchbox", within = "explorer" }
+equals = "olsen"
+because = "the palette run fills the search box"
+
+[[assert]]
+kind = "absent"
+shot = "palette-run"
+element = { role = "option", text = "Per Hansen", within = "explorer" }
+because = "the palette run leaves out Per Hansen"
+
+[[assert]]
+kind = "present"
+shot = "menu-two"
+element = { role = "menuitemradio", text = "Temp", within = "saved-menu" }
+because = "a second search is listed beside the first"
+
+[[assert]]
+kind = "present"
+shot = "deleted"
+element = { role = "status", text = "deleted" }
+because = "deleting raises a notice"
+
+[[assert]]
+kind = "present"
+shot = "deleted"
+element = { role = "button", text = "☆", within = "explorer" }
+because = "a deleted search is no longer the applied one"
+
+[[assert]]
+kind = "absent"
+shot = "menu-after-delete"
+element = { role = "menuitemradio", text = "Temp", within = "saved-menu" }
+because = "the menu no longer lists the deleted search"
+
+[[assert]]
+kind = "present"
+shot = "menu-after-delete"
+element = { role = "menuitemradio", text = "Olsens", within = "saved-menu" }
+because = "deleting one search leaves the other"

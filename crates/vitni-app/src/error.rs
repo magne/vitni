@@ -48,6 +48,9 @@ macro_rules! app_error {
             /// A list query the column catalogue cannot evaluate (ADR 0052 §10).
             #[error(transparent)]
             ListQuery(#[from] crate::list_query::ListQueryError),
+            /// A saved-search change was refused (ADR 0052 §8).
+            #[error(transparent)]
+            SavedSearch(#[from] crate::saved_search::SavedSearchError),
             $(
                 #[doc = concat!("No ", $noun, " exists with the given identifier.")]
                 #[error($msg)]

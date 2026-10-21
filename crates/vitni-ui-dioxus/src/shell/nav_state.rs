@@ -11,9 +11,12 @@ use std::fmt;
 use std::rc::Rc;
 
 use dioxus::prelude::*;
-use vitni_app::{DecidableKind, ListPreferences, ListedKind, RecentItem, RunResume, ThemeMode, push_recent};
+use vitni_app::{
+    DecidableKind, ListPreferences, ListedKind, RecentItem, RunResume, SavedSearchId, ThemeMode, push_recent,
+};
 use vitni_ui::{
-    Category, Destination, NavHistory, NavLocation, NavRecord, ProvenanceDraft, RecordDraft, RecordRef, Tool,
+    Category, Destination, NavHistory, NavLocation, NavRecord, PaletteEntry, ProvenanceDraft, RecordDraft, RecordRef,
+    Tool,
 };
 
 use crate::components::ToastKind;
@@ -469,6 +472,13 @@ pub struct NavState {
     /// `None`. Set by [`Self::open_match_compare`]; `MatchesScreen` consumes and clears it — the same
     /// one-shot handoff as [`Self::geography_focus`].
     pub match_focus: Signal<Option<(DecidableKind, String, String)>>,
+    /// The saved search an Explorer list should apply (a palette *Saved searches* entry, ADR 0052 §8),
+    /// or `None`. Set by [`palette::run_saved_search`](crate::shell::palette::run_saved_search); the
+    /// list of the entry's kind takes and clears it, on mount or, when it is already showing, as the
+    /// signal changes — the same one-shot handoff as [`Self::geography_focus`].
+    pub saved_search_run: Signal<Option<SavedSearchId>>,
+    /// The saved searches the command palette offers, re-read each time it opens.
+    pub saved_search_entries: Signal<Vec<PaletteEntry>>,
     /// The abandoned import run the Import tool should re-run on next mount (a run row's *Resume*,
     /// ADR 0040 §5), or `None`. Set by [`Self::resume_import`]; `BulkImportBody` takes it — the same
     /// one-shot handoff as [`Self::geography_focus`].
@@ -591,6 +601,8 @@ impl NavState {
             notice_seq: Signal::new(0),
             geography_focus: Signal::new(None),
             match_focus: Signal::new(None),
+            saved_search_run: Signal::new(None),
+            saved_search_entries: Signal::new(Vec::new()),
             import_resume: Signal::new(None),
             similar_panel: Signal::new(None),
             research_note_subject: Signal::new(None),

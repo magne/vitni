@@ -8,7 +8,9 @@ use vitni_app::{
     set_citation_evidence_analysis, set_citation_restrictions, set_page, show_citation, tag_citation,
 };
 
-use crate::args::{ConfidenceArg, EvidenceKindArg, InformationKindArg, ListArgs, RestrictionsArgs, SourceQualityArg};
+use crate::args::{
+    ConfidenceArg, EvidenceKindArg, InformationKindArg, ListArgs, RestrictionsArgs, SourceQualityArg, narrows,
+};
 use crate::commands::similar::hint_similar;
 use crate::i18n::Localizer;
 
@@ -273,7 +275,7 @@ async fn list(workspace: &Workspace, window: &ListArgs, localizer: &Localizer) -
     if citations.is_empty() {
         println!(
             "{}",
-            localizer.empty_page(page, window.narrows(), localizer.citation_list_empty())
+            localizer.empty_page(page, narrows(&query), localizer.citation_list_empty())
         );
         return Ok(());
     }

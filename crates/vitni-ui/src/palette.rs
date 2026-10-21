@@ -1,12 +1,15 @@
 //! The command palette's framework-neutral model (`docs/mockups/search-palette.html`, ADR 0008).
 //!
-//! The palette blends three kinds of result — records (the loaded entity lists, filtered by the
-//! query), commands (create-a-record, review-matches, open-a-tool/help), and the recently-opened
-//! records — into grouped, keyboard-navigable options. All of the decision logic lives here as pure
+//! The palette blends four kinds of result — records (the loaded entity lists, filtered by the
+//! query), commands (create-a-record, review-matches, open-a-tool/help), saved searches, and the
+//! recently-opened records — into grouped, keyboard-navigable options. All of the decision logic lives here as pure
 //! functions ([`palette_groups`], [`move_active`], [`activate`]) so it is unit-testable without a
 //! renderer; the Dioxus layer only loads the rows, resolves labels, and draws the listbox.
 
+use vitni_app::{SavedSearchId, SavedSearchList};
+
 use crate::list::RowVm;
+use crate::listed::listed_category;
 use crate::navigation::{Category, RecordRef, Tool};
 
 /// The most options one record group shows; the operator narrows with the query rather than
@@ -37,7 +40,7 @@ pub struct PaletteCommandVm {
     pub label: String,
 }
 
-/// One palette option: a record hit, a command, or a recently-opened record.
+/// One palette option: a record hit, a command, a saved search, or a recently-opened record.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PaletteEntry {
     /// A record from a loaded entity list.
@@ -49,6 +52,15 @@ pub enum PaletteEntry {
     },
     /// A command.
     Command(PaletteCommandVm),
+    /// A saved search, run in the list of its kind's category.
+    SavedSearch {
+        /// The saved search.
+        id: SavedSearchId,
+        /// Its name.
+        name: String,
+        /// The category that lists its kind, shown beside the name.
+        category: Category,
+    },
     /// A recently-opened record (the "Jump back in" list, newest first).
     Recent {
         /// The record's category.
@@ -68,6 +80,8 @@ pub enum PaletteGroupKind {
     Category(Category),
     /// The Commands group.
     Commands,
+    /// The Saved searches group.
+    SavedSearches,
     /// The Recent group.
     Recent,
 }
@@ -81,13 +95,20 @@ pub struct PaletteGroup {
     pub entries: Vec<PaletteEntry>,
 }
 
-/// What activating a palette option does: open a record, or run a command.
+/// What activating a palette option does: open a record, run a command, or run a saved search.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PaletteAction {
     /// Open a record as a tab.
     Open(RecordRef),
     /// Run a command.
     Run(PaletteCommand),
+    /// Open a saved search's list with its query applied.
+    RunSavedSearch {
+        /// The saved search.
+        id: SavedSearchId,
+        /// The category whose list it applies to.
+        category: Category,
+    },
 }
 
 /// The default command list, in palette display order: a Create for every creatable category, then
@@ -112,16 +133,18 @@ pub fn palette_commands() -> Vec<PaletteCommand> {
 }
 
 /// Builds the palette's groups for `query`, in display order (record categories in
-/// [`Category::all`] order, then Commands, then Recent).
+/// [`Category::all`] order, then Commands, Saved searches, then Recent).
 ///
-/// An empty query shows Commands + Recent only (the record lists are not dumped wholesale). A
-/// non-empty query filters each record category by [`RowVm::matches`] (capped at
-/// [`PALETTE_GROUP_MAX`] per group), the commands by their label, and the recent records by their
-/// label. Every empty group is omitted.
+/// An empty query shows Commands, Saved searches and Recent only (the record lists are not dumped
+/// wholesale). A non-empty query filters each record category by [`RowVm::matches`] (capped at
+/// [`PALETTE_GROUP_MAX`] per group), the commands and saved searches by their name, and the recent
+/// records by their label. Like commands, saved searches are never capped. Every empty group is
+/// omitted.
 #[must_use]
 pub fn palette_groups(
     records: &[(Category, Vec<RowVm>)],
     commands: &[PaletteCommandVm],
+    saved: &[PaletteEntry],
     recent: &[PaletteEntry],
     query: &str,
 ) -> Vec<PaletteGroup> {
@@ -161,6 +184,17 @@ pub fn palette_groups(
             entries: command_entries,
         });
     }
+    let saved_entries: Vec<PaletteEntry> = saved
+        .iter()
+        .filter(|entry| query.is_empty() || saved_matches(entry, query))
+        .cloned()
+        .collect();
+    if !saved_entries.is_empty() {
+        groups.push(PaletteGroup {
+            kind: PaletteGroupKind::SavedSearches,
+            entries: saved_entries,
+        });
+    }
     let recent_entries: Vec<PaletteEntry> = recent
         .iter()
         .filter(|entry| query.is_empty() || recent_matches(entry, query))
@@ -180,6 +214,14 @@ fn command_matches(command: &PaletteCommandVm, query: &str) -> bool {
     command.label.to_lowercase().contains(&query.to_lowercase())
 }
 
+/// Whether a saved search's name contains `query` (case-insensitive).
+fn saved_matches(entry: &PaletteEntry, query: &str) -> bool {
+    match entry {
+        PaletteEntry::SavedSearch { name, .. } => name.to_lowercase().contains(&query.to_lowercase()),
+        PaletteEntry::Record { .. } | PaletteEntry::Command(_) | PaletteEntry::Recent { .. } => false,
+    }
+}
+
 /// Whether a recent entry's label or id contains `query` (case-insensitive).
 fn recent_matches(entry: &PaletteEntry, query: &str) -> bool {
     let query = query.to_lowercase();
@@ -187,7 +229,7 @@ fn recent_matches(entry: &PaletteEntry, query: &str) -> bool {
         PaletteEntry::Recent { human_id, label, .. } => {
             label.to_lowercase().contains(&query) || human_id.to_lowercase().contains(&query)
         }
-        PaletteEntry::Record { .. } | PaletteEntry::Command(_) => false,
+        PaletteEntry::Record { .. } | PaletteEntry::Command(_) | PaletteEntry::SavedSearch { .. } => false,
     }
 }
 
@@ -204,7 +246,7 @@ pub fn move_active(active: usize, total: usize, delta: isize) -> usize {
     usize::try_from(stepped).unwrap_or(0).min(last)
 }
 
-/// The action activating `entry` performs: open the record (record + recent hits) or run the command.
+/// The action activating `entry` performs: open the record (record + recent hits) or run the command or saved search.
 #[must_use]
 pub fn activate(entry: &PaletteEntry) -> PaletteAction {
     match entry {
@@ -223,14 +265,36 @@ pub fn activate(entry: &PaletteEntry) -> PaletteAction {
             label: label.clone(),
         }),
         PaletteEntry::Command(vm) => PaletteAction::Run(vm.command.clone()),
+        PaletteEntry::SavedSearch { id, category, .. } => PaletteAction::RunSavedSearch {
+            id: *id,
+            category: *category,
+        },
     }
+}
+
+/// The readable saved searches as palette entries, each with its kind's category; the unreadable ones
+/// are not offered.
+#[must_use]
+pub fn saved_search_entries(list: &SavedSearchList) -> Vec<PaletteEntry> {
+    let mut entries = Vec::with_capacity(list.searches.len());
+    for search in &list.searches {
+        entries.push(PaletteEntry::SavedSearch {
+            id: search.id,
+            name: search.name.clone(),
+            category: listed_category(search.kind),
+        });
+    }
+    entries
 }
 
 #[cfg(test)]
 mod tests {
+    use uuid::Uuid;
+    use vitni_app::{ListedKind, SavedSearchId, SavedSearchList, SavedSearchSummary, UnreadableSavedSearch};
+
     use super::{
         PALETTE_GROUP_MAX, PaletteAction, PaletteCommand, PaletteCommandVm, PaletteEntry, PaletteGroupKind, activate,
-        move_active, palette_commands, palette_groups,
+        move_active, palette_commands, palette_groups, saved_search_entries,
     };
     use crate::list::RowVm;
     use crate::navigation::{Category, Tool};
@@ -258,6 +322,21 @@ mod tests {
         }
     }
 
+    fn saved(n: u128, name: &str, category: Category) -> PaletteEntry {
+        PaletteEntry::SavedSearch {
+            id: SavedSearchId::from_uuid(Uuid::from_u128(n)),
+            name: name.to_owned(),
+            category,
+        }
+    }
+
+    fn saved_searches() -> Vec<PaletteEntry> {
+        vec![
+            saved(1, "Born before 1800", Category::People),
+            saved(2, "Untagged places", Category::Places),
+        ]
+    }
+
     fn people() -> (Category, Vec<RowVm>) {
         (
             Category::People,
@@ -278,10 +357,10 @@ mod tests {
     }
 
     #[test]
-    fn empty_query_shows_commands_and_recent_only() {
+    fn empty_query_shows_commands_and_recent_without_saved_searches() {
         let records = vec![people()];
         let recent = vec![recent(Category::Families, "F0017", "Smith–Doe family")];
-        let groups = palette_groups(&records, &commands(), &recent, "");
+        let groups = palette_groups(&records, &commands(), &[], &recent, "");
         let kinds: Vec<PaletteGroupKind> = groups.iter().map(|group| group.kind).collect();
         assert_eq!(kinds, vec![PaletteGroupKind::Commands, PaletteGroupKind::Recent]);
         assert_eq!(groups[0].entries.len(), 3, "all commands on an empty query");
@@ -295,7 +374,7 @@ mod tests {
             recent(Category::Families, "F0017", "Smith–Doe family"),
             recent(Category::Places, "L0009", "Boston"),
         ];
-        let groups = palette_groups(&records, &commands(), &recent, "smi");
+        let groups = palette_groups(&records, &commands(), &[], &recent, "smi");
         // People group first (two Smith/Smyth rows), then Recent (the Smith–Doe family). No command
         // matches "smi", so the Commands group is omitted.
         let kinds: Vec<PaletteGroupKind> = groups.iter().map(|group| group.kind).collect();
@@ -312,7 +391,7 @@ mod tests {
         let many: Vec<RowVm> = (0..20).map(|n| row(&format!("I{n:04}"), "Ada Match")).collect();
         let places: Vec<RowVm> = vec![row("L0001", "Match Place")];
         let records = vec![(Category::People, many), (Category::Places, places)];
-        let groups = palette_groups(&records, &[], &[], "match");
+        let groups = palette_groups(&records, &[], &[], &[], "match");
         assert_eq!(groups[0].kind, PaletteGroupKind::Category(Category::People));
         assert_eq!(groups[0].entries.len(), PALETTE_GROUP_MAX, "the people group is capped");
         assert_eq!(groups[1].kind, PaletteGroupKind::Category(Category::Places));
@@ -320,7 +399,7 @@ mod tests {
 
     #[test]
     fn command_label_matching_is_case_insensitive() {
-        let groups = palette_groups(&[], &commands(), &[], "MATCHES");
+        let groups = palette_groups(&[], &commands(), &[], &[], "MATCHES");
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].kind, PaletteGroupKind::Commands);
         assert_eq!(groups[0].entries.len(), 1);
@@ -328,7 +407,7 @@ mod tests {
 
     #[test]
     fn empty_groups_are_omitted() {
-        let groups = palette_groups(&[people()], &commands(), &[], "no-such-token");
+        let groups = palette_groups(&[people()], &commands(), &[], &[], "no-such-token");
         assert!(groups.is_empty(), "nothing matches, so no groups: {groups:?}");
     }
 
@@ -353,11 +432,11 @@ mod tests {
                 assert_eq!(reference.human_id, "I0042");
                 assert_eq!(reference.label, "Smith, John");
             }
-            PaletteAction::Run(_) => panic!("a record entry opens a record"),
+            PaletteAction::Run(_) | PaletteAction::RunSavedSearch { .. } => panic!("a record entry opens a record"),
         }
         match activate(&recent(Category::Families, "F0017", "Smith–Doe family")) {
             PaletteAction::Open(reference) => assert_eq!(reference.human_id, "F0017"),
-            PaletteAction::Run(_) => panic!("a recent entry opens a record"),
+            PaletteAction::Run(_) | PaletteAction::RunSavedSearch { .. } => panic!("a recent entry opens a record"),
         }
         let run = PaletteEntry::Command(command(PaletteCommand::ReviewMatches, "Review possible matches"));
         assert_eq!(activate(&run), PaletteAction::Run(PaletteCommand::ReviewMatches));
@@ -379,6 +458,103 @@ mod tests {
         assert!(
             !commands.contains(&PaletteCommand::OpenTool(Tool::Matches)),
             "Matches is reached via Review possible matches, not an OpenTool command"
+        );
+    }
+
+    #[test]
+    fn saved_searches_follow_commands_and_precede_recent_on_an_empty_query() {
+        let recent = vec![recent(Category::Families, "F0017", "Smith–Doe family")];
+        let groups = palette_groups(&[people()], &commands(), &saved_searches(), &recent, "");
+        let kinds: Vec<PaletteGroupKind> = groups.iter().map(|group| group.kind).collect();
+        assert_eq!(
+            kinds,
+            vec![
+                PaletteGroupKind::Commands,
+                PaletteGroupKind::SavedSearches,
+                PaletteGroupKind::Recent
+            ]
+        );
+        assert_eq!(
+            groups[1].entries,
+            saved_searches(),
+            "every saved search, each with its category"
+        );
+    }
+
+    #[test]
+    fn saved_searches_are_filtered_by_name_and_omitted_when_none_match() {
+        let groups = palette_groups(&[], &[], &saved_searches(), &[], "UNTAGGED");
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].kind, PaletteGroupKind::SavedSearches);
+        assert_eq!(groups[0].entries, vec![saved(2, "Untagged places", Category::Places)]);
+        let none = palette_groups(&[], &[], &saved_searches(), &[], "no-such-token");
+        assert!(none.is_empty(), "{none:?}");
+    }
+
+    #[test]
+    fn every_saved_search_is_listed_beyond_the_record_group_cap() {
+        let many: Vec<PaletteEntry> = (1..=PALETTE_GROUP_MAX as u128 + 1)
+            .map(|n| saved(n, &format!("Search {n}"), Category::People))
+            .collect();
+        let groups = palette_groups(&[], &[], &many, &[], "");
+        assert_eq!(groups[0].entries, many);
+    }
+
+    #[test]
+    fn the_saved_searches_group_is_omitted_when_there_are_none() {
+        let groups = palette_groups(&[], &commands(), &[], &[], "");
+        let kinds: Vec<PaletteGroupKind> = groups.iter().map(|group| group.kind).collect();
+        assert_eq!(kinds, vec![PaletteGroupKind::Commands]);
+    }
+
+    #[test]
+    fn activating_a_saved_search_runs_it_in_its_category() {
+        let entry = saved(7, "Born before 1800", Category::People);
+        assert_eq!(
+            activate(&entry),
+            PaletteAction::RunSavedSearch {
+                id: SavedSearchId::from_uuid(Uuid::from_u128(7)),
+                category: Category::People,
+            }
+        );
+    }
+
+    #[test]
+    fn saved_search_entries_carry_the_kinds_category_and_skip_unreadable() {
+        let id = SavedSearchId::from_uuid(Uuid::from_u128(1));
+        let place_id = SavedSearchId::from_uuid(Uuid::from_u128(2));
+        let list = SavedSearchList {
+            searches: vec![
+                SavedSearchSummary {
+                    id,
+                    name: "Born in Oslo".to_owned(),
+                    kind: ListedKind::Person,
+                },
+                SavedSearchSummary {
+                    id: place_id,
+                    name: "Farms".to_owned(),
+                    kind: ListedKind::Place,
+                },
+            ],
+            unreadable: vec![UnreadableSavedSearch {
+                position: 1,
+                name: None,
+            }],
+        };
+        assert_eq!(
+            saved_search_entries(&list),
+            vec![
+                PaletteEntry::SavedSearch {
+                    id,
+                    name: "Born in Oslo".to_owned(),
+                    category: Category::People,
+                },
+                PaletteEntry::SavedSearch {
+                    id: place_id,
+                    name: "Farms".to_owned(),
+                    category: Category::Places,
+                },
+            ]
         );
     }
 }

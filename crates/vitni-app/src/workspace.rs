@@ -24,6 +24,7 @@ use crate::config::{
 use crate::error::AppError;
 use crate::list_query::ListSort;
 use crate::matching::Matching;
+use crate::saved_search::SavedSearchEntry;
 
 /// The workspace manifest file name.
 const MANIFEST_FILE: &str = "workspace.toml";
@@ -114,7 +115,7 @@ impl std::fmt::Display for WorkspaceId {
 }
 
 /// The on-disk workspace manifest (`workspace.toml`, ADR 0005).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WorkspaceManifest {
     /// The workspace's identity (ADR 0043), minted at `init`. `None` only in a manifest written
     /// before ids existed; [`Workspace::open`] records one.
@@ -150,6 +151,10 @@ pub struct WorkspaceManifest {
     /// Per-workspace backup settings (ADR 0044 §3).
     #[serde(default, skip_serializing_if = "BackupSettings::is_default")]
     pub backup: BackupSettings,
+    /// The `[[saved_searches]]` entries (ADR 0052 §8), kept as raw tables so an entry this version
+    /// cannot read survives a rewrite; see [`SavedSearchEntry`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub saved_searches: Vec<toml::Value>,
 }
 
 /// Per-workspace backup settings (`workspace.toml` `[backup]`, ADR 0044 §3).
@@ -636,6 +641,46 @@ pub fn save_list_preferences(dir: &Path, kind: ListedKind, preferences: &ListPre
     write_manifest(dir, &manifest)
 }
 
+/// Reads the workspace's saved searches in manifest order; an entry this version cannot read comes
+/// back as [`SavedSearchEntry::Unreadable`] instead of failing the read, as does one repeating the id of an
+/// earlier entry.
+///
+/// # Errors
+///
+/// [`AppError::Workspace`] if the manifest is missing or cannot be read.
+pub fn read_saved_searches(dir: &Path) -> Result<Vec<SavedSearchEntry>, AppError> {
+    let manifest = read_manifest(dir)?;
+    let mut entries = Vec::with_capacity(manifest.saved_searches.len());
+    let mut seen = std::collections::HashSet::new();
+    for (position, raw) in manifest.saved_searches.iter().enumerate() {
+        let entry = SavedSearchEntry::from_value(position, raw);
+        if let SavedSearchEntry::Readable(search) = &entry
+            && !seen.insert(search.id)
+        {
+            tracing::warn!(position, id = ?search.id, "saved search repeats an earlier id and is kept unchanged");
+            entries.push(SavedSearchEntry::Unreadable { raw: raw.clone() });
+            continue;
+        }
+        entries.push(entry);
+    }
+    Ok(entries)
+}
+
+/// Replaces the manifest's `[[saved_searches]]` with `entries` (read-modify-write, preserving the
+/// rest). No store is opened.
+///
+/// # Errors
+///
+/// [`AppError::Workspace`] if the manifest is missing or cannot be read/written.
+pub fn save_saved_searches(dir: &Path, entries: &[SavedSearchEntry]) -> Result<(), AppError> {
+    let mut manifest = read_manifest(dir)?;
+    manifest.saved_searches.clear();
+    for entry in entries {
+        manifest.saved_searches.push(entry.to_value());
+    }
+    write_manifest(dir, &manifest)
+}
+
 /// Per-workspace language/locale/date/number overrides (`workspace.toml` `[locale]`, ADR 0005).
 ///
 /// Every field absent falls back **live** to the global `[workspace-defaults.locale]`, mirroring
@@ -860,6 +905,7 @@ impl Workspace {
             surety: SuretyLabelOverrides::default(),
             matching: MatchingConfig::default(),
             backup: BackupSettings::default(),
+            saved_searches: Vec::new(),
         };
         write_manifest(dir, &manifest)?;
         Ok(manifest)
@@ -1069,14 +1115,16 @@ mod tests {
         IdFormatOverrides, LayerKind, ListPreferences, ListSort, ListedKind, LocaleOverrides, RECENT_LIMIT, RecentItem,
         UiPreferences, WindowGeometry, Workspace, person_id_format_layers, push_recent, read_manifest,
         read_plugin_preferences, read_preference_layers, read_resolved_locale, read_resolved_surety_labels,
-        read_ui_preferences, resolve_database_url, resolve_init_database_url, resolve_locale, resolve_surety_labels,
-        resolve_ui_preferences, save_list_preferences, save_locale_overrides, save_plugin_enabled, save_plugin_grants,
-        save_recent, save_surety_label_overrides, save_theme_mode, save_window_geometry, surety_layers, theme_layers,
+        read_saved_searches, read_ui_preferences, resolve_database_url, resolve_init_database_url, resolve_locale,
+        resolve_surety_labels, resolve_ui_preferences, save_list_preferences, save_locale_overrides,
+        save_plugin_enabled, save_plugin_grants, save_recent, save_saved_searches, save_surety_label_overrides,
+        save_theme_mode, save_window_geometry, surety_layers, theme_layers,
     };
     use crate::config::{
         AppDefaults, DateFormat, Engine, IdFormats, LocaleDefaults, NumberFormat, OperatorConfig, SuretyLabelOverride,
         SuretyLabelOverrides, ThemeMode, UiDefaults, WorkspaceDefaults,
     };
+    use crate::saved_search::{SavedSearch, SavedSearchEntry, SavedSearchId, StoredQuery};
     use std::path::Path;
     use uuid::Uuid;
     use vitni_core::ids::AgentId;
@@ -1505,6 +1553,160 @@ label = "Ada Lovelace"
             "no columns stays no columns"
         );
         assert_eq!(resolved.lists.get(&ListedKind::Place), None);
+    }
+
+    #[test]
+    fn list_preferences_survive_an_unknown_key_in_the_sort() {
+        let (_dir, ws) = init_workspace();
+        let path = ws.join("workspace.toml");
+        let mut text = std::fs::read_to_string(&path).expect("manifest text");
+        text.push_str(
+            "\n[ui.lists.person]\ncolumns = [\"death\"]\n\n[ui.lists.person.sort]\ncolumn = \"birth\"\n\
+             direction = \"descending\"\nnulls = \"last\"\n",
+        );
+        std::fs::write(&path, text).expect("write manifest");
+
+        let resolved = read_ui_preferences(&ws, &defaults_with_theme(ThemeMode::System));
+
+        let person = resolved
+            .lists
+            .get(&ListedKind::Person)
+            .expect("the person layout is kept");
+        assert_eq!(person.columns, Some(vec!["death".to_owned()]));
+    }
+
+    fn saved(n: u128, name: &str) -> SavedSearchEntry {
+        SavedSearchEntry::Readable(SavedSearch {
+            id: SavedSearchId::from_uuid(Uuid::from_u128(n)),
+            name: name.to_owned(),
+            query: StoredQuery {
+                kind: ListedKind::Person,
+                search: "ada".to_owned(),
+                filters: vec![
+                    toml::from_str("column = \"birth\"\nop = \"is-empty\"\nvalue = { type = \"none\" }")
+                        .expect("clause"),
+                ],
+                sort: Some(toml::from_str("column = \"birth\"\ndirection = \"descending\"").expect("sort")),
+                columns: Some(vec!["name".to_owned(), "birth".to_owned()]),
+            },
+        })
+    }
+
+    fn init_workspace() -> (tempfile::TempDir, std::path::PathBuf) {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ws = dir.path().join("ws");
+        Workspace::init(&ws, &operator(), &AppDefaults::default(), None).expect("init");
+        (dir, ws)
+    }
+
+    #[test]
+    fn a_manifest_without_saved_searches_reads_as_empty() {
+        let (_dir, ws) = init_workspace();
+
+        assert_eq!(read_saved_searches(&ws).expect("read"), Vec::new());
+        let text = std::fs::read_to_string(ws.join("workspace.toml")).expect("manifest text");
+        assert!(!text.contains("saved_searches"), "{text}");
+    }
+
+    #[test]
+    fn saved_searches_round_trip_in_order_as_array_of_tables() {
+        let (_dir, ws) = init_workspace();
+        let searches = vec![saved(2, "Second"), saved(1, "First")];
+
+        save_saved_searches(&ws, &searches).expect("save");
+
+        let text = std::fs::read_to_string(ws.join("workspace.toml")).expect("manifest text");
+        assert!(text.contains("[[saved_searches]]"), "{text}");
+        assert_eq!(read_saved_searches(&ws).expect("read"), searches);
+    }
+
+    #[test]
+    fn saving_list_preferences_keeps_saved_searches_and_the_reverse() {
+        let (_dir, ws) = init_workspace();
+        let searches = vec![saved(1, "First")];
+        let prefs = ListPreferences {
+            columns: Some(vec!["birth".to_owned()]),
+            sort: None,
+        };
+
+        save_saved_searches(&ws, &searches).expect("save searches");
+        save_list_preferences(&ws, ListedKind::Person, &prefs).expect("save prefs");
+        assert_eq!(read_saved_searches(&ws).expect("read"), searches);
+
+        save_saved_searches(&ws, &[saved(1, "First"), saved(2, "Second")]).expect("save again");
+        let resolved = read_ui_preferences(&ws, &defaults_with_theme(ThemeMode::System));
+        assert_eq!(resolved.lists.get(&ListedKind::Person), Some(&prefs));
+    }
+
+    #[test]
+    fn an_entry_repeating_an_earlier_id_is_unreadable_so_it_cannot_take_the_first_one_with_it() {
+        let (_dir, ws) = init_workspace();
+        let manifest_path = ws.join("workspace.toml");
+        let mut text = std::fs::read_to_string(&manifest_path).expect("manifest text");
+        for name in ["Original", "Copy"] {
+            text.push_str("\n[[saved_searches]]\nid = \"0190aaaa-0000-7000-8000-000000000001\"\nname = \"");
+            text.push_str(name);
+            text.push_str("\"\n[saved_searches.query]\nkind = \"person\"\n");
+        }
+        std::fs::write(&manifest_path, text).expect("write manifest");
+
+        let entries = read_saved_searches(&ws).expect("read");
+
+        assert!(matches!(entries[0], SavedSearchEntry::Readable(_)), "{:?}", entries[0]);
+        assert!(
+            matches!(entries[1], SavedSearchEntry::Unreadable { .. }),
+            "{:?}",
+            entries[1]
+        );
+    }
+
+    #[test]
+    fn an_unreadable_entry_loads_with_its_position_and_survives_a_rewrite_unchanged() {
+        let (_dir, ws) = init_workspace();
+        let manifest_path = ws.join("workspace.toml");
+        let mut text = std::fs::read_to_string(&manifest_path).expect("manifest text");
+        text.push_str(
+            r#"
+[[saved_searches]]
+id = "0190aaaa-0000-7000-8000-000000000001"
+name = "Fine"
+[saved_searches.query]
+kind = "person"
+
+[[saved_searches]]
+name = "No id"
+[saved_searches.query]
+kind = "person"
+future_field = 7
+
+[[saved_searches]]
+id = "0190aaaa-0000-7000-8000-000000000003"
+name = 5
+[saved_searches.query]
+kind = "person"
+
+[[saved_searches]]
+id = "0190aaaa-0000-7000-8000-000000000004"
+name = "Mystery"
+[saved_searches.query]
+kind = "galaxy"
+"#,
+        );
+        std::fs::write(&manifest_path, text).expect("write manifest");
+
+        let entries = read_saved_searches(&ws).expect("one bad entry must not fail the read");
+
+        assert_eq!(entries.len(), 4);
+        assert!(matches!(entries[0], SavedSearchEntry::Readable(_)));
+        for (position, entry) in entries.iter().enumerate().skip(1) {
+            assert!(
+                matches!(entry, SavedSearchEntry::Unreadable { .. }),
+                "entry {position} should be unreadable: {entry:?}"
+            );
+        }
+
+        save_saved_searches(&ws, &entries).expect("rewrite");
+        assert_eq!(read_saved_searches(&ws).expect("reread"), entries);
     }
 
     #[test]

@@ -49,7 +49,7 @@ label = "picker: + New note \"a\"…"
 
 [[step]]
 do = "click"
-at = { role = "button", text = "Save" }
+at = { role = "button", text = "Save", within = "dialog" }
 label = "new note card: Save — commits N0001 and attaches it to the place"
 
 # The Save raises the shell's "Saved" toast, which auto-dismisses after 6s. Without this wait the toast

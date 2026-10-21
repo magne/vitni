@@ -17,6 +17,8 @@ use uuid::Uuid;
 use vitni_app::backup::{
     BackupError, BackupRequest, ReplaceRequest, RestoreRequest, create_backup, replace_backup, restore_backup,
 };
+use vitni_app::saved_search::{SavedSearch, SavedSearchEntry, SavedSearchId, StoredQuery};
+use vitni_app::workspace::{read_saved_searches, save_saved_searches};
 use vitni_app::{
     AppDefaults, AppError, DatasetId, ImportCounts, NewImportRun, NewMedia, NewNote, NewPerson, OperatorConfig,
     PersonNameParts, Provenance, RecordOrigin, Session, Workspace, WorkspaceDefaults, create_media, create_note,
@@ -26,6 +28,7 @@ use vitni_app::{
 use vitni_core::enums::EvidenceLevel;
 use vitni_core::ids::AgentId;
 use vitni_core::provenance::{Agent, AgentKind};
+use vitni_db::ListedKind;
 
 fn operator() -> OperatorConfig {
     OperatorConfig {
@@ -878,4 +881,98 @@ async fn a_replace_adds_archived_media_but_never_overwrites_a_file() {
     assert_eq!(again.media_restored, 0);
     assert_eq!(again.media_mismatched, ["media/portraits/ada.jpg"]);
     assert_eq!(fs::read(&file).expect("kept file"), b"edited since");
+}
+
+fn saved_search(n: u128, name: &str) -> SavedSearchEntry {
+    SavedSearchEntry::Readable(SavedSearch {
+        id: SavedSearchId::from_uuid(Uuid::from_u128(n)),
+        name: name.to_owned(),
+        query: StoredQuery {
+            kind: ListedKind::Person,
+            search: "ada".to_owned(),
+            filters: vec![
+                toml::from_str("column = \"birth\"\nop = \"is-empty\"\nvalue = { type = \"none\" }").expect("clause"),
+            ],
+            sort: None,
+            columns: Some(vec!["name".to_owned()]),
+        },
+    })
+}
+
+/// A readable entry, an unreadable one (no `id`) and another readable one.
+fn mixed_saved_searches() -> Vec<SavedSearchEntry> {
+    let raw: toml::Value = toml::from_str("name = \"No id\"\nfuture = 1").expect("raw entry");
+    let unreadable = SavedSearchEntry::from_value(1, &raw);
+    assert!(
+        matches!(unreadable, SavedSearchEntry::Unreadable { .. }),
+        "{unreadable:?}"
+    );
+    vec![saved_search(1, "First"), unreadable, saved_search(2, "Second")]
+}
+
+/// A backed-up workspace whose manifest holds [`mixed_saved_searches`] when the backup is taken.
+async fn backed_up_with_saved_searches() -> (Fixture, Vec<SavedSearchEntry>) {
+    let home = tempfile::tempdir().expect("tempdir");
+    let source = seeded_workspace(home.path()).await;
+    let searches = mixed_saved_searches();
+    save_saved_searches(source.dir(), &searches).expect("save saved searches");
+    let archive = home.path().join("gen.vitni-backup");
+    create_backup(&source, &backup_request(&archive, false))
+        .await
+        .expect("backup");
+    let config = home.path().join("config.toml");
+    let fixture = Fixture {
+        home,
+        config,
+        source,
+        archive,
+    };
+    (fixture, searches)
+}
+
+#[tokio::test]
+async fn the_archived_workspace_manifest_carries_saved_searches() {
+    let (fixture, _) = backed_up_with_saved_searches().await;
+
+    let toml = String::from_utf8(member(&fixture.archive, "workspace.toml")).expect("utf-8");
+
+    assert!(toml.contains("[[saved_searches]]"), "{toml}");
+}
+
+#[tokio::test]
+async fn a_restore_into_a_new_workspace_reproduces_the_saved_searches() {
+    let (fixture, searches) = backed_up_with_saved_searches().await;
+    let target = fixture.home.path().join("restored");
+
+    restore_backup(&restore_request(&fixture.config, &fixture.archive, &target))
+        .await
+        .expect("restore");
+
+    assert_eq!(read_saved_searches(&target).expect("read"), searches);
+}
+
+#[tokio::test]
+async fn a_replace_restore_reproduces_the_saved_searches() {
+    let (fixture, searches) = backed_up_with_saved_searches().await;
+    let target = replace_target(fixture.home.path()).await;
+    save_saved_searches(target.dir(), &[saved_search(9, "Local only")]).expect("local searches");
+
+    replace_backup(&target, &replace_request(&fixture.archive))
+        .await
+        .expect("replace");
+
+    assert_eq!(read_saved_searches(target.dir()).expect("read"), searches);
+}
+
+#[tokio::test]
+async fn an_archive_without_saved_searches_replace_restores_to_none() {
+    let fixture = backed_up(false).await;
+    let target = replace_target(fixture.home.path()).await;
+    save_saved_searches(target.dir(), &[saved_search(9, "Local only")]).expect("local searches");
+
+    replace_backup(&target, &replace_request(&fixture.archive))
+        .await
+        .expect("replace");
+
+    assert_eq!(read_saved_searches(target.dir()).expect("read"), Vec::new());
 }

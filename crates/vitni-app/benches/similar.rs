@@ -730,7 +730,7 @@ fn bench_person_query(c: &mut Criterion, rt: &tokio::runtime::Runtime, dataset: 
             column: "birth".to_owned(),
             direction: SortDirection::Descending,
         }),
-        columns: vec!["name".to_owned(), "birth".to_owned()],
+        columns: Some(vec!["name".to_owned(), "birth".to_owned()]),
         ..ListQuery::new(ListedKind::Person)
     };
     let window = |offset| ListWindow::Offset {

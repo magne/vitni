@@ -48,6 +48,7 @@ use crate::commands::place::PlaceCmd;
 use crate::commands::plugin::PluginCmd;
 use crate::commands::repository::RepositoryCmd;
 use crate::commands::research_note::ResearchNoteCmd;
+use crate::commands::saved_search::SavedSearchCmd;
 use crate::commands::source::SourceCmd;
 use crate::commands::tag::TagCmd;
 use crate::i18n::Localizer;
@@ -82,6 +83,7 @@ macro_rules! for_each_cli_command {
             (Tag, tag, "Operate on tags.", TagCmd),
             (ResearchNote, research_note, "Operate on research notes (ADR 0028).", ResearchNoteCmd),
             (ImportRun, import_run, "List import runs and the datasets they wrote into (ADR 0037).", ImportRunCmd),
+            (SavedSearch, saved_search, "List, save and delete saved searches (ADR 0052 §8).", SavedSearchCmd),
             (Match, match_queue, "Review the possible matches and decide them (ADR 0039).", MatchCmd),
         }
     };

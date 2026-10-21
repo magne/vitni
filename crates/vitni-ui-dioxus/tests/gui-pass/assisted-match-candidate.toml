@@ -54,7 +54,7 @@ label = "type: Fjellstue"
 
 [[step]]
 do = "click"
-at = { role = "button", text = "Save" }
+at = { role = "button", text = "Save", within = "detail-head" }
 label = "New person: Save"
 
 [[step]]

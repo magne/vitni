@@ -95,7 +95,7 @@ name = "reason-typed"
 
 [[step]]
 do = "click"
-at = { role = "button", text = "Save" }
+at = { role = "button", text = "Save", within = "detail-head" }
 label = "detail head: Save"
 
 [[step]]

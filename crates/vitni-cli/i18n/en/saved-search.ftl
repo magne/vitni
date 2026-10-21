@@ -1,0 +1,15 @@
+err-saved-search-empty-name = a saved search needs a name
+err-saved-search-duplicate-name = a saved search named `{ $name }` already exists
+err-saved-search-not-found = no saved search `{ $reference }`
+err-saved-search-removed = the saved search no longer exists
+err-saved-search-broken = the saved search `{ $name }` cannot run
+err-saved-search-broken-clause = clause { $position } (`{ $clause }`): { $reason }
+err-saved-search-broken-clause-nameless = clause { $position }: names no column or operator
+err-saved-search-broken-clause-no-column = clause { $position } (`{ $clause }`): names no column
+err-saved-search-broken-clause-no-operator = clause { $position } (`{ $clause }`): names no operator
+saved-search-saved = Saved { $name }
+saved-search-deleted = Deleted { $name }
+saved-search-list-empty = No saved searches yet.
+saved-search-line = { $name } ({ $kind })
+saved-search-unreadable-line = saved_searches[{ $position }] { $name }: cannot be read
+saved-search-unreadable-line-nameless = saved_searches[{ $position }]: cannot be read

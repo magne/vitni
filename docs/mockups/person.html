@@ -22,6 +22,8 @@
              shown ones (disabled at either end); the sort menu picks the ID order or a column (not Tags) and a direction. Both
              menus hang full-width under the toolbar over a click-away scrim; Esc closes them. The layout
              is kept per kind in workspace.toml [ui.lists.<kind>]. The People default is Birth, Death. -->
+        <span class="menu-anchor"><button class="btn sm" title="Choose and order the columns a row shows" aria-haspopup="dialog" aria-expanded="false">Columns</button></span>
+        <!-- The Columns menu open (one menu is open at a time; the Saved menu is shown open below):
         <span class="menu-anchor"><button class="btn sm" title="Choose and order the columns a row shows" aria-haspopup="dialog" aria-expanded="true">Columns</button>
           <div class="list-menu" role="dialog" aria-label="Columns">
             <div class="list-menu-column"><label for="list-column-birth"><input type="checkbox" id="list-column-birth" checked><span>Birth</span></label><button class="btn sm ghost" type="button" aria-label="Move Birth up" disabled>↑</button><button class="btn sm ghost" type="button" aria-label="Move Birth down">↓</button></div>
@@ -32,8 +34,41 @@
             <div class="list-menu-column"><label for="list-column-tags"><input type="checkbox" id="list-column-tags"><span>Tags</span></label></div>
           </div>
         </span>
+        -->
+        <span class="menu-anchor"><button class="icon-btn" type="button" title="Saved searches" aria-label="Saved searches" aria-haspopup="menu" aria-expanded="true">★</button>
+          <div class="list-menu" role="menu" aria-label="Saved searches" data-hook="saved-menu">
+            <button class="menu-item" role="menuitemradio" type="button" aria-checked="true" aria-disabled="false"><span class="menu-check" aria-hidden="true">✓</span><span>Born before 1800</span></button>
+            <button class="menu-item" role="menuitemradio" type="button" aria-checked="false" aria-disabled="false"><span class="menu-check" aria-hidden="true"></span><span>Fana families</span></button>
+            <button class="menu-item" role="menuitem" type="button" aria-disabled="true">Old search: cannot be read</button>
+            <div class="menu-sep" role="separator"></div>
+            <div class="saved-naming" role="group" aria-label="Name">
+              <label for="saved-name">Name</label>
+              <input class="in invalid" id="saved-name" value="Fana families" aria-invalid="true" aria-describedby="saved-name-error">
+              <span id="saved-name-error" class="field-error" role="alert">A saved search with this name already exists.</span>
+              <div class="filter-actions">
+                <button class="btn sm primary" type="button">Save</button>
+                <button class="btn sm ghost" type="button">Cancel</button>
+              </div>
+            </div>
+          </div>
+        </span>
         <span class="menu-anchor"><button class="btn sm" title="Change sort order" aria-haspopup="menu" aria-expanded="false">Sort: ID ↑</button></span>
         <button class="btn sm primary" title="New person">+ New</button>
+        <!-- Saved searches (ADR 0052 §8–10, #680). The 30px icon button before the sort button is ☆ while no
+             saved search is applied and ★ while one is, named "Saved searches" for assistive tech and as a
+             tooltip. Its menu hangs full width under the toolbar like Columns and sort: this kind's saved
+             searches (a radio item, ticked for the applied one; an entry this version cannot read is listed
+             disabled by name), then Save as new, Update, Rename and Delete — the last three act on the
+             applied search and are disabled while none is. Save as new and Rename ask for the name in a field
+             inside the menu (shown here refusing a name another saved search has, ignoring case; an empty
+             name is refused the same way), with Save and Cancel; the field keeps aria-invalid and
+             aria-describedby on its message. A saved search stores the search, the clauses, the sort and the
+             shown columns, and is kept in workspace.toml [[saved_searches]]. Applying one fills the search
+             box and the chips and never writes the list's own layout. The command palette lists them too (see
+             the search palette mockup). A clause on a column or condition this version no longer has is
+             not run: the list shows "A filter of this saved search cannot run…" and loads no rows until the
+             marked chip is edited (opens a new clause that replaces it) or removed. A deleted tag or record
+             stays in its clause and shows "deleted tag" or "deleted record", matching nothing. -->
       </div>
       <!-- Filter bar (ADR 0052 §2–3, #678). The search box matches the kind's text columns and the ID;
            *Filters* adds a typed clause, and every clause narrows the list (AND). The editor sits in the
@@ -78,6 +113,7 @@
       </section>
       <div class="list-filters" role="group" aria-label="Filters">
         <span class="chip"><button class="chip-label" type="button" aria-label="Edit filter: Birth after 1800">Birth after 1800</button><button class="chip-delete" type="button" aria-label="Remove filter: Birth after 1800">×</button></span>
+        <span class="chip stale"><button class="chip-label" type="button" aria-label="Edit filter: shoe-size contains (this column no longer exists)">shoe-size contains (this column no longer exists)</button><button class="chip-delete" type="button" aria-label="Remove filter: shoe-size contains (this column no longer exists)">×</button></span>
       </div>
       <!-- Windowed (#590): the listbox is as tall as the whole list (--list-row-h per row) and mounts
            only a window of rows around the scroll offset, plus the roving tab stop — each row at its

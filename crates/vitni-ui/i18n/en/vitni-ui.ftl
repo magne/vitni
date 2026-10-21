@@ -855,6 +855,16 @@ filter-op-has-all-of = has all of
 filter-op-has-none-of = has none of
 filter-chip = { $column } { $op } { $value }
 filter-chip-bare = { $column } { $op }
+filter-deleted-tag = deleted tag
+filter-deleted-record = deleted record
+filter-stale-unknown-column = this column no longer exists
+filter-stale-unknown-operator = this operator is not available for the column
+filter-stale-wrong-value = the value does not fit the operator
+filter-stale-unknown-choice = this value is not one the column offers
+filter-stale-clause = { $clause } ({ $reason })
+filter-stale-clause-nameless = this clause names no column or operator
+filter-stale-no-column = this clause names no column
+filter-stale-no-operator = this clause names no operator
 # A number cell in an Explorer row reads with its column: `Children 3` (ADR 0052 §7)
 list-cell-number = { $column } { $value }
 filter-range = { $from } – { $to }
@@ -1621,3 +1631,9 @@ similar-hint = Possibly the same as { $record } ({ $score }%)
 similar-draft-side = New
 similar-panel-title = Similar records
 similar-none = No similar records found.
+
+err-saved-search-empty-name = a saved search needs a name
+err-saved-search-duplicate-name = a saved search named `{ $name }` already exists
+err-saved-search-not-found = no saved search `{ $reference }`
+err-saved-search-removed = the saved search no longer exists
+err-saved-search-broken = the saved search `{ $name }` cannot run

@@ -55,6 +55,26 @@ filter-cancel = Cancel
 filter-edit = Edit filter: { $filter }
 filter-delete = Remove filter: { $filter }
 
+# Explorer saved searches (ADR 0052 §8-10, #680)
+saved-title = Saved searches
+saved-save-new = Save as new
+saved-update = Update
+saved-rename = Rename
+saved-delete = Delete
+saved-name = Name
+saved-save = Save
+saved-cancel = Cancel
+saved-name-empty = Give the saved search a name.
+saved-name-duplicate = A saved search with this name already exists.
+saved-unreadable = saved_searches[{ $position }]: cannot be read
+saved-unreadable-named = { $name }: cannot be read
+saved-saved = Saved search "{ $name }" saved
+saved-updated = Saved search "{ $name }" updated
+saved-renamed = Saved search renamed to "{ $name }"
+saved-deleted = Saved search "{ $name }" deleted
+saved-marked-notice = A filter of this saved search cannot run. Fix or remove the marked filter to see the list.
+saved-marked-blocks-save = Fix or remove the marked filter before saving this search.
+
 # Component chrome (icon-button accessible names, skip link)
 skip-to-content = Skip to content
 close = Close
@@ -122,6 +142,7 @@ palette-placeholder = Type a command or search…
 palette-combobox-label = Search people, places, sources, or run a command
 palette-results-label = Search results and commands
 palette-group-commands = Commands
+palette-group-saved-searches = Saved searches
 palette-group-recent = Recent
 palette-kind-command = Command
 palette-kind-recent = Recent

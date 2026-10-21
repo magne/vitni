@@ -45,7 +45,7 @@ label = "Finish polygon"
 
 [[step]]
 do = "click"
-at = { role = "button", text = "Save" }
+at = { role = "button", text = "Save", within = "dialog" }
 label = "geometry panel: Save"
 
 [[step]]
