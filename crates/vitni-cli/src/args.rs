@@ -264,12 +264,13 @@ impl From<RelationshipArg> for ChildParentRelationship {
     }
 }
 
+// ADR 0031 §3 replaces `PlaceType`, and with it this mirror, by a kind, a level and a vocabulary key.
 /// CLI mirror of [`PlaceType`]'s closed variants. The domain's `Custom` escape is not exposed yet.
 #[derive(Clone, Copy, ValueEnum)]
 pub enum PlaceTypeArg {
     /// A country.
     Country,
-    /// A first-level division (county, state, province).
+    /// A county-like division, whose level varies by country.
     County,
     /// A municipality / kommune.
     Municipality,
