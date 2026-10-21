@@ -53,8 +53,8 @@ change ([`issue-tracking.md`](issue-tracking.md) §4). Check here before filing 
 
 - **`LineString` geometry variant** — the model ships `Point`/`Polygon`; `LineString` is additive-later
   per ADR 0024 (grow the enum append-only when a concrete need appears), and nothing wants it yet.
-  **`Multi*` is no longer deferred** — the concrete need ADR 0024 named for itself arrived, so it is an
-  open issue (#569).
+  **`Multi*` is no longer deferred** — the concrete need ADR 0024 named for itself arrived, and ADR 0031
+  §1 decides `MultiPolygon` (#569).
 - **Explicit `[from, until)` validity intervals** — the effective-from resolution rule (ADR 0026)
   ships; add intervals additively only if gaps/overlaps prove ambiguous in real data. Still closed after
   the Norwegian-geography review, which found the gap intervals would address (a dissolved place
@@ -74,7 +74,11 @@ change ([`issue-tracking.md`](issue-tracking.md) §4). Check here before filing 
   a Source with its own media.
 - **External ids have no frontend entry point** — person `add_external_id` (module-level, not even
   root-exported) and `add_family_external_id` are used only inside `import.rs` for resolve-or-create.
-  External ids are importer bookkeeping, not user-editable data.
+  Person and Family external ids are importer bookkeeping, not user-editable data. A place's external
+  ids are to be listed read-only on its profile, since a *kommunenummer* is one (ADR 0031 §8, #693).
+- **A place `code` stays undated and single-valued (#574)** — ADR 0031 §8 makes a *kommunenummer* a
+  Place `ExternalId` dated by its validity, so the identifier history #574 wanted lives there. `code` is
+  Gramps' plain code and round-trips as it is; dating it too would hold the same number twice.
 
 ## Lists
 
