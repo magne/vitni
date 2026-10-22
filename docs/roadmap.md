@@ -355,10 +355,11 @@ pluggable provider can geocode; the geometry model and view work depend on nothi
 **ADR 0024** (place geometry & spatial storage), **ADR 0025** (geography view & pluggable map
 provider), and **ADR 0026** (place succession & temporal resolution).
 
-- **Geometry beyond a point** (ADR 0024): a typed `PlaceGeometry` — point, polygon, multi-polygon
-  (islands / exclaves), line — over integer microdegrees, **dated and accumulating** (the 1801 and
-  1900 boundaries coexist). The projection materialises WKB behind a SQLite R\*Tree for viewport
-  queries; GeoJSON is the import/export interchange (closes the deferred `PLAC.MAP` round-trip gap).
+- **Geometry beyond a point** (ADR 0024): a typed `PlaceGeometry` — point and polygon, with
+  multi-polygon (islands / exclaves) added by ADR 0031 — over integer microdegrees, **dated and
+  accumulating** (the 1801 and 1900 boundaries coexist). The projection materialises WKB behind a
+  SQLite R\*Tree for viewport queries; GeoJSON is the import/export interchange (closes the deferred
+  `PLAC.MAP` round-trip gap).
 - **Places change over time** (ADR 0026): a date-aware resolution rule selects the name / parent /
   geometry in effect at a date, and **succession links** (`Merged` / `Split` / `Absorbed` /
   `Elevated`) record identity changes — Aker + Kristiania → Oslo (1948), a county split — distinct
@@ -384,7 +385,7 @@ Plan: [`docs/archive/plans/places-geography-temporal.md`](archive/plans/places-g
   index over the built-in `box` type (#608), with a `places_in_bbox` query both engines answer alike,
   rebuildable by `vitni rebuild`. GeoJSON is the interchange (permissive GeoRust crates:
   `geo-types`, `geozero` with `with-geo`/`with-gpkg`, `geojson`); GEDCOM `PLAC.MAP` / Gramps `<coord>`
-  points round-trip. `LineString`/`Multi*` variants stay an additive follow-up.
+  points round-trip. `LineString` stays an additive follow-up; ADR 0031 §1 adds `MultiPolygon`.
 - **Succession & temporal resolution (ADR 0026).** A pure **effective-from** resolver (latest dated
   assertion ≤ target, else the undated/primary) selects name / enclosing parent / geometry as of a
   date — one rule shared by the generated title, the **transitive, cycle-aware, date-aware
@@ -411,13 +412,16 @@ Plan: [`docs/archive/plans/places-geography-temporal.md`](archive/plans/places-g
   **Residual closure, scoped 2026-07-29** by [`docs/research/gis-norway.md`](research/gis-norway.md),
   which tested this phase's model against Norwegian administrative history (counties and municipalities
   back to 1838, plus the ecclesiastical hierarchy) and found real importable data reaching 1838. Three of
-  the residuals above are promoted from optional to required by that target and are gated by **ADR 0031**:
-  the `Multi*` geometry variant (280 of 357 Norwegian municipalities have coastline, so single-ring
-  polygons cannot express them), the dated `add_place_name`/`assert_place_enclosed_by` use-cases, and the
-  Postgres mirror — whose succession half turns out to be a functional break of `show_place` rather than a
-  performance follow-up. The research also surfaced model gaps this phase did not anticipate: parallel
-  civil/ecclesiastical/judicial hierarchies that do not nest, positional accuracy as a concept distinct
-  from `Confidence`, and cessation. All are additive; the itemization lives in the
+  the residuals above are promoted from optional to required by that target: the `Multi*` geometry
+  variant (280 of 357 Norwegian municipalities have coastline, so single-ring polygons cannot express
+  them) and the dated `add_place_name`/`assert_place_enclosed_by` use-cases, both decided by
+  **ADR 0031**, and the Postgres mirror — whose succession half turns out to be a functional break of
+  `show_place` rather than a performance follow-up. The research also surfaced model gaps this phase
+  did not anticipate: parallel civil/ecclesiastical/judicial hierarchies that do not nest, positional
+  accuracy as a concept distinct from `Confidence`, and cessation. ADR 0031 decides all but cessation, and widens them past Norway
+  ([`research/places-beyond-norway.md`](research/places-beyond-norway.md)); it was accepted ahead of its
+  implementation, like ADRs 0037–0041. Replacing `PlaceType` is not additive and goes through the backup
+  upgrader (ADR 0041); the rest is. The itemization lives in the
   [place issues](https://github.com/magne/vitni/issues?q=is%3Aopen+label%3Aarea%2Frecords%2Fplaces).
   The import itself is deliberately unmilestoned — see
   [`issue-tracking.md`](issue-tracking.md) §3.
@@ -824,7 +828,7 @@ they are confirmed when the ADR is written.
 | [ADR 0013](adr/0013-import-export-contract.md) — **accepted** | Import/export contract: bulk worlds + streaming I/O + progress; mapping strategy (GEDCOM 7 / Gramps XML, ExternalId dedup) | Phase 4 | data-model §16–17 |
 | [ADR 0015](adr/0015-configuration-split-and-storage.md) — **accepted** | Config split: workspace-functionality vs operator vs client/presentation config, and the file/DB storage seam | Phase 7 | ADR 0005 |
 | [ADR 0017](adr/0017-assisted-import-host-capabilities.md) — **accepted** | Assisted-import host capabilities (`net` fetch, `media-store`, pluggable `ai`, `present`) — the Digitalarkivet importer | Phase 8 | ADR 0007, 0011 |
-| [ADR 0024](adr/0024-place-geometry-and-spatial-storage.md) — **accepted** | Place geometry (point/polygon/multi-polygon), the event-log encoding, the SQLite R\*Tree projection index, and the GeoJSON interchange | Phase 9 | ADR 0002, 0004, 0009 |
+| [ADR 0024](adr/0024-place-geometry-and-spatial-storage.md) — **accepted** | Place geometry (point/polygon; multi-polygon by ADR 0031), the event-log encoding, the SQLite R\*Tree projection index, and the GeoJSON interchange | Phase 9 | ADR 0002, 0004, 0009 |
 | [ADR 0025](adr/0025-geography-view-and-pluggable-map-provider.md) — **accepted** | Geography view rendering, in-map editing, and the pluggable map provider | Phase 9 | ADR 0008, 0024 |
 | [ADR 0026](adr/0026-place-succession-and-temporal-resolution.md) — **accepted** | Place succession (merge/split) + the date-aware resolution rule | Phase 9 | ADR 0004, 0024 |
 | [ADR 0027](adr/0027-configurable-surety-scheme-labels.md) — **accepted** | Configurable surety-scheme labels (relabel the five ordinals; cardinality stays fixed) | Phase 10 | ADR 0005, 0015 |
@@ -832,6 +836,7 @@ they are confirmed when the ADR is written.
 | [ADR 0029](adr/0029-import-merge-sync-reconciliation.md) — **accepted** | Import merge/sync: timestamp-gated reconciliation against the file's export date (`Person.sex` first slice; Source deferred) | Phase 10 | ADR 0013, 0018 |
 | [ADR 0014](adr/0014-plugin-signing-trust-tiers-and-loading.md) — **accepted** | Plugin signing, trust tiers, capability-grant UX, and three-layer loading | Phase 11 | ADR 0007 |
 | [ADR 0030](adr/0030-customizable-keyboard-shortcuts.md) — **accepted** | Customizable keyboard shortcuts: one resolved `Chord` map, Global-group-only rebinding, client-scope `[shortcuts]` config | Ease of use | ADR 0008, 0015 |
+| [ADR 0031](adr/0031-place-model-for-administrative-geography.md) — **accepted** | Place model for administrative geography: `kind`, `level` and a plugin-shipped vocabulary key replace `PlaceType`; enclosure links name their hierarchy; `MultiPolygon` with accuracy, role and placement; `Formed` and `TerritoryTransferred`; Place external ids keyed with a validity date | Phase 9 residual closure | ADR 0007, 0011, 0013, 0014, 0024, 0026, 0029, 0037, 0038 |
 | [ADR 0032](adr/0032-projection-schema-evolution-by-replay.md) — **accepted** | Projection schema evolution by replay: a `human_id` generated column + indexes on every view table, migrated by drop-and-replay rather than in-place `ALTER TABLE` | 0.9 — UI stabilization | ADR 0009, 0010 |
 | [ADR 0033](adr/0033-named-map-providers-and-live-switching.md) — **accepted** | Named `[map.providers.*]` config (mirroring `[ai.providers]`), a `MapSource` resolved in `vitni-app` (incl. a Google Map Tiles session adapter), and live `setStyle` provider switching with no remount | 0.9 — UI stabilization | ADR 0025, 0017, 0008 |
 | [ADR 0034](adr/0034-licence-split-agpl-application-permissive-interchange.md) — **accepted** | Per-crate licence split: `MIT OR Apache-2.0` interchange crates, `AGPL-3.0-or-later` application with the §7 permission for `vitni:host-api` plugin components, DCO + a licence-grant CLA | 0.9.5 — public release | ADR 0007, 0011, 0014 |
@@ -852,7 +857,6 @@ they are confirmed when the ADR is written.
 | [ADR 0049](adr/0049-import-supersede-reason-is-derived.md) — **accepted** | An import's supersession stores no rationale; History derives its reason, localized, from the run's export date, and a run's History row expands to the changes it made | `0.9` | ADR 0003, 0029, 0037 |
 | [ADR 0050](adr/0050-projections-record-their-last-event.md) — **accepted** | A view row holds the sequence of the last event folded into it, written by vitni's own query that folds only later events, so the write journal replays a killed or failed commit's aggregate through all its queries on the next open | Phase 14 (`0.10`) | ADR 0009, 0010, 0032, 0037 |
 | [ADR 0051](adr/0051-an-unreadable-event-is-reported-not-fatal.md) — **accepted** | An event that does not decode is named by its aggregate and sequence; its aggregate's projection holds the events before it and stays journalled, so every open reports it and neither open nor rebuild fails | Phase 14 (`0.10`) | ADR 0032, 0037, 0041, 0050 |
-| ADR 0031 | Place model for real-world administrative geography: reopen the `Multi*` geometry variant, add a civil/ecclesiastical/judicial `relation` to `PlaceRef`, and carry positional accuracy separately from `Confidence` | Phase 9 residual closure | ADR 0024, 0026, 0027 |
 | ADR 0016 | Server backend + web frontend + server-connected workspaces (transport, auth) | Phase 13 | ADR 0002, 0005, 0006, 0008 |
 
 Conditional — write an ADR only if/when the option is adopted (direction already fixed, so not

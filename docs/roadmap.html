@@ -590,7 +590,7 @@ the same cycle as its spike, so the working code informs the decision.</p>
       <td>Phase 7</td><td>ADR 0005</td></tr>
     <tr><td><b><a href="adr/0017-assisted-import-host-capabilities.md">ADR 0017</a></b> &mdash; accepted</td><td>Assisted-import host capabilities (<code>net</code> fetch, <code>media-store</code>, pluggable <code>ai</code>, <code>present</code>) &mdash; Digitalarkivet</td>
       <td>Phase 8</td><td>ADR 0007, 0011</td></tr>
-    <tr><td><b><a href="adr/0024-place-geometry-and-spatial-storage.md">ADR 0024</a></b> &mdash; accepted</td><td>Place geometry (point/polygon/multi-polygon), event-log encoding, SQLite R*Tree projection index, GeoJSON interchange</td>
+    <tr><td><b><a href="adr/0024-place-geometry-and-spatial-storage.md">ADR 0024</a></b> &mdash; accepted</td><td>Place geometry (point/polygon; multi-polygon by ADR 0031), event-log encoding, SQLite R*Tree projection index, GeoJSON interchange</td>
       <td>Phase 9</td><td>ADR 0002, 0004, 0009</td></tr>
     <tr><td><b><a href="adr/0025-geography-view-and-pluggable-map-provider.md">ADR 0025</a></b> &mdash; accepted</td><td>Geography view rendering, in-map editing, pluggable map provider</td>
       <td>Phase 9</td><td>ADR 0008, 0024</td></tr>
@@ -606,6 +606,8 @@ the same cycle as its spike, so the working code informs the decision.</p>
       <td>Phase 11</td><td>ADR 0007</td></tr>
     <tr><td><b><a href="adr/0030-customizable-keyboard-shortcuts.md">ADR 0030</a></b> &mdash; accepted</td><td>Customizable keyboard shortcuts: one resolved <code>Chord</code> map, Global-group-only rebinding, client-scope <code>[shortcuts]</code> config</td>
       <td>Ease of use</td><td>ADR 0008, 0015</td></tr>
+    <tr><td><b><a href="adr/0031-place-model-for-administrative-geography.md">ADR 0031</a></b> &mdash; accepted</td><td>Place model for administrative geography: <code>kind</code>, <code>level</code> and a plugin-shipped vocabulary key replace <code>PlaceType</code>; enclosure links name their hierarchy; <code>MultiPolygon</code> with accuracy, role and placement; <code>Formed</code> and <code>TerritoryTransferred</code>; Place external ids keyed with a validity date</td>
+      <td>Phase 9 residual closure</td><td>ADR 0007, 0011, 0013, 0014, 0024, 0026, 0029, 0037, 0038</td></tr>
     <tr><td><b><a href="adr/0032-projection-schema-evolution-by-replay.md">ADR 0032</a></b> &mdash; accepted</td><td>Projection schema evolution by replay: a <code>human_id</code> generated column + indexes on every view table, migrated by drop-and-replay rather than in-place <code>ALTER TABLE</code></td>
       <td>0.9 &mdash; UI stabilization</td><td>ADR 0009, 0010</td></tr>
     <tr><td><b><a href="adr/0033-named-map-providers-and-live-switching.md">ADR 0033</a></b> &mdash; accepted</td><td>Named <code>[map.providers.*]</code> config (mirroring <code>[ai.providers]</code>), a <code>MapSource</code> resolved in <code>vitni-app</code> (incl. a Google Map Tiles session adapter), and live <code>setStyle</code> provider switching with no remount</td>
@@ -646,8 +648,6 @@ the same cycle as its spike, so the working code informs the decision.</p>
       <td>Phase 14 (0.10)</td><td>ADR 0009, 0010, 0032, 0037</td></tr>
     <tr><td><b><a href="adr/0051-an-unreadable-event-is-reported-not-fatal.md">ADR 0051</a></b> &mdash; accepted</td><td>An event that does not decode is named by its aggregate and sequence; its aggregate&rsquo;s projection holds the events before it and stays journalled, so every open reports it and neither open nor rebuild fails</td>
       <td>Phase 14 (0.10)</td><td>ADR 0032, 0037, 0041, 0050</td></tr>
-    <tr><td><b>ADR 0031</b></td><td>Place model for real-world administrative geography: reopen the <code>Multi*</code> geometry variant, add a civil/ecclesiastical/judicial <code>relation</code> to <code>PlaceRef</code>, and carry positional accuracy separately from <code>Confidence</code></td>
-      <td>Phase 9 residual closure</td><td>ADR 0024, 0026, 0027</td></tr>
     <tr><td><b>ADR 0016</b></td><td>Server backend + web frontend + server-connected workspaces (transport, auth)</td>
       <td>Phase 13</td><td>ADR 0002, 0005, 0006, 0008</td></tr>
   </tbody>

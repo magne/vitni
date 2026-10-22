@@ -187,13 +187,15 @@ pub enum AssociationRole {
 }
 
 /// The kind of a `Place` in the enclosure hierarchy (closed set plus a custom escape — Gramps
-/// place types, data-model §7).
+/// place types, data-model §7). ADR 0031 §3 decides its replacement by a `kind`, a `level` and a
+/// vocabulary key.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "value")]
 pub enum PlaceType {
     /// A country.
     Country,
-    /// A first-level division (county, state, province).
+    /// A county-like division, whose level varies by country: a Norwegian fylke is first-level, a US
+    /// county second-level. The Gramps import also folds State and Province into it.
     County,
     /// A municipality / kommune.
     Municipality,
