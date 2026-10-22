@@ -1589,8 +1589,8 @@ phase, which fits the roadmap's treatment of import/export as plugins.
 | 6 | Dissolved municipalities render forever, overlapping their own successors on the map | H | M | Recommendation 8 |
 | 7 | Same-date geometries at different generalization levels resolve non-deterministically by import order | M | M | Recommendation 6's tie-break |
 | 8 | `place_view` blob is re-read and rewritten per command; megabyte geometries invalidate the snapshotting decision | M | H | Import at N500 or coarser; re-measure snapshotting if finer data is ever attempted |
-| 9 | Importing ~1,100 reference places drowns a user's own handful of places in every list and picker | H | H | Open question 2 — decide before P3, not after |
-| 10 | CC BY 4.0 and NLOD attribution obligations have no in-app surface today | H | M | Record each dataset as a `Source` + `Citation` (plugin design, Provenance) and design one attribution view |
+| 9 | Importing ~1,100 reference places drowns a user's own handful of places in every list and picker | H | H | Decided by ADR 0053: filter on the `dataset` column |
+| 10 | CC BY 4.0 and NLOD attribution obligations have no in-app surface today | H | M | Decided by ADR 0053: each dataset vintage is a `Source` + `Citation`; no separate attribution view |
 | 11 | RHD's 1838/1886 *matrikkel* — the published farm→parish crosswalk — states **no licence at all**, while a sibling RHD dataset is personal-use-only | H | M | Do not bundle or redistribute; contact HistLab for written clarification before using it as import input |
 | 11b | Digitalarkivet's `robots.txt` explicitly `Disallow: /` for `anthropic-ai`, `CCBot`, `ChatGPT Agent` and 134 other agents | H | M | Do not build a scraping plugin against it; request API access from Arkivverket instead (histreg.no already consumes such an API) |
 | 12 | `prestehistorie.no`, the richest *prestegjeld* history, is copyright-only | H | M | Use as a research reference only; never as import input |
@@ -1654,9 +1654,13 @@ to see and search on.
    technical one. Options: a Tag convention (works today, zero model change); a workspace-level
    filter; or a genuine reference-data partition (large). This should be settled *before* P3, because
    it is much harder to retrofit.
+   *Decided by [ADR 0053](../adr/0053-reference-data-dataset-column.md): a `dataset` list column read
+   from the records' origins, not a tag or a partition.*
 3. **Bundle the data, or require a download?** Every dataset we would want is redistributable with
    attribution, so the blocker is bundle size and the absence of an attribution surface — not
    licence. Worth deciding alongside question 2.
+   *Decided by [ADR 0053](../adr/0053-reference-data-dataset-column.md): fetched at runtime over
+   `net`, never bundled.*
 4. **How faithful must the identity model be?** The repo's rule yields five aggregates for
    Troms/Finnmark 1919–2024 and matches Norwegian practice exactly, but a user searching "Troms" will
    get three hits. Accept, or add a merged presentation layer?
