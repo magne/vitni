@@ -68,3 +68,4 @@ err-place-identity-decided = places { $place } and { $other } already have a liv
 err-place-empty-type = a place type must state a kind, a level or a key
 err-place-text-only-type-date = a place type's date must be a calendar date, not free text
 err-place-type-key-invalid = "{ $key }" is not a place type key: write <namespace>:<name>, such as std:farm, or custom:<text>
+err-place-type-date-invalid = "{ $date }" is not a date: write YYYY, YYYY-MM or YYYY-MM-DD

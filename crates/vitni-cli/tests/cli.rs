@@ -1806,3 +1806,287 @@ fn a_place_created_without_a_type_has_none_and_set_type_gives_it_one() {
         .success()
         .stdout(predicate::str::contains("type: parish"));
 }
+
+/// Every place-type statement the `gen` workspace's log holds, oldest first, as stored JSON, with
+/// the number of `AssertionSuperseded` events beside them.
+fn stored_place_types(dir: &Path) -> (Vec<serde_json::Value>, usize) {
+    let url = format!("sqlite://{}", dir.join("ws").join("vitni.sqlite3").display());
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let rows: Vec<(String, String)> = runtime.block_on(async {
+        let pool = sqlx::SqlitePool::connect(&url).await.unwrap();
+        let rows = sqlx::query_as("SELECT event_type, payload FROM events ORDER BY rowid")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+        pool.close().await;
+        rows
+    });
+    let mut statements = Vec::new();
+    let mut superseded = 0;
+    for (event_type, payload) in rows {
+        match event_type.as_str() {
+            "PlaceCreated" | "PlaceTypeSet" => {
+                let event: serde_json::Value = serde_json::from_str(&payload).unwrap();
+                statements.push(event["type_statement"].clone());
+            }
+            "AssertionSuperseded" => superseded += 1,
+            _ => {}
+        }
+    }
+    (statements, superseded)
+}
+
+fn create_place_typed(dir: &Path, key: &str) {
+    vitni(dir)
+        .args(["place", "create", "--type", key, "--name", "Fana"])
+        .assert()
+        .success();
+}
+
+#[test]
+fn set_type_level_alone_keeps_the_key_and_kind() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    create_place_typed(dir.path(), "std:county");
+
+    vitni(dir.path())
+        .args(["place", "set-type", "P0001", "--level", "adm1"])
+        .assert()
+        .success();
+
+    let (statements, _) = stored_place_types(dir.path());
+    let last = statements.last().unwrap();
+    assert_eq!(last["type_key"], "std:county", "{last}");
+    assert_eq!(last["kind"], "Administrative", "{last}");
+    assert_eq!(last["level"], "Adm1", "{last}");
+    vitni(dir.path())
+        .args(["place", "show", "P0001"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("type: county"));
+}
+
+#[test]
+fn set_type_kind_alone_stores_a_kind_with_no_key() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    vitni(dir.path())
+        .args(["place", "create", "--name", "Fana"])
+        .assert()
+        .success();
+
+    vitni(dir.path())
+        .args(["place", "set-type", "P0001", "--kind", "ecclesiastical"])
+        .assert()
+        .success();
+
+    let (statements, _) = stored_place_types(dir.path());
+    let last = statements.last().unwrap();
+    assert_eq!(last["kind"], "Ecclesiastical", "{last}");
+    assert!(last.get("type_key").is_none_or(serde_json::Value::is_null), "{last}");
+    vitni(dir.path())
+        .args(["place", "show", "P0001"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("type: ecclesiastical"));
+}
+
+#[test]
+fn set_type_with_a_non_std_key_kind_and_level_stores_all_three_and_shows_kind_and_key() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    vitni(dir.path())
+        .args(["place", "create", "--name", "Fana"])
+        .assert()
+        .success();
+
+    vitni(dir.path())
+        .args([
+            "place",
+            "set-type",
+            "P0001",
+            "--type",
+            "no:prestegjeld",
+            "--kind",
+            "ecclesiastical",
+            "--level",
+            "adm3",
+        ])
+        .assert()
+        .success();
+
+    let (statements, _) = stored_place_types(dir.path());
+    let last = statements.last().unwrap();
+    assert_eq!(last["type_key"], "no:prestegjeld", "{last}");
+    assert_eq!(last["kind"], "Ecclesiastical", "{last}");
+    assert_eq!(last["level"], "Adm3", "{last}");
+    vitni(dir.path())
+        .args(["place", "show", "P0001"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("type: ecclesiastical · no:prestegjeld"));
+}
+
+#[test]
+fn set_type_with_a_date_adds_a_dated_entry_beside_the_undated_one() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    create_place_typed(dir.path(), "std:farm");
+
+    vitni(dir.path())
+        .args(["place", "set-type", "P0001", "--date", "1838", "--type", "std:parish"])
+        .assert()
+        .success();
+
+    let (statements, superseded) = stored_place_types(dir.path());
+    assert_eq!(statements.len(), 2, "{statements:?}");
+    assert_eq!(superseded, 0);
+    let dated = &statements[1];
+    assert_eq!(dated["type_key"], "std:parish", "{dated}");
+    assert_eq!(dated["kind"], "Ecclesiastical", "{dated}");
+    assert!(!dated["date"].is_null(), "{dated}");
+    assert_eq!(statements[0]["type_key"], "std:farm");
+}
+
+#[test]
+fn a_dated_level_edit_keeps_the_same_date_entrys_key_and_kind() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    create_place_typed(dir.path(), "std:farm");
+    vitni(dir.path())
+        .args([
+            "place",
+            "set-type",
+            "P0001",
+            "--date",
+            "1838",
+            "--type",
+            "no:prestegjeld",
+            "--kind",
+            "ecclesiastical",
+        ])
+        .assert()
+        .success();
+
+    vitni(dir.path())
+        .args(["place", "set-type", "P0001", "--date", "1838", "--level", "adm1"])
+        .assert()
+        .success();
+
+    let (statements, superseded) = stored_place_types(dir.path());
+    assert_eq!(superseded, 1, "only the 1838 entry is superseded");
+    let last = statements.last().unwrap();
+    assert_eq!(last["type_key"], "no:prestegjeld", "{last}");
+    assert_eq!(last["kind"], "Ecclesiastical", "{last}");
+    assert_eq!(last["level"], "Adm1", "{last}");
+    assert!(!last["date"].is_null(), "{last}");
+}
+
+#[test]
+fn a_std_type_re_derives_the_kind_instead_of_keeping_the_old_one() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    create_place_typed(dir.path(), "std:farm");
+
+    vitni(dir.path())
+        .args(["place", "set-type", "P0001", "--type", "std:parish"])
+        .assert()
+        .success();
+
+    let (statements, _) = stored_place_types(dir.path());
+    let last = statements.last().unwrap();
+    assert_eq!(last["type_key"], "std:parish", "{last}");
+    assert_eq!(last["kind"], "Ecclesiastical", "{last}");
+    assert!(last.get("level").is_none_or(serde_json::Value::is_null), "{last}");
+}
+
+#[test]
+fn set_type_with_nothing_to_set_is_refused_through_fluent() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    create_place_typed(dir.path(), "std:farm");
+
+    vitni(dir.path())
+        .args(["place", "set-type", "P0001"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "a place type must state a kind, a level or a key",
+        ));
+}
+
+#[test]
+fn set_type_refuses_a_malformed_date_and_a_malformed_key_naming_the_input() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    create_place_typed(dir.path(), "std:farm");
+
+    vitni(dir.path())
+        .args(["place", "set-type", "P0001", "--type", "std:parish", "--date", "18x8"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("18x8").and(predicate::str::contains("unexpected argument").not()));
+    vitni(dir.path())
+        .args(["place", "set-type", "P0001", "--level", "adm1", "--type", "farm"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("\"farm\" is not a place type key"));
+
+    for catalogue in [
+        include_str!("../i18n/en/place.ftl"),
+        include_str!("../i18n/no/place.ftl"),
+    ] {
+        assert!(catalogue.contains("err-place-type-date-invalid ="));
+    }
+}
+
+/// A farm created undated, then typed a parish from 1838: the base of an undated and a dated edit.
+fn farm_then_parish_from_1838(dir: &Path) {
+    create_place_typed(dir, "std:farm");
+    vitni(dir)
+        .args(["place", "set-type", "P0001", "--date", "1838", "--type", "std:parish"])
+        .assert()
+        .success();
+}
+
+#[test]
+fn set_type_without_a_date_edits_the_undated_type_and_leaves_the_dated_one() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    farm_then_parish_from_1838(dir.path());
+
+    vitni(dir.path())
+        .args(["place", "set-type", "P0001", "--level", "adm1"])
+        .assert()
+        .success();
+
+    let (statements, superseded) = stored_place_types(dir.path());
+    assert_eq!(statements.len(), 3, "{statements:?}");
+    assert_eq!(superseded, 0, "the 1838 entry stays live");
+    let last = &statements[2];
+    assert_eq!(last["type_key"], "std:farm", "{last}");
+    assert_eq!(last["kind"], statements[0]["kind"], "{last}");
+    assert_eq!(last["level"], "Adm1", "{last}");
+    assert!(last.get("date").is_none_or(serde_json::Value::is_null), "{last}");
+    assert_eq!(statements[1]["type_key"], "std:parish");
+}
+
+#[test]
+fn set_type_with_a_date_edits_only_that_dated_entry() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    farm_then_parish_from_1838(dir.path());
+
+    vitni(dir.path())
+        .args(["place", "set-type", "P0001", "--date", "1838", "--level", "adm1"])
+        .assert()
+        .success();
+
+    let (statements, superseded) = stored_place_types(dir.path());
+    assert_eq!(superseded, 1, "only the 1838 entry is superseded");
+    let last = statements.last().unwrap();
+    assert_eq!(last["type_key"], "std:parish", "{last}");
+    assert_eq!(last["kind"], "Ecclesiastical", "{last}");
+    assert_eq!(last["level"], "Adm1", "{last}");
+    assert_eq!(last["date"], statements[1]["date"], "{last}");
+}

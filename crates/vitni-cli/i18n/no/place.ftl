@@ -68,3 +68,4 @@ err-place-identity-decided = stedene { $place } og { $other } har allerede en gj
 err-place-empty-type = en stedstype må oppgi en art, et nivå eller en nøkkel
 err-place-text-only-type-date = datoen til en stedstype må være en kalenderdato, ikke fritekst
 err-place-type-key-invalid = «{ $key }» er ikke en stedstypenøkkel: skriv <navnerom>:<navn>, for eksempel std:farm, eller custom:<tekst>
+err-place-type-date-invalid = «{ $date }» er ikke en dato: skriv ÅÅÅÅ, ÅÅÅÅ-MM eller ÅÅÅÅ-MM-DD

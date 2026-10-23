@@ -137,6 +137,7 @@ impl Localizer {
     pub(super) fn place_error(&self, error: &PlaceError) -> String {
         match error {
             PlaceError::InvalidTypeKey(key) => fl!(self.loader, "err-place-type-key-invalid", key = key.clone()),
+            PlaceError::InvalidTypeDate(date) => fl!(self.loader, "err-place-type-date-invalid", date = date.clone()),
             PlaceError::EmptyPlaceType => fl!(self.loader, "err-place-empty-type"),
             PlaceError::TextOnlyPlaceTypeDate => fl!(self.loader, "err-place-text-only-type-date"),
             PlaceError::NotFound(id) => fl!(self.loader, "err-place-not-exist", id = id.to_string()),

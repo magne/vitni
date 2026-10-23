@@ -9,9 +9,9 @@ use clap::{Args, ValueEnum};
 use vitni_app::{
     AppError, ChildParentRelationship, ChromosomeSide, ColumnType, Confidence, DnaGenomeBuild, DnaProvider,
     DnaTestType, EventType, EvidenceKind, FileConfigStore, FilterOp, FilterValue, GenealogicalDate, InformationKind,
-    ListFilter, ListPage, ListQuery, ListQueryError, ListSort, ListedKind, NoteType, ParticipantRole, RepositoryType,
-    Restriction, SortDirection, SourceMediaType, SourceQuality, SuccessionKind, Workspace, gregorian_date,
-    reference_id, runnable_saved_query,
+    ListFilter, ListPage, ListQuery, ListQueryError, ListSort, ListedKind, NoteType, ParticipantRole, PlaceKind,
+    PlaceLevel, RepositoryType, Restriction, SortDirection, SourceMediaType, SourceQuality, SuccessionKind, Workspace,
+    gregorian_date, reference_id, runnable_saved_query,
 };
 use vitni_core::enums::EvidenceLevel;
 
@@ -288,6 +288,90 @@ impl From<SuccessionKindArg> for SuccessionKind {
             SuccessionKindArg::Absorbed => Self::Absorbed,
             SuccessionKindArg::Elevated => Self::Elevated,
             SuccessionKindArg::Renamed => Self::Renamed,
+        }
+    }
+}
+
+/// CLI mirror of [`PlaceKind`] — what sort of structure a place is (ADR 0031 §3).
+#[derive(Clone, Copy, ValueEnum)]
+pub enum PlaceKindArg {
+    /// A civil administrative unit.
+    Administrative,
+    /// A church unit.
+    Ecclesiastical,
+    /// A court district.
+    Judicial,
+    /// A civil-registration district.
+    Registration,
+    /// A tax or fiscal unit.
+    Fiscal,
+    /// A military district.
+    Military,
+    /// A manorial unit.
+    Manorial,
+    /// A land-register unit.
+    Cadastral,
+    /// A statistical unit.
+    Statistical,
+    /// A populated place.
+    Settlement,
+    /// A building or structure.
+    Building,
+    /// A natural feature.
+    Natural,
+}
+
+impl From<PlaceKindArg> for PlaceKind {
+    fn from(value: PlaceKindArg) -> Self {
+        match value {
+            PlaceKindArg::Administrative => Self::Administrative,
+            PlaceKindArg::Ecclesiastical => Self::Ecclesiastical,
+            PlaceKindArg::Judicial => Self::Judicial,
+            PlaceKindArg::Registration => Self::Registration,
+            PlaceKindArg::Fiscal => Self::Fiscal,
+            PlaceKindArg::Military => Self::Military,
+            PlaceKindArg::Manorial => Self::Manorial,
+            PlaceKindArg::Cadastral => Self::Cadastral,
+            PlaceKindArg::Statistical => Self::Statistical,
+            PlaceKindArg::Settlement => Self::Settlement,
+            PlaceKindArg::Building => Self::Building,
+            PlaceKindArg::Natural => Self::Natural,
+        }
+    }
+}
+
+/// CLI mirror of [`PlaceLevel`] — a place's rank in a hierarchy (ADR 0031 §3).
+#[derive(Clone, Copy, ValueEnum)]
+pub enum PlaceLevelArg {
+    /// A country.
+    Country,
+    /// First administrative level.
+    Adm1,
+    /// Second administrative level.
+    Adm2,
+    /// Third administrative level.
+    Adm3,
+    /// Fourth administrative level.
+    Adm4,
+    /// Fifth administrative level.
+    Adm5,
+    /// A settlement.
+    Settlement,
+    /// A part of a settlement.
+    SubSettlement,
+}
+
+impl From<PlaceLevelArg> for PlaceLevel {
+    fn from(value: PlaceLevelArg) -> Self {
+        match value {
+            PlaceLevelArg::Country => Self::Country,
+            PlaceLevelArg::Adm1 => Self::Adm1,
+            PlaceLevelArg::Adm2 => Self::Adm2,
+            PlaceLevelArg::Adm3 => Self::Adm3,
+            PlaceLevelArg::Adm4 => Self::Adm4,
+            PlaceLevelArg::Adm5 => Self::Adm5,
+            PlaceLevelArg::Settlement => Self::Settlement,
+            PlaceLevelArg::SubSettlement => Self::SubSettlement,
         }
     }
 }
@@ -770,4 +854,32 @@ impl FilterArg {
 /// A `YYYY[-MM[-DD]]` filter date.
 fn date(raw: &str) -> Option<GenealogicalDate> {
     crate::commands::person::parse_born(raw).ok().map(gregorian_date)
+}
+
+#[cfg(test)]
+mod tests {
+    use clap::ValueEnum;
+    use vitni_app::{PlaceKind, PlaceLevel};
+
+    use super::{PlaceKindArg, PlaceLevelArg};
+
+    #[test]
+    fn the_place_kind_mirror_covers_exactly_the_core_kinds() {
+        let mapped: Vec<PlaceKind> = PlaceKindArg::value_variants()
+            .iter()
+            .copied()
+            .map(PlaceKind::from)
+            .collect();
+        assert_eq!(mapped, PlaceKind::ALL);
+    }
+
+    #[test]
+    fn the_place_level_mirror_covers_exactly_the_core_levels() {
+        let mapped: Vec<PlaceLevel> = PlaceLevelArg::value_variants()
+            .iter()
+            .copied()
+            .map(PlaceLevel::from)
+            .collect();
+        assert_eq!(mapped, PlaceLevel::ALL);
+    }
 }

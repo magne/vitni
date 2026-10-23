@@ -29,6 +29,9 @@ pub enum PlaceError {
     /// the key from user input, since a [`PlaceTypeKey`](crate::place_type::PlaceTypeKey) cannot be malformed.
     #[error("{0:?} is not a place type key")]
     InvalidTypeKey(String),
+    /// A place type date was not a calendar date a frontend could parse from user input.
+    #[error("{0:?} is not a date")]
+    InvalidTypeDate(String),
     /// A place type carried a text-only date, which has no sort value to resolve or supersede by
     /// (ADR 0054).
     #[error("a place type's date must be a calendar date, not free text")]
