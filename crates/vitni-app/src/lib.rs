@@ -214,11 +214,11 @@ pub use person::{
 pub use person_change_set::{PersonChangeSet, PersonTarget, commit_person_change_set};
 pub use place::{
     NewPlace, PlaceEnclosingRef, PlaceGeometryRef, PlaceMergeResult, PlaceNameRef, PlaceSuccessionInput,
-    PlaceSuccessionRef, PlaceSummary, add_place_citation, add_place_name, assert_place_coordinates,
+    PlaceSuccessionRef, PlaceSummary, PlaceTypeRef, add_place_citation, add_place_name, assert_place_coordinates,
     assert_place_enclosed_by, assert_place_geometry, assert_place_succession, attach_place_media, attach_place_note,
     create_place, distinguish_places, list_places, list_places_as_of, list_places_page, merge_places,
-    place_claim_owner, place_pair_decision, set_place_code, set_place_human_id, set_place_type,
-    set_restrictions as set_place_restrictions, show_place, show_place_as_of, tag_place,
+    place_claim_owner, place_pair_decision, place_type_at, set_place_code, set_place_human_id, set_place_type,
+    set_restrictions as set_place_restrictions, show_place, show_place_as_of, tag_place, undated_place_type,
     undo_place_distinction_and_merge, update_place_media_ref,
 };
 pub use place_change_set::{PlaceChangeSet, commit_place_change_set};

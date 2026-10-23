@@ -2593,6 +2593,47 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn two_set_place_type_calls_supersede_once_and_leave_one_live_type() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let mut host = low_template_host(&dir).await;
+        let place = commands::Host::create_place(&mut host, "Haugen".to_owned())
+            .await
+            .expect("place");
+        for key in ["std:farm", "std:parish"] {
+            commands::Host::set_place_type(&mut host, place.clone(), record(true, Some(key), None))
+                .await
+                .expect("set type");
+        }
+
+        let log = vitni_app::change_log_for_place(&host.workspace, &place)
+            .await
+            .expect("log");
+        let superseded = log
+            .iter()
+            .filter(|entry| entry.event_type == "AssertionSuperseded")
+            .count();
+        assert_eq!(superseded, 1);
+        let view = host
+            .workspace
+            .store()
+            .find_place(&place)
+            .await
+            .expect("find")
+            .expect("place exists");
+        let live = view.place_types_with_assertions();
+        assert_eq!(live.len(), 1);
+        assert_eq!(
+            live[0]
+                .value
+                .value
+                .type_key
+                .as_ref()
+                .map(vitni_app::PlaceTypeKey::as_str),
+            Some("std:parish")
+        );
+    }
+
+    #[tokio::test]
     async fn a_place_created_through_the_host_has_no_type_and_a_set_type_is_the_only_one() {
         let dir = tempfile::tempdir().expect("tempdir");
         let mut host = low_template_host(&dir).await;

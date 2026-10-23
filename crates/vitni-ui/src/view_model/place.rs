@@ -1455,6 +1455,7 @@ mod place_detail_events_tests {
             own_place_type: None,
             place_type: None,
             place_type_confidence: None,
+            place_types: Vec::new(),
             names: Vec::new(),
             code: None,
             code_confidence: None,

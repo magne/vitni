@@ -461,3 +461,312 @@ async fn empty_succession_endpoints_are_a_domain_error() {
         Err(AppError::PlaceDomain(PlaceError::EmptySuccessionEndpoints))
     ));
 }
+
+// --- Same-date retype and creation-aware supersession (ADR 0054) ---
+
+fn std_type(name: &str) -> vitni_app::PlaceTypeStatement {
+    vitni_app::std_statement(name).expect("a std key")
+}
+
+fn dated(name: &str, date: GenealogicalDate) -> vitni_app::PlaceTypeStatement {
+    vitni_app::PlaceTypeStatement {
+        date: Some(date),
+        ..std_type(name)
+    }
+}
+
+async fn retype(ws: &Workspace, session: &Session, human_id: &str, statement: vitni_app::PlaceTypeStatement) {
+    vitni_app::set_place_type(ws, session, human_id, statement, MutationMeta::default())
+        .await
+        .expect("set type");
+}
+
+async fn event_types(ws: &Workspace, human_id: &str) -> Vec<String> {
+    vitni_app::change_log_for_place(ws, human_id)
+        .await
+        .expect("log")
+        .into_iter()
+        .map(|entry| entry.event_type)
+        .collect()
+}
+
+async fn superseded_count(ws: &Workspace, human_id: &str) -> usize {
+    event_types(ws, human_id)
+        .await
+        .iter()
+        .filter(|event_type| *event_type == "AssertionSuperseded")
+        .count()
+}
+
+/// The live type entries of a place as `(assertion id, statement)`, in assertion order.
+async fn live_types(ws: &Workspace, human_id: &str) -> Vec<(String, vitni_app::PlaceTypeStatement)> {
+    let view = ws
+        .store()
+        .find_place(human_id)
+        .await
+        .expect("find")
+        .expect("place exists");
+    view.place_types_with_assertions()
+        .iter()
+        .map(|entry| (entry.assertion_id.to_string(), entry.value.value.clone()))
+        .collect()
+}
+
+async fn created_assertion(ws: &Workspace, human_id: &str) -> String {
+    ws.store()
+        .find_place(human_id)
+        .await
+        .expect("find")
+        .expect("place exists")
+        .created_assertion()
+        .expect("created")
+        .to_string()
+}
+
+async fn current_type(ws: &Workspace, human_id: &str) -> Option<vitni_app::PlaceTypeStatement> {
+    show_place(ws, human_id).await.expect("show").expect("found").place_type
+}
+
+fn imported() -> Provenance {
+    Provenance {
+        origin: Some(vitni_core::origin::RecordOrigin {
+            dataset: vitni_core::origin::DatasetId::global("digitalarkivet"),
+            record: "plac:Haugen".to_owned(),
+            item: None,
+            digest: None,
+            run: vitni_core::ids::ImportRunId::from_uuid(Uuid::from_u128(9)),
+        }),
+        ..Provenance::default()
+    }
+}
+
+#[tokio::test]
+async fn a_retype_after_creation_is_plain_and_leaves_the_creation_entry_and_origin_live() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let place = create_place(
+        &ws,
+        &session,
+        NewPlace {
+            human_id: None,
+            place_type: std_type("farm"),
+            name: Some("Haugen".to_owned()),
+        },
+        imported(),
+        &[],
+    )
+    .await
+    .expect("place");
+    let place_id = ws
+        .store()
+        .find_place(&place)
+        .await
+        .expect("find")
+        .expect("exists")
+        .place_id()
+        .expect("id");
+
+    retype(&ws, &session, &place, std_type("parish")).await;
+
+    assert_eq!(
+        superseded_count(&ws, &place).await,
+        0,
+        "the creation is never superseded"
+    );
+    let created = created_assertion(&ws, &place).await;
+    let live = live_types(&ws, &place).await;
+    assert_eq!(live.len(), 2, "the created type and the retype are both live: {live:?}");
+    assert_eq!(live[0], (created.clone(), std_type("farm")));
+    assert_eq!(live[1].1, std_type("parish"));
+    assert_eq!(current_type(&ws, &place).await, Some(std_type("parish")));
+    assert!(
+        ws.store()
+            .created_origin("place", &place_id.to_string())
+            .await
+            .expect("origin")
+            .is_some(),
+        "the place.created origin row is still live"
+    );
+}
+
+#[tokio::test]
+async fn undoing_the_first_retype_restores_the_created_type() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let place = create(&ws, &session, "Haugen", std_type("farm")).await;
+    retype(&ws, &session, &place, std_type("parish")).await;
+    let retype_id = live_types(&ws, &place).await[1].0.clone();
+
+    vitni_app::undo_place_assertion(&ws, &session, &place, &retype_id, None)
+        .await
+        .expect("undo");
+
+    assert_eq!(current_type(&ws, &place).await, Some(std_type("farm")));
+    assert_eq!(live_types(&ws, &place).await.len(), 1);
+}
+
+#[tokio::test]
+async fn a_second_undated_retype_supersedes_the_first_retype_only() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let place = create(&ws, &session, "Haugen", std_type("farm")).await;
+    let created = created_assertion(&ws, &place).await;
+    retype(&ws, &session, &place, std_type("parish")).await;
+    let first_retype = live_types(&ws, &place).await[1].0.clone();
+
+    retype(&ws, &session, &place, std_type("county")).await;
+
+    assert_eq!(superseded_count(&ws, &place).await, 1);
+    let live = live_types(&ws, &place).await;
+    let ids: Vec<&str> = live.iter().map(|(id, _)| id.as_str()).collect();
+    assert!(ids.contains(&created.as_str()), "the creation entry stays live");
+    assert!(!ids.contains(&first_retype.as_str()), "the first retype is replaced");
+    assert_eq!(live.len(), 2);
+    assert_eq!(current_type(&ws, &place).await, Some(std_type("county")));
+}
+
+#[tokio::test]
+async fn dated_types_accumulate_and_a_same_date_reset_supersedes_only_that_entry() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let place = create(&ws, &session, "Haugen", vitni_app::PlaceTypeStatement::default()).await;
+    retype(&ws, &session, &place, dated("farm", year(1838))).await;
+    retype(&ws, &session, &place, dated("parish", year(1964))).await;
+    assert_eq!(superseded_count(&ws, &place).await, 0);
+    assert_eq!(live_types(&ws, &place).await.len(), 2, "1838 and 1964 are both live");
+
+    retype(&ws, &session, &place, dated("hamlet", year(1838))).await;
+    assert_eq!(superseded_count(&ws, &place).await, 1);
+    let respelled = GenealogicalDate {
+        original_text: Some("abt 1838".to_owned()),
+        ..year(1838)
+    };
+    retype(&ws, &session, &place, dated("village", respelled)).await;
+    assert_eq!(
+        superseded_count(&ws, &place).await,
+        2,
+        "another spelling of 1838 is the same date"
+    );
+
+    let live = live_types(&ws, &place).await;
+    let keys: Vec<String> = live
+        .iter()
+        .map(|(_, statement)| {
+            statement
+                .type_key
+                .as_ref()
+                .map(|key| key.as_str().to_owned())
+                .unwrap_or_default()
+        })
+        .collect();
+    assert_eq!(live.len(), 2, "{keys:?}");
+    assert!(keys.contains(&"std:village".to_owned()), "{keys:?}");
+    assert!(
+        keys.contains(&"std:parish".to_owned()),
+        "the 1964 entry is untouched: {keys:?}"
+    );
+
+    let as_of_1900 = show_place_as_of(&ws, &place, year(1900))
+        .await
+        .expect("show")
+        .expect("found");
+    assert_eq!(
+        as_of_1900.place_type.and_then(|statement| statement.type_key),
+        std_type("village").type_key,
+        "as of 1900 the 1838 type is in effect"
+    );
+}
+
+#[tokio::test]
+async fn the_first_type_set_on_an_untyped_place_is_plain() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let place = create(&ws, &session, "Haugen", vitni_app::PlaceTypeStatement::default()).await;
+
+    retype(&ws, &session, &place, std_type("farm")).await;
+
+    assert_eq!(superseded_count(&ws, &place).await, 0);
+    assert_eq!(current_type(&ws, &place).await, Some(std_type("farm")));
+}
+
+#[tokio::test]
+async fn a_caller_supplied_supersedes_passes_through_unchanged() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let place = create(&ws, &session, "Haugen", std_type("farm")).await;
+    let created = created_assertion(&ws, &place).await;
+
+    vitni_app::set_place_type(
+        &ws,
+        &session,
+        &place,
+        std_type("parish"),
+        MutationMeta {
+            supersedes: Some(&created),
+            ..MutationMeta::default()
+        },
+    )
+    .await
+    .expect("explicit supersession");
+
+    assert_eq!(superseded_count(&ws, &place).await, 1);
+    let live = live_types(&ws, &place).await;
+    assert_eq!(live.len(), 1, "the created entry was replaced as asked: {live:?}");
+    assert_eq!(live[0].1, std_type("parish"));
+}
+
+#[tokio::test]
+async fn a_caller_supplied_supersedes_wins_over_the_same_date_entry() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let place = create(&ws, &session, "Haugen", std_type("farm")).await;
+    let created = created_assertion(&ws, &place).await;
+    vitni_app::set_place_type(&ws, &session, &place, std_type("parish"), MutationMeta::default())
+        .await
+        .expect("plain retype accumulates");
+
+    vitni_app::set_place_type(
+        &ws,
+        &session,
+        &place,
+        std_type("city"),
+        MutationMeta {
+            supersedes: Some(&created),
+            ..MutationMeta::default()
+        },
+    )
+    .await
+    .expect("explicit supersession");
+
+    let live: Vec<_> = live_types(&ws, &place)
+        .await
+        .into_iter()
+        .map(|(_, value)| value)
+        .collect();
+    assert_eq!(
+        live,
+        [std_type("parish"), std_type("city")],
+        "only the named entry was replaced"
+    );
+}
+
+#[tokio::test]
+async fn an_empty_statement_is_refused() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let place = create(&ws, &session, "Haugen", std_type("farm")).await;
+
+    let result = vitni_app::set_place_type(
+        &ws,
+        &session,
+        &place,
+        vitni_app::PlaceTypeStatement::default(),
+        MutationMeta::default(),
+    )
+    .await;
+
+    assert!(
+        matches!(result, Err(AppError::PlaceDomain(PlaceError::EmptyPlaceType))),
+        "{result:?}"
+    );
+}

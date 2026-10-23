@@ -78,6 +78,18 @@ pub struct PlaceEnclosingRef {
     pub assertion_id: String,
 }
 
+/// One live type statement of a place, with its surety and the assertion that introduced it (ADR 0054).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlaceTypeRef {
+    /// The stated kind, level, key and date.
+    pub statement: PlaceTypeStatement,
+    /// The operator's surety in the statement, if recorded.
+    pub confidence: Option<Confidence>,
+    /// The `AssertionId` (a UUID string) that introduced this statement — what `place_claim_owner`
+    /// and a Retract take to address the row. Never rendered.
+    pub assertion_id: String,
+}
+
 /// A succession relation from a place's perspective — a predecessor or a successor, depending on
 /// which list it is read from (ADR 0026 §4).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -141,6 +153,9 @@ pub struct PlaceSummary {
     pub place_type: Option<PlaceTypeStatement>,
     /// The operator's surety in the place type, if set.
     pub place_type_confidence: Option<Confidence>,
+    /// Every live type statement, in assertion order — the creation statement included; for a merged
+    /// cluster, the members' statements follow the root's.
+    pub place_types: Vec<PlaceTypeRef>,
     /// The asserted names, in assertion order, each with its language/date + provenance.
     pub names: Vec<PlaceNameRef>,
     /// The place's code, if set.
@@ -348,20 +363,62 @@ pub(crate) async fn resolve_place_id_public(store: &Store, human_id: &str) -> Re
     resolve_place_id(store, human_id).await
 }
 
+/// The latest live undated type statement of `summary`, if any (ADR 0054).
+#[must_use]
+pub fn undated_place_type(summary: &PlaceSummary) -> Option<&PlaceTypeStatement> {
+    place_type_at(summary, None).map(|entry| &entry.statement)
+}
+
+/// The latest live type entry of `summary` stated at `date` — `None` meaning undated — where two dates
+/// are the same when their `sort_value`s are equal (ADR 0054). The creation entry is included.
+#[must_use]
+pub fn place_type_at<'a>(summary: &'a PlaceSummary, date: Option<&GenealogicalDate>) -> Option<&'a PlaceTypeRef> {
+    let wanted = date.map(|d| d.sort_value);
+    summary
+        .place_types
+        .iter()
+        .rev()
+        .find(|entry| same_type_date(entry.statement.date.as_ref(), wanted))
+}
+
+/// Whether a type entry dated `date` is stated at the `wanted` sort value (ADR 0054: equal `sort_value`s;
+/// two undated entries are the same date).
+fn same_type_date(date: Option<&GenealogicalDate>, wanted: Option<i64>) -> bool {
+    date.map(|d| d.sort_value) == wanted
+}
+
 /// Sets (or changes) an existing place's type, identified by `human_id`.
+///
+/// Unless the caller names an assertion to supersede or the write carries an import origin (whose
+/// gate supersedes), a statement replaces the live entry with the same date, other than the creation
+/// entry; otherwise it accumulates (ADR 0054).
 ///
 /// # Errors
 ///
-/// [`AppError::PlaceNotFound`] if no such place exists, or a workspace/store error.
+/// [`AppError::PlaceNotFound`] if no such place exists, [`AppError::PlaceDomain`] if the statement is
+/// empty or its date is text-only, or a workspace/store error.
 pub async fn set_place_type(
     workspace: &Workspace,
     session: &Session,
     human_id: &str,
     type_statement: PlaceTypeStatement,
-    meta: MutationMeta<'_>,
+    mut meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
-    let place_id = resolve_place_id(store, human_id).await?;
+    let view = store.find_place(human_id).await?;
+    let place_id = use_case::resolve_id(
+        view.as_ref(),
+        |view| view.place_id(),
+        || AppError::PlaceNotFound(human_id.to_owned()),
+    )?;
+    let same_date = view
+        .as_ref()
+        .filter(|_| meta.supersedes.is_none() && meta.provenance.origin.is_none())
+        .and_then(|view| same_date_entry(view, type_statement.date.as_ref()))
+        .map(|id| id.to_string());
+    if let Some(target) = same_date.as_deref() {
+        meta.supersedes = Some(target);
+    }
     execute_place_mutation(
         store,
         session,
@@ -373,6 +430,19 @@ pub async fn set_place_type(
         meta,
     )
     .await
+}
+
+/// The latest live type entry of `view` at `date` (equal `sort_value`; two undated entries are the
+/// same date), other than the creation entry.
+fn same_date_entry(view: &PlaceView, date: Option<&GenealogicalDate>) -> Option<AssertionId> {
+    let wanted = date.map(|d| d.sort_value);
+    let created = view.created_assertion();
+    view.place_types_with_assertions()
+        .iter()
+        .rev()
+        .filter(|entry| Some(entry.assertion_id) != created)
+        .find(|entry| same_type_date(entry.value.value.date.as_ref(), wanted))
+        .map(|entry| entry.assertion_id)
 }
 
 /// Asserts an additional name on an existing place, identified by `human_id`.
@@ -1550,6 +1620,7 @@ fn summarize_as_of(view: &PlaceView, lookups: &PlaceLookups, as_of: Option<&Gene
         own_place_type: asserted_type.map(|asserted| asserted.value.clone()),
         place_type: asserted_type.map(|asserted| asserted.value.clone()),
         place_type_confidence: asserted_type.and_then(|asserted| asserted.confidence),
+        place_types: type_refs(view),
         names,
         code: view.code().map(ToOwned::to_owned),
         code_confidence: view.asserted_code().and_then(|a| a.confidence),
@@ -1576,6 +1647,18 @@ fn summarize_as_of(view: &PlaceView, lookups: &PlaceLookups, as_of: Option<&Gene
         merged: Vec::new(),
         claim_owners: BTreeMap::new(),
     }
+}
+
+/// Every live type statement of `view`, in assertion order.
+fn type_refs(view: &PlaceView) -> Vec<PlaceTypeRef> {
+    view.place_types_with_assertions()
+        .iter()
+        .map(|entry| PlaceTypeRef {
+            statement: entry.value.value.clone(),
+            confidence: entry.value.confidence,
+            assertion_id: entry.assertion_id.to_string(),
+        })
+        .collect()
 }
 
 /// Summarises a cluster — its root first, then its members — as one place (ADR 0039 §5): the root's
@@ -1613,6 +1696,7 @@ fn adopt(root: &mut PlaceSummary, member: PlaceSummary) {
     for assertion_id in owned {
         root.claim_owners.insert(assertion_id, owner.clone());
     }
+    root.place_types.extend(member.place_types);
     if root.place_type.is_none() {
         root.place_type = member.place_type;
         root.place_type_confidence = member.place_type_confidence;

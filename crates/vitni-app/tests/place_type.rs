@@ -5,9 +5,10 @@
 
 use uuid::Uuid;
 use vitni_app::{
-    AppDefaults, ChangeValue, CitingContext, MutationMeta, NewCitation, NewPlace, NewSource, OperatorConfig,
-    Provenance, Session, Workspace, WorkspaceDefaults, assert_place_enclosed_by, change_log_for_place, create_citation,
-    create_place, create_source, place_profile, set_place_type, show_source,
+    AppDefaults, ChangeValue, CitingContext, EvidenceLevel, MutationMeta, NewCitation, NewPerson, NewPlace, NewSource,
+    OperatorConfig, Provenance, Session, Workspace, WorkspaceDefaults, add_person_citation, assert_place_enclosed_by,
+    change_log_for_place, create_citation, create_person, create_place, create_source, place_profile, set_place_type,
+    show_person, show_source,
 };
 use vitni_core::ids::AgentId;
 use vitni_core::place_type::{PlaceKind, PlaceLevel, PlaceTypeKey, PlaceTypeStatement};
@@ -183,4 +184,67 @@ async fn the_history_of_a_typed_place_shows_the_statement() {
         .find(|entry| entry.event_type == "PlaceCreated")
         .expect("created entry");
     assert_eq!(created.value, Some(ChangeValue::PlaceType(farm)));
+}
+
+#[tokio::test]
+async fn a_citation_on_a_retyped_places_creation_entry_still_counts_toward_its_backs() {
+    let (ws, _dir) = workspace().await;
+    let session = session();
+    let source = create_source(
+        &ws,
+        &session,
+        NewSource {
+            human_id: None,
+            title: Some("Parish register".to_owned()),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("source");
+    let citation = create_citation(
+        &ws,
+        &session,
+        NewCitation {
+            human_id: None,
+            source,
+            page: None,
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("citation");
+    let farm = statement(Some(PlaceKind::Settlement), None, Some("std:farm"));
+    let place = create(&ws, "Haugen", farm, std::slice::from_ref(&citation)).await;
+    let parish = statement(Some(PlaceKind::Ecclesiastical), None, Some("std:parish"));
+    set_place_type(&ws, &session, &place, parish, MutationMeta::default())
+        .await
+        .expect("retype");
+    let person = create_person(
+        &ws,
+        &session,
+        NewPerson {
+            human_id: None,
+            name: None,
+            evidence_level: EvidenceLevel::Conclusion,
+            external_ids: Vec::new(),
+        },
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("person");
+    add_person_citation(&ws, &session, &person, &citation, MutationMeta::default())
+        .await
+        .expect("cite the person");
+
+    let shown = show_person(&ws, &person).await.expect("show").expect("person");
+
+    let row = shown
+        .citations
+        .iter()
+        .find(|row| row.human_id == citation)
+        .unwrap_or_else(|| panic!("{:?}", shown.citations));
+    assert_eq!(row.backs_count, 2, "the person and the place's creation type entry");
 }

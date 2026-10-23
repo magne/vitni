@@ -2140,3 +2140,37 @@ async fn a_place_decided_same_keeps_the_code_it_has() {
 
     assert_eq!(place_summary(&workspace, &stored).await.code.as_deref(), Some("NO"));
 }
+
+#[tokio::test]
+async fn re_importing_a_changed_place_type_from_a_newer_file_supersedes_it_once() {
+    let (workspace, _dir) = workspace().await;
+    let typed = |key: &str| {
+        vec![typed_place(
+            "plac:Haugen",
+            "Haugen",
+            vitni_app::std_statement(key).unwrap_or_default(),
+        )]
+    };
+    import(&workspace, &importer(dataset(1)), typed("farm")).await;
+    let stored = only_place(&workspace).await;
+
+    let exported = at_year(2100);
+    let session = dated_importer(dataset(1), exported);
+    let (plan, _) = dated_import(&workspace, &session, typed("parish"), Some(exported)).await;
+
+    let Disposition::Update { fields, .. } = disposition(&plan, 0, 0) else {
+        panic!("expected an update: {:?}", disposition(&plan, 0, 0));
+    };
+    assert_eq!(fields, &["place.PlaceTypeSet".to_owned()]);
+    let log = vitni_app::change_log_for_place(&workspace, &stored).await.expect("log");
+    let superseded = log
+        .iter()
+        .filter(|entry| entry.event_type == "AssertionSuperseded")
+        .count();
+    assert_eq!(superseded, 1, "the gate supersedes once; the use-case adds no second");
+    let place = place_summary(&workspace, &stored).await;
+    assert_eq!(
+        place.place_type,
+        Some(vitni_app::std_statement("parish").unwrap_or_default())
+    );
+}
