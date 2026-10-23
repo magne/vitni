@@ -16,23 +16,12 @@ pub const SUCCESSION_KINDS: [vitni_app::SuccessionKind; 5] = [
     vitni_app::SuccessionKind::Renamed,
 ];
 
-/// The `std` place types offered by every "new place" type picker (a common subset; the vocabulary has
-/// more) — the single list, so a place created from the Places category and a place created inline (an
-/// event's "+ New place" cascade) always offer the same choices.
+/// The twenty `std` place types offered by every "new place" type picker, in Gramps order — the single
+/// list, so a place created from the Places category and a place created inline (an event's "+ New
+/// place" cascade) always offer the same choices.
 #[must_use]
 pub fn new_place_types() -> Vec<vitni_app::PlaceTypeStatement> {
-    const NAMES: [&str; 9] = [
-        "country",
-        "county",
-        "municipality",
-        "parish",
-        "city",
-        "town",
-        "village",
-        "farm",
-        "building",
-    ];
-    NAMES.iter().filter_map(|name| vitni_app::std_statement(name)).collect()
+    vitni_app::std_statements().to_vec()
 }
 
 /// One asserted place name (Names tab): text, language, date, surety, and source count.

@@ -776,20 +776,7 @@ fn GeographyCreateForm(point: (f64, f64), onsaved: EventHandler<()>) -> Element 
     let services = state.services().clone();
     let loc = state.data_loc();
     let mut name = use_signal(String::new);
-    let place_types: Vec<PlaceTypeStatement> = [
-        "farm",
-        "village",
-        "town",
-        "city",
-        "parish",
-        "municipality",
-        "county",
-        "country",
-        "building",
-    ]
-    .iter()
-    .filter_map(|name| vitni_app::std_statement(name))
-    .collect();
+    let place_types = vitni_ui::new_place_types();
     let mut place_type = use_signal(|| vitni_app::std_statement("farm").unwrap_or_default());
     let type_options: Vec<SelectChoice> = place_types
         .iter()
@@ -803,16 +790,12 @@ fn GeographyCreateForm(point: (f64, f64), onsaved: EventHandler<()>) -> Element 
     let (lat, lon) = point;
     rsx! {
         Input { label: loc.field_label("name"), name: "geo-new-name".to_owned(), value: name(), oninput: move |event: FormEvent| name.set(event.value()) }
-        Select {
+        GeographyTypeSelect {
             label: loc.field_label("type"),
-            name: "geo-new-type".to_owned(),
-            value: Some("0".to_owned()),
             options: type_options,
-            onchange: move |event: FormEvent| {
-                if let Some(kind) = event.value().parse::<usize>().ok().and_then(|index| place_types.get(index).cloned()) {
-                    place_type.set(kind);
-                }
-            },
+            place_types: place_types.clone(),
+            selected: place_type(),
+            onchange: move |kind: PlaceTypeStatement| place_type.set(kind),
         }
         {provenance_block(loc, prov)}
         SidePanelActions {
@@ -837,6 +820,31 @@ fn GeographyCreateForm(point: (f64, f64), onsaved: EventHandler<()>) -> Element 
                     });
                 },
             }
+        }
+    }
+}
+
+/// The quick-create form's type select: `options` are the labelled `place_types`, `selected` the current one.
+#[component]
+fn GeographyTypeSelect(
+    label: String,
+    options: Vec<SelectChoice>,
+    place_types: Vec<PlaceTypeStatement>,
+    selected: PlaceTypeStatement,
+    onchange: EventHandler<PlaceTypeStatement>,
+) -> Element {
+    let current = place_types.iter().position(|t| t.type_key == selected.type_key);
+    rsx! {
+        Select {
+            label,
+            name: "geo-new-type".to_owned(),
+            value: current.map(|index| index.to_string()),
+            options,
+            onchange: move |event: FormEvent| {
+                if let Some(kind) = event.value().parse::<usize>().ok().and_then(|index| place_types.get(index).cloned()) {
+                    onchange.call(kind);
+                }
+            },
         }
     }
 }
@@ -891,7 +899,51 @@ mod tests {
     use super::{GeoPanel, filtered_markers, geometry_panel_for, provider_kind, selected_marker_shape};
     use crate::screens::map_shared::geo_point;
     use vitni_app::{MapProvider, PlaceGeometry};
-    use vitni_ui::{EventPinVm, GeographyVm, MarkerShapeVm, PlaceMarkerVm};
+    use vitni_ui::{EventPinVm, GeographyVm, Localizer, MarkerShapeVm, PlaceMarkerVm};
+
+    fn type_select() -> dioxus::prelude::Element {
+        use dioxus::prelude::*;
+        let loc = Localizer::with_languages(None, &["en".parse().unwrap_or_default()]);
+        let place_types = vitni_ui::new_place_types();
+        let options = place_types
+            .iter()
+            .enumerate()
+            .map(|(index, kind)| crate::components::SelectChoice {
+                value: index.to_string(),
+                label: loc.place_type_label(kind),
+            })
+            .collect();
+        rsx! {
+            super::GeographyTypeSelect {
+                label: loc.field_label("type"),
+                options,
+                place_types,
+                selected: vitni_app::std_statement("farm").unwrap_or_default(),
+                onchange: |_| {},
+            }
+        }
+    }
+
+    #[test]
+    fn the_create_form_type_select_lists_the_twenty_std_labels_with_farm_selected() {
+        let mut vdom = dioxus::prelude::VirtualDom::new(type_select);
+        vdom.rebuild_in_place();
+        let html = dioxus_ssr::render(&vdom);
+        let mut labels = Vec::new();
+        let mut selected = Vec::new();
+        for chunk in html.split("<option").skip(1) {
+            let (attributes, rest) = chunk.split_once('>').unwrap_or_default();
+            let label = rest.split("</option>").next().unwrap_or_default().to_owned();
+            if attributes.contains("selected") {
+                selected.push(label.clone());
+            }
+            labels.push(label);
+        }
+        assert_eq!(labels.len(), 20, "{html}");
+        assert_eq!(labels[0], "Country");
+        assert_eq!(labels[19], "Number");
+        assert_eq!(selected, ["Farm"], "{html}");
+    }
 
     #[test]
     fn provider_kind_tokens_round_trip_the_select_value() {

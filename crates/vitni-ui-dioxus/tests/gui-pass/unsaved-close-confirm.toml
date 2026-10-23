@@ -7,7 +7,7 @@
 # Dirtying a record without a typing step: the Type `<select>` is the one control a keypress alone can
 # change. Clicking it directly opens a native GTK option popup that grabs the keyboard, so focus is
 # moved onto it with `Tab` out of the ID field instead, and `Down` picks the next option
-# (Municipality → Parish).
+# (Municipality → Town).
 #
 # The clicks on empty list space are what keep the reference frames comparable. They blur the select (a
 # focus ring is a real pixel difference, and the remounted pane after the round trip has no focus) and
@@ -47,7 +47,7 @@ label = "Tab onto the Type select"
 [[step]]
 do = "key"
 chord = "Down"
-label = "Type: Municipality → Parish"
+label = "Type: Municipality → Town"
 
 [[step]]
 do = "click"

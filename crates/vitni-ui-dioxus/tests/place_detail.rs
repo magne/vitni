@@ -755,3 +755,173 @@ fn a_merged_place_row_names_the_copy_it_came_from() {
     let html = render(merged_place_view);
     assert_eq!(html.matches("from P0002").count(), 3, "{html}");
 }
+
+/// The labels of the std place types in Gramps order: the fixed, language-independent option order.
+const STD_TYPE_LABELS: [&str; 20] = [
+    "Country",
+    "State",
+    "County",
+    "City",
+    "Parish",
+    "Locality",
+    "Street",
+    "Province",
+    "Region",
+    "Department",
+    "Neighborhood",
+    "District",
+    "Borough",
+    "Municipality",
+    "Town",
+    "Village",
+    "Hamlet",
+    "Farm",
+    "Building",
+    "Number",
+];
+
+/// The `(label, selected)` pairs of the `<select id="{id}">` in `html`, in document order.
+fn select_options(html: &str, id: &str) -> Vec<(String, bool)> {
+    let marker = format!(r#"id="{id}""#);
+    let Some(start) = html.find(&marker) else {
+        return Vec::new();
+    };
+    let select = &html[start..];
+    let select = select.find("</select>").map_or(select, |end| &select[..end]);
+    let mut options = Vec::new();
+    for chunk in select.split("<option").skip(1) {
+        let (attributes, rest) = chunk.split_once('>').unwrap_or_default();
+        let label = rest.split("</option>").next().unwrap_or_default().to_owned();
+        options.push((label, attributes.contains("selected")));
+    }
+    options
+}
+
+fn edit_with_type(place_type: Option<vitni_app::PlaceTypeStatement>) -> Element {
+    let loc = loc();
+    let mut detail = sample();
+    detail.place_type = place_type;
+    let seed = PlaceDraft::from_detail(&detail);
+    let record = RecordEditState {
+        editing: use_signal(|| true),
+        seed: use_signal({
+            let seed = seed.clone();
+            move || seed
+        }),
+        draft: use_signal(move || seed),
+        prov: use_signal(ProvenanceDraft::default),
+    };
+    place_overview(&loc, &detail, record)
+}
+
+fn edit_std_farm() -> Element {
+    edit_with_type(vitni_app::std_statement("farm"))
+}
+
+fn edit_untyped() -> Element {
+    edit_with_type(None)
+}
+
+fn edit_prestegjeld() -> Element {
+    edit_with_type(Some(vitni_app::PlaceTypeStatement {
+        kind: Some(vitni_app::PlaceKind::Ecclesiastical),
+        type_key: vitni_app::PlaceTypeKey::new("no:prestegjeld").ok(),
+        ..vitni_app::PlaceTypeStatement::default()
+    }))
+}
+
+fn edit_custom_sokn() -> Element {
+    edit_with_type(Some(vitni_app::PlaceTypeStatement {
+        type_key: vitni_app::PlaceTypeKey::new("custom:Sokn").ok(),
+        ..vitni_app::PlaceTypeStatement::default()
+    }))
+}
+
+fn edit_kind_only() -> Element {
+    edit_with_type(Some(vitni_app::PlaceTypeStatement {
+        kind: Some(vitni_app::PlaceKind::Ecclesiastical),
+        ..vitni_app::PlaceTypeStatement::default()
+    }))
+}
+
+fn labels_of(options: &[(String, bool)]) -> Vec<&str> {
+    options.iter().map(|(label, _)| label.as_str()).collect()
+}
+
+fn selected_of(options: &[(String, bool)]) -> Vec<&str> {
+    options
+        .iter()
+        .filter(|(_, selected)| *selected)
+        .map(|(label, _)| label.as_str())
+        .collect()
+}
+
+#[test]
+fn the_type_select_lists_the_twenty_std_labels_in_gramps_order() {
+    let options = select_options(&render(edit_std_farm), "place-type");
+    assert_eq!(labels_of(&options), STD_TYPE_LABELS);
+    assert_eq!(selected_of(&options), ["Farm"]);
+}
+
+#[test]
+fn an_untyped_place_adds_a_selected_no_type_option() {
+    let options = select_options(&render(edit_untyped), "place-type");
+    assert_eq!(options.len(), 21, "{options:?}");
+    assert_eq!(selected_of(&options), ["No type"]);
+    let std_part: Vec<&str> = labels_of(&options)
+        .into_iter()
+        .filter(|label| *label != "No type")
+        .collect();
+    assert_eq!(std_part, STD_TYPE_LABELS);
+}
+
+#[test]
+fn a_std_typed_place_offers_no_no_type_option() {
+    let options = select_options(&render(edit_std_farm), "place-type");
+    assert!(!labels_of(&options).contains(&"No type"), "{options:?}");
+}
+
+#[test]
+fn a_foreign_namespace_key_is_kept_as_a_selected_extra_option() {
+    let options = select_options(&render(edit_prestegjeld), "place-type");
+    assert_eq!(options.len(), 21, "{options:?}");
+    let [(_, true)] = options
+        .iter()
+        .filter(|(_, selected)| *selected)
+        .collect::<Vec<_>>()
+        .as_slice()
+    else {
+        panic!("exactly one selected option: {options:?}");
+    };
+    assert!(
+        !STD_TYPE_LABELS.contains(&selected_of(&options)[0]),
+        "the selected option is the extra one, not a std label: {options:?}"
+    );
+}
+
+#[test]
+fn a_custom_key_is_kept_as_a_selected_option_labelled_by_its_text() {
+    let options = select_options(&render(edit_custom_sokn), "place-type");
+    assert_eq!(options.len(), 21, "{options:?}");
+    assert_eq!(selected_of(&options), ["Sokn"]);
+}
+
+#[test]
+fn a_kind_only_statement_is_kept_as_a_selected_option_labelled_by_its_kind() {
+    let options = select_options(&render(edit_kind_only), "place-type");
+    assert_eq!(options.len(), 21, "{options:?}");
+    assert_eq!(selected_of(&options), ["Ecclesiastical"]);
+}
+
+#[test]
+fn the_type_select_has_no_custom_option() {
+    for view in [edit_std_farm, edit_untyped, edit_prestegjeld] {
+        let options = select_options(&render(view), "place-type");
+        assert!(
+            !labels_of(&options)
+                .iter()
+                .any(|label| label.to_lowercase().starts_with("custom")),
+            "{options:?}"
+        );
+    }
+}
