@@ -6,9 +6,9 @@
 use uuid::Uuid;
 use vitni_app::{
     AppDefaults, AppError, DateParts, FilterOp, FilterValue, ListCell, ListFilter, ListPage, ListQuery, ListQueryError,
-    ListSort, ListWindow, ListedKind, MutationMeta, NewPerson, OperatorConfig, PersonNameParts, Provenance, Session,
-    SortDirection, Workspace, WorkspaceDefaults, assert_sex, create_person, create_tag, gregorian_date,
-    list_persons_page, list_places_page, list_tags_query, query_list, record_birth, tag_person,
+    ListSort, ListWindow, ListedKind, MutationMeta, NewPerson, OperatorConfig, PersonNameParts, PlaceKind, PlaceLevel,
+    Provenance, Session, SortDirection, Workspace, WorkspaceDefaults, assert_sex, create_person, create_tag,
+    gregorian_date, list_persons_page, list_places_page, list_tags_query, query_list, record_birth, tag_person,
 };
 use vitni_core::date::GenealogicalDate;
 use vitni_core::enums::{EvidenceLevel, Sex};
@@ -420,4 +420,78 @@ async fn a_tag_query_runs_over_the_whole_vocabulary_in_its_order() {
         list_tags_query(&ws, &persons(Vec::new())).await,
         Err(AppError::ListQuery(ListQueryError::KindMismatch { .. }))
     ));
+}
+
+async fn classified_place(ws: &Workspace, name: &str, kind: Option<PlaceKind>, level: Option<PlaceLevel>) -> String {
+    let new = vitni_app::NewPlace {
+        human_id: None,
+        place_type: vitni_app::PlaceTypeStatement {
+            kind,
+            level,
+            type_key: None,
+            date: None,
+        },
+        name: Some(name.to_owned()),
+    };
+    vitni_app::create_place(ws, &session(), new, Provenance::default(), &[])
+        .await
+        .expect("create place")
+}
+
+fn places(filters: Vec<ListFilter>) -> ListQuery {
+    ListQuery {
+        filters,
+        ..ListQuery::new(ListedKind::Place)
+    }
+}
+
+async fn listed_places(ws: &Workspace, query: &ListQuery) -> Result<Vec<String>, AppError> {
+    let page = list_places_page(ws, query, ListPage::ALL).await?;
+    Ok(page.items.into_iter().map(|summary| summary.human_id).collect())
+}
+
+#[tokio::test]
+async fn place_kind_and_level_filters_take_their_variants_and_keep_unstated_fields_per_none_of() {
+    let (ws, _dir) = workspace().await;
+    let haugen = classified_place(&ws, "Haugen", Some(PlaceKind::Settlement), Some(PlaceLevel::Settlement)).await;
+    let norge = classified_place(&ws, "Norge", Some(PlaceKind::Administrative), Some(PlaceLevel::Country)).await;
+    let hamar = classified_place(&ws, "Hamar", Some(PlaceKind::Ecclesiastical), Some(PlaceLevel::Adm1)).await;
+    let bare = classified_place(&ws, "Ringsaker", None, None).await;
+    let values = |items: &[&str]| FilterValue::Values(items.iter().map(|item| (*item).to_owned()).collect());
+
+    let settlements = places(vec![filter("kind", FilterOp::IsAnyOf, values(&["settlement"]))]);
+    assert_eq!(
+        listed_places(&ws, &settlements).await.expect("list"),
+        std::slice::from_ref(&haugen)
+    );
+    let not_country = places(vec![filter("level", FilterOp::IsNoneOf, values(&["country"]))]);
+    let mut expected = vec![haugen, hamar.clone(), bare];
+    expected.sort();
+    let mut found = listed_places(&ws, &not_country).await.expect("list");
+    found.sort();
+    assert_eq!(
+        found, expected,
+        "none of keeps the place with no level, and drops {norge}"
+    );
+    let adm1 = places(vec![filter("level", FilterOp::IsAnyOf, values(&["Adm1"]))]);
+    assert_eq!(listed_places(&ws, &adm1).await.expect("list"), [hamar]);
+
+    let typo = places(vec![filter("level", FilterOp::IsAnyOf, values(&["adm9"]))]);
+    let refused = listed_places(&ws, &typo).await;
+    assert!(
+        matches!(
+            refused,
+            Err(AppError::ListQuery(ListQueryError::UnknownChoice { ref column, ref value }))
+                if column == "level" && value == "adm9"
+        ),
+        "{refused:?}"
+    );
+    let crossed = places(vec![filter("kind", FilterOp::IsAnyOf, values(&["adm1"]))]);
+    assert!(
+        matches!(
+            listed_places(&ws, &crossed).await,
+            Err(AppError::ListQuery(ListQueryError::UnknownChoice { .. }))
+        ),
+        "a level is not a kind"
+    );
 }

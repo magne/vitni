@@ -14,6 +14,7 @@ use vitni_core::date::{DateModifier, DatePoint, GenealogicalDate, GenealogicalDa
 use vitni_core::dna::{DnaProvider, DnaTestType};
 use vitni_core::dna_match::MatchStatus;
 use vitni_core::enums::{EventType, NoteType, RepositoryType, Sex};
+use vitni_core::place_type::{PlaceKind, PlaceLevel};
 use vitni_core::provenance::Confidence;
 use vitni_db::{
     ColumnType, ListCell, ListColumn, ListPage, ListPredicate, ListResult, ListSpec, ListTest, ListWindow, ListedKind,
@@ -702,6 +703,8 @@ fn is_choice(kind: ListedKind, column: &str, key: &str) -> bool {
         (ListedKind::Citation, "confidence") => names::<Confidence>(key),
         (ListedKind::Repository, "type") => names::<RepositoryType>(key),
         (ListedKind::Note, "type") => names::<NoteType>(key),
+        (ListedKind::Place, "kind") => names::<PlaceKind>(key),
+        (ListedKind::Place, "level") => names::<PlaceLevel>(key),
         (ListedKind::DnaTest, "provider") => names::<DnaProvider>(key),
         (ListedKind::DnaTest, "test-type") => names::<DnaTestType>(key),
         (ListedKind::DnaMatch, "status") => names::<MatchStatus>(key),
@@ -763,6 +766,23 @@ mod tests {
     }
 
     #[test]
+    fn the_place_kind_and_level_columns_name_their_variants() {
+        for kind in vitni_core::place_type::PlaceKind::ALL {
+            let key = vitni_db::choice_key(&kind).unwrap_or_default();
+            assert!(is_choice(ListedKind::Place, "kind", &key), "{key}");
+        }
+        for level in vitni_core::place_type::PlaceLevel::ALL {
+            let key = vitni_db::choice_key(&level).unwrap_or_default();
+            assert!(is_choice(ListedKind::Place, "level", &key), "{key}");
+        }
+        assert!(is_choice(ListedKind::Place, "level", "adm1"));
+        assert!(is_choice(ListedKind::Place, "level", "sub-settlement"));
+        assert!(!is_choice(ListedKind::Place, "level", "adm6"));
+        assert!(!is_choice(ListedKind::Place, "kind", "adm1"), "a level is not a kind");
+        assert!(!is_choice(ListedKind::Place, "kind", "settlment"));
+    }
+
+    #[test]
     fn every_choice_column_has_its_enum() {
         for kind in ListedKind::ALL {
             for column in kind.columns() {
@@ -777,6 +797,8 @@ mod tests {
                         "ancestry-dna",
                         "autosomal",
                         "confirmed",
+                        "settlement",
+                        "adm1",
                     ];
                     assert!(
                         some.iter().any(|key| is_choice(*kind, column.id, key)),

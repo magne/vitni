@@ -331,6 +331,8 @@ impl ListedRecord for PlaceView {
                     .and_then(|statement| statement.type_key.as_ref())
                     .map(PlaceTypeKey::as_str),
             ),
+            choice(place_type.and_then(|statement| statement.kind.as_ref())),
+            choice(place_type.and_then(|statement| statement.level.as_ref())),
             record(enclosing, enclosing_name),
             None,
         ]

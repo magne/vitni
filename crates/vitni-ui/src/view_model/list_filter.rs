@@ -12,8 +12,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use vitni_app::{
     Calendar, ColumnType, DateParts, DnaProvider, DnaTestType, EventType, FilterOp, FilterValue, GenealogicalDate,
-    ListFilter, ListedKind, MatchStatus, NoteType, RepositoryType, SavedSearchId, SavedSearchList, Sex,
-    UnreadableSavedSearch, choice_key, gregorian_date, same_saved_name,
+    ListFilter, ListedKind, MatchStatus, NoteType, PlaceKind, PlaceLevel, RepositoryType, SavedSearchId,
+    SavedSearchList, Sex, UnreadableSavedSearch, choice_key, gregorian_date, same_saved_name,
 };
 
 use crate::i18n::Localizer;
@@ -280,6 +280,8 @@ pub fn choice_options(loc: &Localizer, kind: ListedKind, column: &str) -> Vec<Ch
         }
         (ListedKind::Repository, "type") => options(&REPOSITORY_TYPES, |ty| loc.repository_type_label(ty)),
         (ListedKind::Note, "type") => options(&NOTE_TYPES, |ty| loc.note_type_label(ty)),
+        (ListedKind::Place, "kind") => options(&PlaceKind::ALL, |kind| loc.place_kind_label(*kind)),
+        (ListedKind::Place, "level") => options(&PlaceLevel::ALL, |level| loc.place_level_label(*level)),
         (ListedKind::DnaTest, "provider") => options(&DNA_PROVIDERS, |provider| loc.dna_provider_label(provider)),
         (ListedKind::DnaTest, "test-type") => options(&DNA_TEST_TYPES, |ty| loc.dna_test_type_label(*ty)),
         (ListedKind::DnaMatch, "status") => options(&[MatchStatus::Confirmed, MatchStatus::Rejected], |status| {
@@ -738,6 +740,43 @@ mod tests {
         assert!(providers.iter().any(|option| option.key == "twenty-three-and-me"));
         assert_eq!(confidence.first().map(|option| option.key.as_str()), Some("very-low"));
         assert_eq!(choice_options(&loc, ListedKind::Person, "name"), Vec::new());
+    }
+
+    #[test]
+    fn the_place_kind_and_level_columns_offer_every_variant_localized() {
+        for lang in ["en", "no"] {
+            let loc = Localizer::for_test(lang);
+            let kinds = choice_options(&loc, ListedKind::Place, "kind");
+            let levels = choice_options(&loc, ListedKind::Place, "level");
+
+            let kind_labels: Vec<String> = vitni_app::PlaceKind::ALL
+                .map(|kind| loc.place_kind_label(kind))
+                .to_vec();
+            let level_labels: Vec<String> = vitni_app::PlaceLevel::ALL
+                .map(|level| loc.place_level_label(level))
+                .to_vec();
+            assert_eq!(
+                kinds.iter().map(|o| o.label.clone()).collect::<Vec<_>>(),
+                kind_labels,
+                "{lang}"
+            );
+            assert_eq!(
+                levels.iter().map(|o| o.label.clone()).collect::<Vec<_>>(),
+                level_labels,
+                "{lang}"
+            );
+            assert_eq!(kinds.len(), vitni_app::PlaceKind::ALL.len());
+            assert_eq!(levels.len(), vitni_app::PlaceLevel::ALL.len());
+            assert!(kinds.iter().any(|option| option.key == "ecclesiastical"));
+            assert!(levels.iter().any(|option| option.key == "adm1"));
+            assert!(levels.iter().any(|option| option.key == "sub-settlement"));
+        }
+        assert_eq!(choice_options(&loc(), ListedKind::Person, "kind"), Vec::new());
+    }
+
+    #[test]
+    fn the_place_type_column_stays_text_so_it_offers_no_choices() {
+        assert_eq!(choice_options(&loc(), ListedKind::Place, "type"), Vec::new());
     }
 
     #[test]

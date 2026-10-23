@@ -1623,6 +1623,86 @@ fn a_list_filter_the_catalogue_cannot_evaluate_fails_naming_the_clause() {
 }
 
 #[test]
+fn a_place_list_filters_by_kind_and_level_and_names_a_bad_key() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    for name in ["Hamar", "Haugen", "Ringsaker"] {
+        vitni(dir.path())
+            .args(["place", "create", "--name", name])
+            .assert()
+            .success();
+    }
+    vitni(dir.path())
+        .args([
+            "place",
+            "set-type",
+            "P0001",
+            "--kind",
+            "ecclesiastical",
+            "--level",
+            "adm1",
+        ])
+        .assert()
+        .success();
+    vitni(dir.path())
+        .args([
+            "place",
+            "set-type",
+            "P0002",
+            "--kind",
+            "settlement",
+            "--level",
+            "sub-settlement",
+        ])
+        .assert()
+        .success();
+    let places = |args: &[&str]| listed_ids(dir.path(), "place", args);
+
+    assert_eq!(places(&["--filter", "kind:is-any-of:settlement"]), ["P0002"]);
+    assert_eq!(places(&["--filter", "level:is-any-of:adm1"]), ["P0001"]);
+    assert_eq!(
+        places(&["--filter", "level:is-none-of:sub-settlement"]),
+        ["P0001", "P0003"]
+    );
+    vitni(dir.path())
+        .args(["place", "list", "--filter", "level:is-any-of:adm9"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("adm9").and(predicate::str::contains("level")));
+}
+
+#[test]
+fn place_create_takes_a_kind_and_level_in_one_step() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    vitni(dir.path())
+        .args([
+            "place",
+            "create",
+            "--kind",
+            "ecclesiastical",
+            "--level",
+            "adm2",
+            "--name",
+            "Fana",
+        ])
+        .assert()
+        .success();
+    vitni(dir.path())
+        .args([
+            "place", "create", "--type", "std:farm", "--level", "adm1", "--name", "Haugen",
+        ])
+        .assert()
+        .success();
+    let places = |args: &[&str]| listed_ids(dir.path(), "place", args);
+
+    assert_eq!(places(&["--filter", "kind:is-any-of:ecclesiastical"]), ["P0001"]);
+    assert_eq!(places(&["--filter", "level:is-any-of:adm2"]), ["P0001"]);
+    assert_eq!(places(&["--filter", "level:is-any-of:adm1"]), ["P0002"]);
+    assert_eq!(places(&["--filter", "kind:is-any-of:settlement"]), ["P0002"]);
+}
+
+#[test]
 fn a_list_filter_takes_a_tag_by_name_and_a_record_by_its_human_id() {
     let dir = TempDir::new().unwrap();
     init(dir.path());

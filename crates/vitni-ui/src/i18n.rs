@@ -3042,6 +3042,8 @@ impl Localizer {
             "marriage" => fl!(self.loader, "list-column-marriage"),
             "children" => fl!(self.loader, "list-column-children"),
             "type" => fl!(self.loader, "list-column-type"),
+            "kind" => fl!(self.loader, "list-column-kind"),
+            "level" => fl!(self.loader, "list-column-level"),
             "date" => fl!(self.loader, "list-column-date"),
             "place" => fl!(self.loader, "list-column-place"),
             "description" => fl!(self.loader, "list-column-description"),
@@ -4339,6 +4341,20 @@ mod tests {
         assert_eq!(
             Localizer::for_test("no").place_type_label(&statement(None, None, None)),
             "Ingen type"
+        );
+    }
+
+    #[test]
+    fn the_place_kind_and_level_headers_are_localized() {
+        let en = Localizer::for_test("en");
+        let no = Localizer::for_test("no");
+        assert_eq!(en.list_column_label("kind"), "Kind");
+        assert_eq!(en.list_column_label("level"), "Level");
+        assert_eq!(no.list_column_label("level"), "Nivå");
+        let no_kind = no.list_column_label("kind");
+        assert!(
+            !no_kind.is_empty() && no_kind != "kind" && no_kind != "Kind",
+            "{no_kind}"
         );
     }
 

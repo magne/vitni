@@ -226,11 +226,42 @@ pub fn cells_line<S: BuildHasher>(
 ) -> Option<String> {
     let mut parts = Vec::with_capacity(cells.len());
     for (column, cell) in columns.iter().zip(cells) {
-        if let Some(text) = cell.as_ref().and_then(|cell| cell_text(loc, kind, column, cell, tags)) {
-            parts.push(text);
-        }
+        let text = match cell {
+            Some(cell) => cell_text(loc, kind, column, cell, tags),
+            None if kind == ListedKind::Place && column == "type" => keyless_type_text(loc, columns, cells),
+            None => None,
+        };
+        parts.extend(text);
     }
     (!parts.is_empty()).then(|| parts.join(" · "))
+}
+
+/// The columns to fetch for a list that shows `shown`: a place list showing `type` also fetches `kind`
+/// and `level` (appended, in that order, when not shown), which label a place whose type has no key.
+#[must_use]
+pub fn fetch_columns(kind: ListedKind, shown: &[String]) -> Vec<String> {
+    let mut fetched = shown.to_vec();
+    if kind == ListedKind::Place && shown.iter().any(|column| column == "type") {
+        for column in ["kind", "level"] {
+            if !fetched.iter().any(|id| id == column) {
+                fetched.push(column.to_owned());
+            }
+        }
+    }
+    fetched
+}
+
+/// A place's `type` cell when its type has no key: the label of its kind, else of its level, read from
+/// the cells [`fetch_columns`] placed after `columns`; `None` for an untyped place.
+fn keyless_type_text(loc: &Localizer, columns: &[String], cells: &[Option<ListCell>]) -> Option<String> {
+    let fetched = fetch_columns(ListedKind::Place, columns);
+    for column in ["kind", "level"] {
+        let at = fetched.iter().position(|id| id == column)?;
+        if let Some(Some(ListCell::Choice(key))) = cells.get(at) {
+            return Some(choice_label(loc, ListedKind::Place, column, key));
+        }
+    }
+    None
 }
 
 /// The label of a choice column's `key`, the key itself when no option carries it.
@@ -517,6 +548,29 @@ mod tests {
             line(&loc(), "no:prestegjeld").as_deref(),
             Some("no:prestegjeld"),
             "another namespace shows its key, not kind and key"
+        );
+    }
+
+    #[test]
+    fn a_keyless_place_type_shows_its_kind_label_else_its_level_label_with_both_hidden() {
+        let tags = HashMap::new();
+        let shown = ids(&["type"]);
+        let fetched = super::fetch_columns(ListedKind::Place, &shown);
+        assert_eq!(fetched, ids(&["type", "kind", "level"]));
+        let choice = |key: &str| Some(ListCell::Choice(key.to_owned()));
+        let line = |kind: Option<ListCell>, level: Option<ListCell>| {
+            cells_line(&loc(), ListedKind::Place, &shown, &[None, kind, level], &tags)
+        };
+        assert_eq!(
+            line(choice("ecclesiastical"), choice("adm1")).as_deref(),
+            Some("Ecclesiastical")
+        );
+        assert_eq!(line(None, choice("adm1")).as_deref(), Some("First-level division"));
+        assert_eq!(line(None, None), None, "an untyped place stays empty");
+        let keyed = [Some(ListCell::Text("std:farm".to_owned())), choice("settlement"), None];
+        assert_eq!(
+            cells_line(&loc(), ListedKind::Place, &shown, &keyed, &tags).as_deref(),
+            Some("Farm")
         );
     }
 

@@ -773,3 +773,58 @@ async fn a_saved_place_type_choice_clause_is_stale_now_that_type_is_text() {
     let error = saved_search_error(vitni_app::runnable_saved_query(&store, "Parishes", ListedKind::Place));
     assert!(matches!(error, SavedSearchError::Broken { .. }), "{error:?}");
 }
+
+#[tokio::test]
+async fn a_saved_search_naming_place_kind_or_level_runs() {
+    let (ws, store, dir) = workspace_with_store().await;
+    let new = |name: &str, kind, level| NewPlace {
+        human_id: None,
+        place_type: vitni_app::PlaceTypeStatement {
+            kind,
+            level,
+            type_key: None,
+            date: None,
+        },
+        name: Some(name.to_owned()),
+    };
+    let hamar = create_place(
+        &ws,
+        &session(),
+        new(
+            "Hamar",
+            Some(vitni_app::PlaceKind::Ecclesiastical),
+            Some(vitni_app::PlaceLevel::Adm1),
+        ),
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("hamar");
+    create_place(
+        &ws,
+        &session(),
+        new(
+            "Norge",
+            Some(vitni_app::PlaceKind::Administrative),
+            Some(vitni_app::PlaceLevel::Country),
+        ),
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("norge");
+    let filters = format!(
+        "{}{}",
+        clause("kind", "is-any-of", &values(&["ecclesiastical"])),
+        clause("level", "is-none-of", &values(&["country"]))
+    );
+    write_search(&dir, 1, "Church levels", "place", "", &filters);
+
+    let resolution = resolve_saved_search(&store, "Church levels", Some(ListedKind::Place)).expect("resolve");
+
+    assert_eq!(resolution.stale, Vec::new());
+    let query = runnable(&resolution).expect("a runnable query");
+    let page = list_places_page(&ws, query, ListPage::ALL).await.expect("list");
+    let found: Vec<String> = page.items.into_iter().map(|summary| summary.human_id).collect();
+    assert_eq!(found, [hamar]);
+}
