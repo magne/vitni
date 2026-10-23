@@ -65,6 +65,7 @@ pub mod person_change_set;
 pub mod place;
 pub mod place_change_set;
 mod place_hierarchy;
+pub mod place_vocabulary;
 pub mod plugins;
 pub mod profile;
 mod record_origin;
@@ -221,6 +222,9 @@ pub use place::{
     undo_place_distinction_and_merge, unstated_place_type, update_place_media_ref,
 };
 pub use place_change_set::{PlaceChangeSet, commit_place_change_set};
+pub use place_vocabulary::{
+    PlaceTypeGiven, merge_place_type, prefill_from_std, std_statement, std_statements, suggest,
+};
 pub use plugins::{PluginTrust, plugin_layers, resolve_bundle, resolve_bundles};
 pub use plugins::{embedded_plugins_dir, resolve_embedded_plugins_dir};
 pub use profile::{
