@@ -126,7 +126,7 @@ jobs:
     name: postgres integration tests
     # Native runner (not the container image): testcontainers needs a reachable Docker daemon, which
     # only works outside a container job. vitni-db and vitni-app have no webview/UI deps, so no apt setup is
-    # needed; the test-containers-util helper starts and reuses the `vitni-pg` container.
+    # needed; the vitni-test-postgres helper starts and reuses the `vitni-pg` container.
     runs-on: ubuntu-latest
     env:
       CARGO_PROFILE_DEV_DEBUG: "0"

@@ -1,6 +1,6 @@
 //! Integration tests for the Postgres backend of the engine-neutral [`Store`] (ADR 0002).
 //!
-//! These exercise the real Postgres wiring against a containerized server: `test-containers-util`
+//! These exercise the real Postgres wiring against a containerized server: `vitni-test-postgres`
 //! reuses one container per process (`vitni-pg`) and gives each test a fresh, randomly-named
 //! database (dropped when the `PostgresTestDb` guard falls out of scope), so tests stay isolated
 //! while sharing one container. A running Docker daemon is required; the tests compile only under
@@ -14,9 +14,7 @@
 #![cfg(feature = "postgres")]
 #![expect(clippy::unwrap_used, reason = "tests abort on setup/assertion failure")]
 
-use sqlx::migrate::Migrator;
 use sqlx::{PgPool, Row};
-use test_containers_util::sqlx_pg::PostgresTestDb;
 use time::macros::datetime;
 use uuid::Uuid;
 use vitni_core::citation::command::{CitationCommand, CitationCommandEnvelope};
@@ -36,18 +34,15 @@ use vitni_core::provenance::{Agent, AgentKind, AssertionMeta, Confidence, EventC
 use vitni_core::repository::{RepositoryCommand, RepositoryCommandEnvelope};
 use vitni_core::source::{SourceCommand, SourceCommandEnvelope};
 use vitni_db::{CommandError, ListPage, PlaceSuccessionRecord, Store};
+use vitni_test_postgres::PostgresTestDb;
 
 /// The shared container name; one container is started per test process and reused across tests.
 const CONTAINER: &str = "vitni-pg";
 
-/// An empty migrator — our schema is created by `Store::open`, not by sqlx migrations, but the test
-/// helper requires one.
-static MIGRATIONS: Migrator = sqlx::migrate!();
-
 /// Opens a `Store` over a fresh, isolated Postgres database. The returned guard must be kept alive
 /// for the database's lifetime; it is dropped (and the database deleted) at the end of the test.
 async fn store() -> (Store, PostgresTestDb) {
-    let db = PostgresTestDb::create(CONTAINER, &MIGRATIONS, None, None).await;
+    let db = PostgresTestDb::create(CONTAINER).await.unwrap();
     let store = Store::open(db.dsn()).await.unwrap();
     (store, db)
 }

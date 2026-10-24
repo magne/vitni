@@ -54,11 +54,8 @@ postgres-es = "0.5.0"
 wasmtime = "49.0.3"
 wasmtime-wasi = "49.0.3"
 # plugin bundle signing (vitni-plugin-host, xtask; ADR 0014): ed25519 detached signatures over a
-# sha2 digest, verified against an embedded trust root. Held at the pre-release: 3.0.0 requires
-# curve25519-dalek ^5.0.0, while `russh` (dev-only, via `test-containers-util` → `testcontainers`
-# 0.27) requires curve25519-dalek =5.0.0-pre.6, and the russh version cargo falls back to does not
-# compile against the pkcs5 that ed25519-dalek 3.0.0 pulls in. Re-evaluate when testcontainers ships
-# a russh on stable curve25519-dalek (0.28's russh 0.61 still pins =5.0.0-rc.0).
+# sha2 digest, verified against an embedded trust root. Still on the 3.0.0 pre-release; the `russh`
+# pin on curve25519-dalek that required it is gone (testcontainers' `host-port-exposure` is off), so 3.0.0 resolves.
 ed25519-dalek = "=3.0.0-pre.6"
 # assisted-import host capabilities (vitni-plugin-host; ADR 0017): host-mediated HTTP,
 # media-library storage with SHA-256 checksums, and content-type sniffing.
@@ -76,6 +73,10 @@ wiremock = "0.6.5"
 # scoped environment-variable guard for the ai vision-api key tests (ADR 0017 §4); serializes env
 # mutation so parallel tests don't race the process environment.
 temp-env = { version = "0.3.6", features = ["async_closure"] }
+# Postgres integration tests (vitni-test-postgres, dev-only): one reused container, a database per test.
+# No `host-port-exposure`: it would pull in `russh` (and its SSH/crypto tree), which nothing here uses.
+testcontainers = { version = "0.27.3", features = ["reusable-containers"] }
+testcontainers-modules = { version = "0.15.0", features = ["postgres"] }
 # async runtime / test support
 tokio = { version = "1.53.2", features = ["macros", "rt-multi-thread"] }
 tempfile = "3.27.0"
@@ -136,6 +137,8 @@ vitni-app = { path = "crates/vitni-app" }
 vitni-ui = { path = "crates/vitni-ui" }
 vitni-plugin-host = { path = "crates/vitni-plugin-host" }
 vitni-digitalarkivet = { path = "crates/vitni-digitalarkivet" }
+# Postgres test database helper (dev-dependency of vitni-db and vitni-app; Docker-backed).
+vitni-test-postgres = { path = "crates/vitni-test-postgres" }
 # The two frontends, consumed as libraries by the `vitni` launcher (ADR 0035). The renderer's webview
 # is opted into through the launcher's `gui` feature, so it stays off here.
 vitni-cli = { path = "crates/vitni-cli" }

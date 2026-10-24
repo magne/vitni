@@ -39,10 +39,7 @@ tempfile = { workspace = true }
 time = { workspace = true }
 # Postgres-backed tests (feature = "postgres"): reuses one container per process, isolating each
 # test in a fresh randomly-named database dropped on Drop.
-test-containers-util = { version = "0.1.4", features = ["pg-sqlx"] }
-# The `migrate` feature provides the empty `Migrator` the test helper requires (our schema is
-# created by `Store::open`, not by sqlx migrations).
-sqlx = { workspace = true, features = ["migrate"] }
+vitni-test-postgres = { workspace = true }
 # Projection-rebuild / hot-query benchmarks (Phase 11 workstream B).
 criterion = { workspace = true }
 

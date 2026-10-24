@@ -104,6 +104,10 @@ name = "vitni-digitalarkivet"
 allow = ["AGPL-3.0-or-later"]
 
 [[licenses.exceptions]]
+name = "vitni-test-postgres"
+allow = ["AGPL-3.0-or-later"]
+
+[[licenses.exceptions]]
 name = "xtask"
 allow = ["AGPL-3.0-or-later"]
 

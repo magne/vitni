@@ -39,10 +39,10 @@ tokio = { workspace = true }
 proptest = { workspace = true }
 tempfile = { workspace = true }
 # Failure injection (#390): a test installs a SQLite trigger that aborts one event insert.
-sqlx = { workspace = true, features = ["migrate"] }
+sqlx = { workspace = true }
 # The cross-engine backup test (feature = "postgres"; ADR 0041 §2): one reused container, a fresh
-# database per test. The `migrate` feature above provides the empty `Migrator` the helper requires.
-test-containers-util = { version = "0.1.4", features = ["pg-sqlx"] }
+# database per test.
+vitni-test-postgres = { workspace = true }
 # The record-matching benchmarks: criterion, and the event trait the bench's bulk-loaded rows are
 # written through.
 criterion = { workspace = true }
