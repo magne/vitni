@@ -205,9 +205,11 @@ history-operator-unknown = ukjent operatør
 history-undo = Angre: { $what }
 history-undo-short = Angre
 # Verdien en Historikk-rad nevner ved siden av frasen (#545): hva en korreksjon erstattet, en lenket post
-# som etikett og id, rollen den ble lenket i, en DNA-matchs totaler og fjernede begrensninger.
+# som etikett og id, en datert verdi med datoen, rollen den ble lenket i, en DNA-matchs totaler og fjernede
+# begrensninger.
 history-replaced = var { $value }
 history-value-record = { $label } ({ $id })
+history-value-dated = { $label } ({ $date })
 history-value-role = { $record } ({ $role })
 history-value-dna = { $cm } cM over { $segments ->
     [one] 1 segment
@@ -777,14 +779,47 @@ succession-kind-renamed = omdøpt
 action-add-participant = Legg til deltaker
 action-add-enclosing = Legg til omsluttende sted
 place-type-country = Land
-place-type-county = Fylke
-place-type-municipality = Kommune
-place-type-parish = Sogn
+place-type-state = Delstat
+place-type-county = Grevskap
 place-type-city = By
+place-type-parish = Sogn
+place-type-locality = Lokalitet
+place-type-street = Gate
+place-type-province = Provins
+place-type-region = Region
+place-type-department = Departement
+place-type-neighborhood = Nabolag
+place-type-district = Distrikt
+place-type-borough = Bydel
+place-type-municipality = Kommune
 place-type-town = Tettsted
 place-type-village = Landsby
+place-type-hamlet = Grend
 place-type-farm = Gård
 place-type-building = Bygning
+place-type-number = Nummer
+place-type-none = Ingen type
+place-kind-administrative = Administrativ
+place-kind-ecclesiastical = Kirkelig
+place-kind-judicial = Rettslig
+place-kind-registration = Registrering
+place-kind-fiscal = Skatt
+place-kind-military = Militær
+place-kind-manorial = Gods
+place-kind-cadastral = Matrikkel
+place-kind-statistical = Statistisk
+place-kind-settlement = Bosetning
+place-kind-building = Bygning
+place-kind-natural = Natur
+place-level-country = Land
+place-level-adm1 = Første inndelingsnivå
+place-level-adm2 = Andre inndelingsnivå
+place-level-adm3 = Tredje inndelingsnivå
+place-level-adm4 = Fjerde inndelingsnivå
+place-level-adm5 = Femte inndelingsnivå
+place-level-settlement = Bosetning
+place-level-sub-settlement = Delområde av bosetning
+place-type-kind-key = { $kind } · { $key }
 
 # Feil
 error-prefix = feil: { $message }

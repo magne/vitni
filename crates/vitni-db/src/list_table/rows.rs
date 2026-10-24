@@ -18,6 +18,7 @@ use vitni_core::name::PersonName;
 use vitni_core::note::{NoteState, NoteView};
 use vitni_core::person::{PersonState, PersonView};
 use vitni_core::place::{PlaceState, PlaceView};
+use vitni_core::place_type::PlaceTypeKey;
 use vitni_core::repository::{RepositoryState, RepositoryView};
 use vitni_core::research_note::{ResearchNoteState, ResearchNoteView};
 use vitni_core::source::{SourceState, SourceView};
@@ -322,9 +323,14 @@ impl ListedRecord for PlaceView {
             .as_ref()
             .and_then(|id| refs.places.get(id))
             .and_then(place_title);
+        let place_type = self.place_type();
         vec![
             text(place_title(self).as_deref()),
-            choice(self.place_type()),
+            text(
+                place_type
+                    .and_then(|statement| statement.type_key.as_ref())
+                    .map(PlaceTypeKey::as_str),
+            ),
             record(enclosing, enclosing_name),
             None,
         ]

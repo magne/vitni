@@ -11,9 +11,9 @@
 
 use uuid::Uuid;
 use vitni_app::{
-    AppDefaults, AppError, MutationMeta, NewPlace, OperatorConfig, PlaceError, PlaceSuccessionInput, PlaceType,
-    Provenance, Session, SuccessionKind, Workspace, WorkspaceDefaults, assert_place_enclosed_by,
-    assert_place_succession, create_place, show_place, show_place_as_of,
+    AppDefaults, AppError, MutationMeta, NewPlace, OperatorConfig, PlaceError, PlaceSuccessionInput, Provenance,
+    Session, SuccessionKind, Workspace, WorkspaceDefaults, assert_place_enclosed_by, assert_place_succession,
+    create_place, show_place, show_place_as_of,
 };
 use vitni_core::date::{Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody};
 use vitni_core::ids::AgentId;
@@ -65,7 +65,7 @@ fn year(value: i32) -> GenealogicalDate {
     }
 }
 
-async fn create(ws: &Workspace, session: &Session, name: &str, place_type: PlaceType) -> String {
+async fn create(ws: &Workspace, session: &Session, name: &str, place_type: vitni_app::PlaceTypeStatement) -> String {
     create_place(
         ws,
         session,
@@ -125,10 +125,34 @@ async fn hierarchy_walk_resolves_the_full_transitive_chain_and_title() {
     let (ws, _dir) = workspace().await;
     let session = session();
 
-    let farm = create(&ws, &session, "Nordgarden", PlaceType::Farm).await;
-    let parish = create(&ws, &session, "Vågå", PlaceType::Parish).await;
-    let county = create(&ws, &session, "Innlandet", PlaceType::County).await;
-    let country = create(&ws, &session, "Norway", PlaceType::Country).await;
+    let farm = create(
+        &ws,
+        &session,
+        "Nordgarden",
+        vitni_app::std_statement("farm").unwrap_or_default(),
+    )
+    .await;
+    let parish = create(
+        &ws,
+        &session,
+        "Vågå",
+        vitni_app::std_statement("parish").unwrap_or_default(),
+    )
+    .await;
+    let county = create(
+        &ws,
+        &session,
+        "Innlandet",
+        vitni_app::std_statement("county").unwrap_or_default(),
+    )
+    .await;
+    let country = create(
+        &ws,
+        &session,
+        "Norway",
+        vitni_app::std_statement("country").unwrap_or_default(),
+    )
+    .await;
 
     assert_place_enclosed_by(&ws, &session, &farm, &parish, MutationMeta::default())
         .await
@@ -151,8 +175,14 @@ async fn a_cycle_in_the_enclosure_chain_terminates_the_walk() {
     let (ws, _dir) = workspace().await;
     let session = session();
 
-    let a = create(&ws, &session, "A", PlaceType::Farm).await;
-    let b = create(&ws, &session, "B", PlaceType::Parish).await;
+    let a = create(&ws, &session, "A", vitni_app::std_statement("farm").unwrap_or_default()).await;
+    let b = create(
+        &ws,
+        &session,
+        "B",
+        vitni_app::std_statement("parish").unwrap_or_default(),
+    )
+    .await;
     assert_place_enclosed_by(&ws, &session, &a, &b, MutationMeta::default())
         .await
         .expect("enclose a in b");
@@ -174,9 +204,27 @@ async fn date_aware_resolution_picks_the_enclosure_in_effect_at_the_query_year()
     let (ws, _dir) = workspace().await;
     let session = session();
 
-    let farm = create(&ws, &session, "Nedre Vågå", PlaceType::Farm).await;
-    let old_parish = create(&ws, &session, "Vågå prestegjeld", PlaceType::Parish).await;
-    let new_parish = create(&ws, &session, "Lom prestegjeld", PlaceType::Parish).await;
+    let farm = create(
+        &ws,
+        &session,
+        "Nedre Vågå",
+        vitni_app::std_statement("farm").unwrap_or_default(),
+    )
+    .await;
+    let old_parish = create(
+        &ws,
+        &session,
+        "Vågå prestegjeld",
+        vitni_app::std_statement("parish").unwrap_or_default(),
+    )
+    .await;
+    let new_parish = create(
+        &ws,
+        &session,
+        "Lom prestegjeld",
+        vitni_app::std_statement("parish").unwrap_or_default(),
+    )
+    .await;
 
     // Two dated jurisdictions: valid from 1801, then reassigned from 1900 — no undated fallback.
     assert_dated_enclosure(&ws, &session, &farm, &old_parish, Some(year(1801))).await;
@@ -204,9 +252,27 @@ async fn a_merge_is_reachable_from_both_the_survivor_and_each_merged_place() {
     let (ws, _dir) = workspace().await;
     let session = session();
 
-    let aker = create(&ws, &session, "Aker", PlaceType::Municipality).await;
-    let kristiania = create(&ws, &session, "Kristiania", PlaceType::Municipality).await;
-    let oslo = create(&ws, &session, "Oslo", PlaceType::Municipality).await;
+    let aker = create(
+        &ws,
+        &session,
+        "Aker",
+        vitni_app::std_statement("municipality").unwrap_or_default(),
+    )
+    .await;
+    let kristiania = create(
+        &ws,
+        &session,
+        "Kristiania",
+        vitni_app::std_statement("municipality").unwrap_or_default(),
+    )
+    .await;
+    let oslo = create(
+        &ws,
+        &session,
+        "Oslo",
+        vitni_app::std_statement("municipality").unwrap_or_default(),
+    )
+    .await;
 
     assert_place_succession(
         &ws,
@@ -244,9 +310,27 @@ async fn a_split_is_reachable_from_every_resulting_place() {
     let (ws, _dir) = workspace().await;
     let session = session();
 
-    let county = create(&ws, &session, "Old County", PlaceType::County).await;
-    let north = create(&ws, &session, "North County", PlaceType::County).await;
-    let south = create(&ws, &session, "South County", PlaceType::County).await;
+    let county = create(
+        &ws,
+        &session,
+        "Old County",
+        vitni_app::std_statement("county").unwrap_or_default(),
+    )
+    .await;
+    let north = create(
+        &ws,
+        &session,
+        "North County",
+        vitni_app::std_statement("county").unwrap_or_default(),
+    )
+    .await;
+    let south = create(
+        &ws,
+        &session,
+        "South County",
+        vitni_app::std_statement("county").unwrap_or_default(),
+    )
+    .await;
 
     assert_place_succession(
         &ws,
@@ -278,7 +362,13 @@ async fn a_split_is_reachable_from_every_resulting_place() {
 async fn an_unknown_referenced_place_is_a_domain_error() {
     let (ws, _dir) = workspace().await;
     let session = session();
-    let place = create(&ws, &session, "Somewhere", PlaceType::Village).await;
+    let place = create(
+        &ws,
+        &session,
+        "Somewhere",
+        vitni_app::std_statement("village").unwrap_or_default(),
+    )
+    .await;
 
     let err = assert_place_succession(
         &ws,
@@ -300,9 +390,27 @@ async fn an_unknown_referenced_place_is_a_domain_error() {
 async fn an_anchor_not_among_the_from_places_is_a_domain_error() {
     let (ws, _dir) = workspace().await;
     let session = session();
-    let a = create(&ws, &session, "A", PlaceType::Village).await;
-    let b = create(&ws, &session, "B", PlaceType::Village).await;
-    let c = create(&ws, &session, "C", PlaceType::Village).await;
+    let a = create(
+        &ws,
+        &session,
+        "A",
+        vitni_app::std_statement("village").unwrap_or_default(),
+    )
+    .await;
+    let b = create(
+        &ws,
+        &session,
+        "B",
+        vitni_app::std_statement("village").unwrap_or_default(),
+    )
+    .await;
+    let c = create(
+        &ws,
+        &session,
+        "C",
+        vitni_app::std_statement("village").unwrap_or_default(),
+    )
+    .await;
 
     let err = assert_place_succession(
         &ws,
@@ -327,7 +435,13 @@ async fn an_anchor_not_among_the_from_places_is_a_domain_error() {
 async fn empty_succession_endpoints_are_a_domain_error() {
     let (ws, _dir) = workspace().await;
     let session = session();
-    let a = create(&ws, &session, "A", PlaceType::Village).await;
+    let a = create(
+        &ws,
+        &session,
+        "A",
+        vitni_app::std_statement("village").unwrap_or_default(),
+    )
+    .await;
 
     let err = assert_place_succession(
         &ws,

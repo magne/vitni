@@ -5,8 +5,8 @@
 
 use uuid::Uuid;
 use vitni_app::{
-    AppDefaults, ListedKind, NewPlace, OperatorConfig, PlaceType, Provenance, Session, Workspace, WorkspaceDefaults,
-    create_place, reference_id, reference_label,
+    AppDefaults, ListedKind, NewPlace, OperatorConfig, Provenance, Session, Workspace, WorkspaceDefaults, create_place,
+    reference_id, reference_label,
 };
 use vitni_core::ids::AgentId;
 use vitni_core::provenance::{Agent, AgentKind};
@@ -42,7 +42,7 @@ async fn a_record_id_is_labelled_by_its_human_id_and_title() {
     let (ws, _dir) = workspace().await;
     let new = NewPlace {
         human_id: None,
-        place_type: PlaceType::Parish,
+        place_type: vitni_app::std_statement("parish").unwrap_or_default(),
         name: Some("Fana".to_owned()),
     };
     let human_id = create_place(&ws, &session(), new, Provenance::default(), &[])
@@ -77,7 +77,7 @@ async fn an_untitled_record_has_no_title_to_repeat_its_human_id() {
     let (ws, _dir) = workspace().await;
     let new = NewPlace {
         human_id: None,
-        place_type: PlaceType::Parish,
+        place_type: vitni_app::std_statement("parish").unwrap_or_default(),
         name: None,
     };
     let human_id = create_place(&ws, &session(), new, Provenance::default(), &[])

@@ -27,9 +27,9 @@ use vitni_app::{
     AbandonReason, AppError, BackupError, CitationError, CitationSummary, Confidence, DbError, DnaMatchError,
     DnaMatchSummary, DnaProvider, DnaTestError, DnaTestSummary, DnaTestType, EventError, EventSummary, EventType,
     FamilyError, FamilySummary, ListPage, ListQueryError, MatchStatus, MediaError, MediaSummary, NoteError,
-    NoteSummary, NoteType, PersonError, PersonSummary, PlaceError, PlaceSummary, PlaceType, RepositoryError,
-    RepositorySummary, RepositoryType, ResearchNoteError, ResearchNoteSummary, Restriction, Sex, SourceError,
-    SourceSummary, SubjectRef, SuretyLabelOverrides, TagError, TagSummary,
+    NoteSummary, NoteType, PersonError, PersonSummary, PlaceError, PlaceKind, PlaceLevel, PlaceSummary,
+    PlaceTypeStatement, RepositoryError, RepositorySummary, RepositoryType, ResearchNoteError, ResearchNoteSummary,
+    Restriction, Sex, SourceError, SourceSummary, SubjectRef, SuretyLabelOverrides, TagError, TagSummary,
 };
 use vitni_app::{
     DatasetError, DatasetSummary, ImportRunError, ImportRunStatus, ImportRunSummary, MatchDataError, PackError,

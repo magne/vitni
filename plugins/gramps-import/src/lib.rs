@@ -11,18 +11,18 @@ wit_bindgen::generate!({
     world: "bulk-import",
     path: "../../crates/vitni-plugin-host/wit",
     with: {
-        "vitni:host-api/types@0.32.0": vitni_plugin_api::types,
-        "vitni:host-api/log@0.32.0": vitni_plugin_api::log,
-        "vitni:host-api/staging@0.32.0": vitni_plugin_api::staging,
-        "vitni:host-api/progress@0.32.0": vitni_plugin_api::progress,
-        "vitni:host-api/import-source@0.32.0": vitni_plugin_api::import_source,
+        "vitni:host-api/types@0.33.0": vitni_plugin_api::types,
+        "vitni:host-api/log@0.33.0": vitni_plugin_api::log,
+        "vitni:host-api/staging@0.33.0": vitni_plugin_api::staging,
+        "vitni:host-api/progress@0.33.0": vitni_plugin_api::progress,
+        "vitni:host-api/import-source@0.33.0": vitni_plugin_api::import_source,
     },
 });
 
 use std::collections::{HashMap, HashSet};
 
 use vitni_gramps_xml::{Citation, Database, Event, EventRef, Family, Gender, Note, Person, Place, Region, Source};
-use vitni_interchange::{DatePoint, parse_age};
+use vitni_interchange::{DatePoint, parse_age, place_type_key_from_gramps_label};
 use vitni_plugin_api::staging::{
     AssociationLink, ChildLink, EntityFields, EntityKind, EntityRef, LinkKind, MediaLink, MemberLink, PairLink,
     ParticipationLink, RepositoryLink, StagedChildRel, StagedCitation, StagedEvent, StagedFamily, StagedMedia,
@@ -377,7 +377,7 @@ impl<'a> Resolver<'a> {
                 None,
                 EntityFields::Place(StagedPlace {
                     name: place.name.clone().unwrap_or_default(),
-                    place_type: place.place_type.as_deref().map(place_type_of),
+                    place_type: place.place_type.as_deref().and_then(place_type_of),
                     coordinates: vitni_plugin_api::place_point(
                         place.name.as_deref().unwrap_or(handle),
                         place.latitude.as_deref(),
@@ -645,20 +645,15 @@ fn note_type_of(label: &str) -> NoteType {
     }
 }
 
-/// Maps a Gramps place-type label onto the host `place-type` variant.
-fn place_type_of(label: &str) -> PlaceType {
-    match label {
-        "Country" => PlaceType::Country,
-        "County" | "State" | "Province" => PlaceType::County,
-        "Municipality" => PlaceType::Municipality,
-        "Parish" => PlaceType::Parish,
-        "City" => PlaceType::City,
-        "Town" => PlaceType::Town,
-        "Village" => PlaceType::Village,
-        "Farm" => PlaceType::Farm,
-        "Building" => PlaceType::Building,
-        other => PlaceType::Custom(other.to_owned()),
-    }
+/// The host `place-type` record for a Gramps place-type label: a `std` or `custom:` key, with the kind
+/// and level left to the host's `std` table. A placeholder label (`Unknown`, `place`, blank) states none.
+fn place_type_of(label: &str) -> Option<PlaceType> {
+    place_type_key_from_gramps_label(label).map(|type_key| PlaceType {
+        kind: None,
+        level: None,
+        type_key: Some(type_key),
+        date: None,
+    })
 }
 
 export!(Importer);

@@ -953,7 +953,14 @@ fn seed_gui_pass(fixture: &Fixture, home: &Path, workspace: &Path) -> Result<()>
     let created = cli(
         fixture,
         home,
-        &["place", "create", "--type", "municipality", "--name", "Kristiansand"],
+        &[
+            "place",
+            "create",
+            "--type",
+            "std:municipality",
+            "--name",
+            "Kristiansand",
+        ],
     )?;
     let place = created
         .split_whitespace()

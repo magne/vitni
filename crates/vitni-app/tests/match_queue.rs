@@ -10,10 +10,9 @@ use uuid::Uuid;
 use vitni_app::{
     AppDefaults, DatasetId, DateParts, DecidableKind, EntityFields, EntityRef, EventType, IdentityDecision,
     ImportRunId, LinkKind, MatchBand, MatchQueueFilter, MatchVerdict, MutationMeta, NewEvent, NewImportRun,
-    NewParticipation, NewPerson, NewPlace, OperatorConfig, PairDecision, PendingRun, PersonNameParts, PlaceType,
-    Provenance, RecordGraph, RunToEnd, Session, StagedEntity, StagedEvent, StagedLink, StagedPerson, Workspace,
-    WorkspaceDefaults, commit_import, decide_match, gregorian_date, list_import_runs, match_pair_decision, match_queue,
-    plan_import,
+    NewParticipation, NewPerson, NewPlace, OperatorConfig, PairDecision, PendingRun, PersonNameParts, Provenance,
+    RecordGraph, RunToEnd, Session, StagedEntity, StagedEvent, StagedLink, StagedPerson, Workspace, WorkspaceDefaults,
+    commit_import, decide_match, gregorian_date, list_import_runs, match_pair_decision, match_queue, plan_import,
 };
 use vitni_core::enums::{EvidenceLevel, ParticipantRole, Sex};
 use vitni_core::ids::AgentId;
@@ -175,7 +174,7 @@ async fn stored_person(workspace: &Workspace, given: &str) -> String {
 async fn farm(workspace: &Workspace, name: &str) -> String {
     let new = NewPlace {
         human_id: None,
-        place_type: PlaceType::Farm,
+        place_type: vitni_app::std_statement("farm").unwrap_or_default(),
         name: Some(name.to_owned()),
     };
     vitni_app::create_place(workspace, &human(), new, Provenance::default(), &[])

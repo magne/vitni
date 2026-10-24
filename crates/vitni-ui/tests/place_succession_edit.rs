@@ -8,8 +8,8 @@
 use uuid::Uuid;
 use vitni_app::{
     Agent, AgentId, AgentKind, AppDefaults, Calendar, DateInput, DateModifier, DatePoint, DateQuality,
-    GenealogicalDateBody, NewPlace, OperatorConfig, PlaceType, Provenance, Session, SuccessionKind, Workspace,
-    WorkspaceDefaults, create_place, show_place,
+    GenealogicalDateBody, NewPlace, OperatorConfig, Provenance, Session, SuccessionKind, Workspace, WorkspaceDefaults,
+    create_place, show_place,
 };
 use vitni_ui::{PlaceEdit, ProvenanceDraft, dispatch_place_edit};
 
@@ -39,7 +39,7 @@ async fn setup() -> (Workspace, Session, tempfile::TempDir) {
     (workspace, session(), dir)
 }
 
-async fn place(ws: &Workspace, session: &Session, name: &str, place_type: PlaceType) -> String {
+async fn place(ws: &Workspace, session: &Session, name: &str, place_type: vitni_app::PlaceTypeStatement) -> String {
     create_place(
         ws,
         session,
@@ -76,9 +76,27 @@ fn year(value: i32) -> DateInput {
 #[tokio::test]
 async fn a_merge_dispatch_prepends_the_anchor_to_the_ceasing_places() {
     let (ws, session, _dir) = setup().await;
-    let aker = place(&ws, &session, "Aker", PlaceType::Municipality).await;
-    let kristiania = place(&ws, &session, "Kristiania", PlaceType::Municipality).await;
-    let oslo = place(&ws, &session, "Oslo", PlaceType::Municipality).await;
+    let aker = place(
+        &ws,
+        &session,
+        "Aker",
+        vitni_app::std_statement("municipality").unwrap_or_default(),
+    )
+    .await;
+    let kristiania = place(
+        &ws,
+        &session,
+        "Kristiania",
+        vitni_app::std_statement("municipality").unwrap_or_default(),
+    )
+    .await;
+    let oslo = place(
+        &ws,
+        &session,
+        "Oslo",
+        vitni_app::std_statement("municipality").unwrap_or_default(),
+    )
+    .await;
 
     dispatch_place_edit(
         &ws,
@@ -117,9 +135,27 @@ async fn a_merge_dispatch_prepends_the_anchor_to_the_ceasing_places() {
 #[tokio::test]
 async fn a_split_dispatch_records_every_resulting_place_and_stays_undated() {
     let (ws, session, _dir) = setup().await;
-    let county = place(&ws, &session, "Old County", PlaceType::County).await;
-    let north = place(&ws, &session, "North County", PlaceType::County).await;
-    let south = place(&ws, &session, "South County", PlaceType::County).await;
+    let county = place(
+        &ws,
+        &session,
+        "Old County",
+        vitni_app::std_statement("county").unwrap_or_default(),
+    )
+    .await;
+    let north = place(
+        &ws,
+        &session,
+        "North County",
+        vitni_app::std_statement("county").unwrap_or_default(),
+    )
+    .await;
+    let south = place(
+        &ws,
+        &session,
+        "South County",
+        vitni_app::std_statement("county").unwrap_or_default(),
+    )
+    .await;
 
     dispatch_place_edit(
         &ws,
@@ -157,8 +193,20 @@ async fn a_split_dispatch_records_every_resulting_place_and_stays_undated() {
 #[tokio::test]
 async fn a_dated_succession_dispatch_records_the_structured_year() {
     let (ws, session, _dir) = setup().await;
-    let old = place(&ws, &session, "Christiania", PlaceType::City).await;
-    let new = place(&ws, &session, "Oslo", PlaceType::City).await;
+    let old = place(
+        &ws,
+        &session,
+        "Christiania",
+        vitni_app::std_statement("city").unwrap_or_default(),
+    )
+    .await;
+    let new = place(
+        &ws,
+        &session,
+        "Oslo",
+        vitni_app::std_statement("city").unwrap_or_default(),
+    )
+    .await;
 
     dispatch_place_edit(
         &ws,

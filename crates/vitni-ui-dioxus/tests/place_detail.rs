@@ -3,7 +3,7 @@
 //! the names table, the hierarchy table, and the tags panel.
 
 use dioxus::prelude::*;
-use vitni_app::{PlaceType, Rect, TagRef};
+use vitni_app::{Rect, TagRef};
 use vitni_ui::{
     AttachedRefVm, Category, CitationRefVm, ConfidenceLevel, DateDraft, EvidenceAxis, EvidenceAxisVm, Localizer,
     MapPointVm, MarkerShapeVm, MediaRefVm, PickerSelection, PickerState, PlaceDetail, PlaceDraft, PlaceGeometryVm,
@@ -25,7 +25,7 @@ fn sample() -> PlaceDetail {
         human_id: "P0007".to_owned(),
         id: "0190-place-id".to_owned(),
         title: "New York".to_owned(),
-        place_type: Some(PlaceType::City),
+        place_type: Some(vitni_app::std_statement("city").unwrap_or_default()),
         type_label: Some("City".to_owned()),
         coordinates: Some("40.7128,-74.006".to_owned()),
         map_point: Some(MapPointVm {

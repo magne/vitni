@@ -219,12 +219,10 @@ pub use place::{
     create_place, distinguish_places, list_places, list_places_as_of, list_places_page, merge_places,
     place_claim_owner, place_pair_decision, set_place_code, set_place_human_id, set_place_type,
     set_restrictions as set_place_restrictions, show_place, show_place_as_of, tag_place,
-    undo_place_distinction_and_merge, unstated_place_type, update_place_media_ref,
+    undo_place_distinction_and_merge, update_place_media_ref,
 };
 pub use place_change_set::{PlaceChangeSet, commit_place_change_set};
-pub use place_vocabulary::{
-    PlaceTypeGiven, merge_place_type, prefill_from_std, std_statement, std_statements, suggest,
-};
+pub use place_vocabulary::{PlaceTypeGiven, merge_place_type, prefill_from_std, std_statement, std_statements};
 pub use plugins::{PluginTrust, plugin_layers, resolve_bundle, resolve_bundles};
 pub use plugins::{embedded_plugins_dir, resolve_embedded_plugins_dir};
 pub use profile::{
@@ -292,7 +290,7 @@ pub use vitni_core::dna::{
 pub use vitni_core::dna_match::{DnaMatchError, MatchStatus};
 pub use vitni_core::dna_test::DnaTestError;
 pub use vitni_core::enums::{
-    AssociationRole, ChildParentRelationship, EventType, EvidenceLevel, FactType, NoteType, ParticipantRole, PlaceType,
+    AssociationRole, ChildParentRelationship, EventType, EvidenceLevel, FactType, NoteType, ParticipantRole,
     RepositoryType, Restriction, Sex, SourceMediaType, SuccessionKind,
 };
 pub use vitni_core::event::EventError;
@@ -326,6 +324,7 @@ pub use vitni_core::note::NoteError;
 pub use vitni_core::origin::{ContentDigest, DatasetId, DatasetScope, DatasetSpec, RecordOrigin};
 pub use vitni_core::person::PersonError;
 pub use vitni_core::place::PlaceError;
+pub use vitni_core::place_type::{PlaceKind, PlaceLevel, PlaceTypeKey, PlaceTypeStatement};
 pub use vitni_core::provenance::{
     Agent, AgentKind, Confidence, EvidenceAnalysis, EvidenceKind, InformationKind, SourceQuality, Timestamp,
 };

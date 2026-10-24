@@ -18,7 +18,7 @@ use vitni_app::{
 
 use crate::i18n::Localizer;
 use crate::presentation::ConfidenceLevel;
-use crate::view_model::{DateDraft, NEW_PLACE_TYPES, parse_date_point};
+use crate::view_model::{DateDraft, parse_date_point};
 
 /// One catalogue column, labelled, as the editor's column select offers it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -273,7 +273,6 @@ pub fn choice_options(loc: &Localizer, kind: ListedKind, column: &str) -> Vec<Ch
             loc.sex_label(Some(sex))
         }),
         (ListedKind::Event, "type") => options(&EVENT_TYPES, |ty| loc.event_type_label(ty)),
-        (ListedKind::Place, "type") => options(&NEW_PLACE_TYPES, |ty| loc.place_type_label(ty)),
         (ListedKind::Citation, "confidence") => {
             options(&ConfidenceLevel::all().map(vitni_app::Confidence::from), |confidence| {
                 loc.confidence_label((*confidence).into())

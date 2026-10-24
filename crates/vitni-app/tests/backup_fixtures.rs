@@ -134,3 +134,63 @@ fn the_current_fixture_holds_every_event_variant_of_every_aggregate() {
         missing.join(", ")
     );
 }
+
+/// A 0.1 archive's place types are upgraded by ADR 0031 §10's table and ADR 0054: the farm keeps one live
+/// `std:farm` statement from its explicit `PlaceTypeSet` (its creation entry was retracted by the fixture),
+/// and the municipality is administrative.
+#[tokio::test]
+async fn the_v0_1_fixtures_places_restore_with_their_upgraded_types() {
+    let home = tempfile::tempdir().expect("tempdir");
+    let config = home.path().join("config.toml");
+    let target = home.path().join("restored");
+    let archive = Path::new(FIXTURES).join("v0.1").join("workspace.vitni-backup");
+    let request = RestoreRequest {
+        config_path: &config,
+        archive: &archive,
+        name: "fixture",
+        dir: Some(&target),
+        database_url: None,
+    };
+    restore_backup(&request).await.expect("restore the 0.1 fixture");
+    let workspace = Workspace::open(&target, &operator(), &WorkspaceDefaults::default())
+        .await
+        .expect("open the restored fixture");
+    let places = workspace.store().list_places().await.expect("places");
+    assert_eq!(places.len(), 2);
+
+    let statements = |view: &vitni_core::place::view::PlaceView| -> Vec<vitni_core::place_type::PlaceTypeStatement> {
+        view.place_types_with_assertions()
+            .iter()
+            .map(|entry| entry.value.value.clone())
+            .collect()
+    };
+    let key = |statement: &vitni_core::place_type::PlaceTypeStatement| {
+        statement.type_key.as_ref().map(|key| key.as_str().to_owned())
+    };
+    let municipality = places
+        .iter()
+        .find(|view| view.human_id().is_some_and(|id| id.as_str() == "P0002"))
+        .expect("P0002");
+    let municipality_types = statements(municipality);
+    assert_eq!(municipality_types.len(), 1);
+    assert_eq!(
+        municipality_types[0].kind,
+        Some(vitni_core::place_type::PlaceKind::Administrative)
+    );
+    assert_eq!(municipality_types[0].level, None);
+    assert_eq!(key(&municipality_types[0]).as_deref(), Some("std:municipality"));
+
+    let farm = places
+        .iter()
+        .find(|view| view.human_id().is_none_or(|id| id.as_str() != "P0002"))
+        .expect("the farm");
+    let farm_types = statements(farm);
+    assert_eq!(
+        farm_types.len(),
+        1,
+        "the retracted creation entry is not live: {farm_types:?}"
+    );
+    assert_eq!(farm_types[0].kind, Some(vitni_core::place_type::PlaceKind::Settlement));
+    assert_eq!(farm_types[0].level, None);
+    assert_eq!(key(&farm_types[0]).as_deref(), Some("std:farm"));
+}

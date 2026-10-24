@@ -19,7 +19,7 @@
 //! instead (`cargo xtask gui-pass`, the `map-*.toml` scenarios); pan/zoom smoothness and click latency
 //! are what remain human-only.
 
-use vitni_app::{BUILT_IN_MAP_PROVIDER, MapConfig, MapProvider, MapSource, PlaceGeometry, PlaceType};
+use vitni_app::{BUILT_IN_MAP_PROVIDER, MapConfig, MapProvider, MapSource, PlaceGeometry, PlaceTypeStatement};
 use vitni_ui::{
     GeographyVm, MarkerShapeVm, PlaceMarkerVm, PlaceRowStatus, PlaceRowVm, TIME_SLIDER_RANGE, clamp_slider_year,
     name_matches,
@@ -776,18 +776,21 @@ fn GeographyCreateForm(point: (f64, f64), onsaved: EventHandler<()>) -> Element 
     let services = state.services().clone();
     let loc = state.data_loc();
     let mut name = use_signal(String::new);
-    let place_types = [
-        PlaceType::Farm,
-        PlaceType::Village,
-        PlaceType::Town,
-        PlaceType::City,
-        PlaceType::Parish,
-        PlaceType::Municipality,
-        PlaceType::County,
-        PlaceType::Country,
-        PlaceType::Building,
-    ];
-    let mut place_type = use_signal(|| PlaceType::Farm);
+    let place_types: Vec<PlaceTypeStatement> = [
+        "farm",
+        "village",
+        "town",
+        "city",
+        "parish",
+        "municipality",
+        "county",
+        "country",
+        "building",
+    ]
+    .iter()
+    .filter_map(|name| vitni_app::std_statement(name))
+    .collect();
+    let mut place_type = use_signal(|| vitni_app::std_statement("farm").unwrap_or_default());
     let type_options: Vec<SelectChoice> = place_types
         .iter()
         .enumerate()

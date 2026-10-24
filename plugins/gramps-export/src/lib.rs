@@ -15,11 +15,11 @@ wit_bindgen::generate!({
     world: "bulk-export",
     path: "../../crates/vitni-plugin-host/wit",
     with: {
-        "vitni:host-api/types@0.32.0": vitni_plugin_api::types,
-        "vitni:host-api/log@0.32.0": vitni_plugin_api::log,
-        "vitni:host-api/query@0.32.0": vitni_plugin_api::query,
-        "vitni:host-api/progress@0.32.0": vitni_plugin_api::progress,
-        "vitni:host-api/export-sink@0.32.0": vitni_plugin_api::export_sink,
+        "vitni:host-api/types@0.33.0": vitni_plugin_api::types,
+        "vitni:host-api/log@0.33.0": vitni_plugin_api::log,
+        "vitni:host-api/query@0.33.0": vitni_plugin_api::query,
+        "vitni:host-api/progress@0.33.0": vitni_plugin_api::progress,
+        "vitni:host-api/export-sink@0.33.0": vitni_plugin_api::export_sink,
     },
 });
 
@@ -29,7 +29,7 @@ use vitni_gramps_xml::{
     ChildRef, Citation, Database, Event, EventRef, EventRefAttribute, Family, Gender, Header, MediaObject, MediaRef,
     Note, Person, PersonRef, Place, Region, RepoRef, Repository, Source, Tag,
 };
-use vitni_interchange::{EventKind, age_value};
+use vitni_interchange::{EventKind, age_value, gramps_label_from_place_type_key};
 use vitni_plugin_api::{convert, query, types};
 
 struct Exporter;
@@ -346,7 +346,7 @@ fn place(dto: types::PlaceDto) -> Place {
         handle: dto.human_id,
         gramps_id: None,
         name: dto.name,
-        place_type: dto.place_type.map(place_type_label),
+        place_type: Some(place_type_label(dto.place_type.as_ref())),
         // The host-api `PlaceDto` carries neither a code nor geometry (ADR 0024) yet — a follow-up.
         code: None,
         enclosed_by: dto.enclosed_by,
@@ -455,20 +455,10 @@ fn confidence_value(confidence: types::Confidence) -> u8 {
     }
 }
 
-/// Maps the host `place-type` onto a Gramps place-type label.
-fn place_type_label(place_type: types::PlaceType) -> String {
-    match place_type {
-        types::PlaceType::Country => "Country".to_owned(),
-        types::PlaceType::County => "County".to_owned(),
-        types::PlaceType::Municipality => "Municipality".to_owned(),
-        types::PlaceType::Parish => "Parish".to_owned(),
-        types::PlaceType::City => "City".to_owned(),
-        types::PlaceType::Town => "Town".to_owned(),
-        types::PlaceType::Village => "Village".to_owned(),
-        types::PlaceType::Farm => "Farm".to_owned(),
-        types::PlaceType::Building => "Building".to_owned(),
-        types::PlaceType::Custom(value) => value,
-    }
+/// The Gramps place-type label for a place's type: its key's label, or `Unknown` when it has none
+/// (Gramps requires a type on every place).
+fn place_type_label(place_type: Option<&types::PlaceType>) -> String {
+    gramps_label_from_place_type_key(place_type.and_then(|statement| statement.type_key.as_deref()))
 }
 
 export!(Exporter);

@@ -301,7 +301,7 @@ classDiagram
     }
     class Place {
         +human_id HumanId?
-        +place_type Asserted~PlaceType~?
+        +place_types Asserted~PlaceTypeStatement~[*]
         +names Asserted~PlaceName~[*]
         +enclosed_by Asserted~PlaceRef~[*]
         +coordinates Asserted~GeoCoordinates~?
@@ -645,7 +645,8 @@ Closed enums with a `Custom(String)` escape hatch unless noted (data-model §7).
 | `ParticipantRole` | Primary, Witness, Officiator, Clergy, Father, Mother, Parent, Child, Husband, Wife, Spouse, Godparent, Friend, Neighbour, Multiple, Bride, Groom, Custom |
 | `AssociationRole` | Clergy, Friend, Godparent, Neighbour, Officiator, Witness, Child, Father, Mother, Parent, Husband, Wife, Spouse, Multiple, Custom |
 | `ChildParentRelationship` | Birth, Adopted, Foster, Step, Sealed, Unknown, Custom |
-| `PlaceType` | Country, County, Municipality, Parish, City, Town, Village, Farm, Building, Custom |
+| `PlaceKind` (closed) | Administrative, Ecclesiastical, Judicial, Registration, Fiscal, Military, Manorial, Cadastral, Statistical, Settlement, Building, Natural |
+| `PlaceLevel` (closed) | Country, Adm1, Adm2, Adm3, Adm4, Adm5, Settlement, SubSettlement |
 | `RepositoryType` | Library, Archive, Church, Cemetery, Museum, Website, Collection, Custom |
 | `SourceMediaType` | Book, Card, Electronic, Fiche, Film, Magazine, Manuscript, Map, Newspaper, Photo, Tombstone, Video, Audio, Custom |
 | `NoteType` | General, Research, Transcript, Citation, Custom |

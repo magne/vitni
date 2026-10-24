@@ -13,7 +13,7 @@ use vitni_app::{
     create_source, set_media_mime, show_citation, show_event, show_family, show_person, show_place, show_source,
     update_person_media_ref, update_place_media_ref, update_source_media_ref,
 };
-use vitni_core::enums::{EventType, EvidenceLevel, PlaceType};
+use vitni_core::enums::{EventType, EvidenceLevel};
 use vitni_core::ids::AgentId;
 use vitni_core::provenance::{Agent, AgentKind};
 
@@ -376,7 +376,7 @@ async fn place_media_ref_gains_a_crop_through_the_update_use_case() {
         &session,
         NewPlace {
             human_id: None,
-            place_type: PlaceType::City,
+            place_type: vitni_app::std_statement("city").unwrap_or_default(),
             name: Some("Oslo".to_owned()),
         },
         Provenance::default(),

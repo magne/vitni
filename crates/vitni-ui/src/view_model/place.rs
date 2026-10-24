@@ -16,20 +16,24 @@ pub const SUCCESSION_KINDS: [vitni_app::SuccessionKind; 5] = [
     vitni_app::SuccessionKind::Renamed,
 ];
 
-/// The place types offered by every "new place" type picker (a common subset; the model has more) —
-/// the single list, so a place created from the Places category and a place created inline (an event's
-/// "+ New place" cascade) always offer the same choices.
-pub const NEW_PLACE_TYPES: [vitni_app::PlaceType; 9] = [
-    vitni_app::PlaceType::Country,
-    vitni_app::PlaceType::County,
-    vitni_app::PlaceType::Municipality,
-    vitni_app::PlaceType::Parish,
-    vitni_app::PlaceType::City,
-    vitni_app::PlaceType::Town,
-    vitni_app::PlaceType::Village,
-    vitni_app::PlaceType::Farm,
-    vitni_app::PlaceType::Building,
-];
+/// The `std` place types offered by every "new place" type picker (a common subset; the vocabulary has
+/// more) — the single list, so a place created from the Places category and a place created inline (an
+/// event's "+ New place" cascade) always offer the same choices.
+#[must_use]
+pub fn new_place_types() -> Vec<vitni_app::PlaceTypeStatement> {
+    const NAMES: [&str; 9] = [
+        "country",
+        "county",
+        "municipality",
+        "parish",
+        "city",
+        "town",
+        "village",
+        "farm",
+        "building",
+    ];
+    NAMES.iter().filter_map(|name| vitni_app::std_statement(name)).collect()
+}
 
 /// One asserted place name (Names tab): text, language, date, surety, and source count.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -174,8 +178,10 @@ pub struct PlaceDetail {
     pub id: String,
     /// The header title: the place's primary name (falls back to the `human_id`).
     pub title: String,
-    /// The place's raw type, if set (seeds the whole-record editor's Type select).
-    pub place_type: Option<vitni_app::PlaceType>,
+    /// The record's own current type statement, if stated (seeds the whole-record editor's Type select) —
+    /// never a merged member's, so an edit is not stamped with a member's date. [`Self::type_label`] is
+    /// the cluster's.
+    pub place_type: Option<vitni_app::PlaceTypeStatement>,
     /// The localized place-type label, if set.
     pub type_label: Option<String>,
     /// The place's coordinates rendered as `lat, long`, if asserted.
@@ -288,7 +294,7 @@ impl PlaceDetail {
         Self {
             human_id: summary.human_id.clone(),
             id: summary.id.clone(),
-            place_type: summary.place_type.clone(),
+            place_type: summary.own_place_type.clone(),
             type_label: summary.place_type.as_ref().map(|t| loc.place_type_label(t)),
             coordinates: summary.coordinates.clone(),
             map_point: map_point(summary.coordinates.as_deref(), &title),
@@ -471,11 +477,10 @@ pub fn place_row(summary: &vitni_app::PlaceSummary, loc: &Localizer) -> RowVm {
     }
 }
 
-/// The decorative avatar glyph for a place row, by type (a generic pin otherwise).
-fn place_avatar(place_type: Option<&vitni_app::PlaceType>) -> String {
-    use vitni_app::PlaceType;
-    match place_type {
-        Some(PlaceType::Parish) => "⛪",
+/// The decorative avatar glyph for a place row, by kind (a generic pin otherwise).
+fn place_avatar(place_type: Option<&vitni_app::PlaceTypeStatement>) -> String {
+    match place_type.and_then(|statement| statement.kind) {
+        Some(vitni_app::PlaceKind::Ecclesiastical) => "⛪",
         _ => "📍",
     }
     .to_owned()
@@ -517,7 +522,9 @@ pub fn place_tabs(detail: &PlaceDetail, loc: &Localizer) -> Vec<DetailTab> {
 }
 
 /// The default place type a fresh create draft starts with (matching the mockup's Type select).
-const DEFAULT_PLACE_TYPE: vitni_app::PlaceType = vitni_app::PlaceType::City;
+pub(crate) fn default_place_type() -> vitni_app::PlaceTypeStatement {
+    vitni_app::std_statement("city").unwrap_or_default()
+}
 
 /// The parse outcome of the coordinate pair (both-or-neither): unset, a parsed point, or invalid.
 enum Coordinates {
@@ -539,8 +546,8 @@ pub struct PlaceDraft {
     pub existing_human_id: Option<String>,
     /// The editable user-facing id; blank ⇒ generated on save (edit) / auto-allocated (create).
     pub human_id: String,
-    /// The place type (required).
-    pub place_type: vitni_app::PlaceType,
+    /// The place type: a create draft always holds one, an edit draft none for an untyped place.
+    pub place_type: Option<vitni_app::PlaceTypeStatement>,
     /// The place's primary name (create-only; on edit, names are the Names collection).
     pub name: String,
     /// The latitude as raw decimal-degree text.
@@ -559,7 +566,7 @@ impl Default for PlaceDraft {
         Self {
             existing_human_id: None,
             human_id: String::new(),
-            place_type: DEFAULT_PLACE_TYPE,
+            place_type: Some(default_place_type()),
             name: String::new(),
             latitude: String::new(),
             longitude: String::new(),
@@ -637,7 +644,7 @@ impl PlaceDraft {
         Self {
             existing_human_id: Some(detail.human_id.clone()),
             human_id: detail.human_id.clone(),
-            place_type: detail.place_type.clone().unwrap_or(DEFAULT_PLACE_TYPE),
+            place_type: detail.place_type.clone(),
             name: String::new(),
             latitude,
             longitude,
@@ -657,7 +664,7 @@ impl PlaceDraft {
         };
         Some(PlaceChangeSetRequest {
             human_id: non_blank(&self.human_id),
-            place_type: self.place_type.clone(),
+            place_type: self.place_type.clone().unwrap_or_default(),
             name: non_blank(&self.name),
             coordinates,
             code: non_blank(&self.code),
@@ -676,10 +683,21 @@ impl PlaceDraft {
             return Vec::new();
         };
         let mut edits = Vec::new();
-        if self.place_type != seed.place_type {
+        let seed_key = seed
+            .place_type
+            .as_ref()
+            .and_then(|statement| statement.type_key.as_ref());
+        if let Some(chosen) = &self.place_type
+            && chosen.type_key.as_ref() != seed_key
+        {
+            // Written at the seed's date, so the pick edits the current statement in place rather than
+            // adding an undated one that a dated current type outranks.
             edits.push(PlaceEdit::SetType {
                 human_id: human_id.clone(),
-                place_type: self.place_type.clone(),
+                place_type: vitni_app::PlaceTypeStatement {
+                    date: seed.place_type.as_ref().and_then(|statement| statement.date.clone()),
+                    ..chosen.clone()
+                },
             });
         }
         let coordinates_changed = self.latitude != seed.latitude || self.longitude != seed.longitude;
@@ -740,7 +758,7 @@ impl RecordDraft for PlaceDraft {
         }
         let draft = vitni_app::DraftRecord::Place {
             name: self.name.trim().to_owned(),
-            place_type: Some(self.place_type.clone()),
+            place_type: self.place_type.clone(),
         };
         (!draft.is_empty()).then_some(draft)
     }
@@ -798,13 +816,12 @@ mod place_draft_tests {
     use super::{PlaceDetail, PlaceDraft, RecordDraft};
     use crate::navigation::PlaceEdit;
     use crate::presentation::RestrictionKind;
-    use vitni_app::PlaceType;
 
     fn seed() -> PlaceDraft {
         PlaceDraft {
             existing_human_id: Some("P0001".to_owned()),
             human_id: "P0001".to_owned(),
-            place_type: PlaceType::City,
+            place_type: Some(vitni_app::std_statement("city").unwrap_or_default()),
             name: String::new(),
             latitude: "59.9".to_owned(),
             longitude: "10.7".to_owned(),
@@ -818,7 +835,7 @@ mod place_draft_tests {
             human_id: "P0090".to_owned(),
             id: "place-uuid".to_owned(),
             title: "Nordland".to_owned(),
-            place_type: Some(PlaceType::Country),
+            place_type: Some(vitni_app::std_statement("country").unwrap_or_default()),
             type_label: None,
             coordinates: None,
             map_point: None,
@@ -917,7 +934,7 @@ mod place_draft_tests {
     #[test]
     fn a_changed_type_and_code_each_yield_one_edit() {
         let draft = PlaceDraft {
-            place_type: PlaceType::Country,
+            place_type: Some(vitni_app::std_statement("country").unwrap_or_default()),
             code: "NO".to_owned(),
             ..seed()
         };
@@ -931,7 +948,7 @@ mod place_draft_tests {
     fn a_blank_human_id_regenerates_and_is_emitted_last() {
         let draft = PlaceDraft {
             human_id: String::new(),
-            place_type: PlaceType::Country,
+            place_type: Some(vitni_app::std_statement("country").unwrap_or_default()),
             ..seed()
         };
         let edits = draft.edits_against(&seed());
@@ -1435,6 +1452,7 @@ mod place_detail_events_tests {
             generated_title: "Nordgarden".to_owned(),
             resolved_name: Some("Nordgarden".to_owned()),
             resolved_as_of: None,
+            own_place_type: None,
             place_type: None,
             place_type_confidence: None,
             names: Vec::new(),
@@ -1511,5 +1529,143 @@ mod place_display_label_tests {
             ..PlaceDraft::new()
         };
         assert_eq!(draft.display_label(), None);
+    }
+}
+
+#[cfg(test)]
+mod place_type_statement_tests {
+    use super::{PlaceDetail, PlaceDraft, place_avatar};
+    use crate::navigation::PlaceEdit;
+    use vitni_app::place_vocabulary::std_statement;
+    use vitni_app::{DateParts, PlaceKind, PlaceLevel, PlaceTypeKey, PlaceTypeStatement, gregorian_date};
+
+    fn detail(place_type: Option<PlaceTypeStatement>) -> PlaceDetail {
+        PlaceDetail {
+            human_id: "P0090".to_owned(),
+            id: "place-uuid".to_owned(),
+            title: "Nordland".to_owned(),
+            place_type,
+            type_label: None,
+            coordinates: None,
+            map_point: None,
+            resolved_geometry: None,
+            geometries: Vec::new(),
+            coordinates_confidence: None,
+            coordinates_confidence_label: None,
+            coordinate_citations: Vec::new(),
+            code: None,
+            code_confidence: None,
+            code_confidence_label: None,
+            code_citations: Vec::new(),
+            names: Vec::new(),
+            hierarchy: Vec::new(),
+            predecessors: Vec::new(),
+            successors: Vec::new(),
+            events: Vec::new(),
+            citations: Vec::new(),
+            media: Vec::new(),
+            notes: Vec::new(),
+            tags: Vec::new(),
+            restrictions: Vec::new(),
+            research_notes: Vec::new(),
+            history: Vec::new(),
+        }
+    }
+
+    fn std_type(name: &str) -> PlaceTypeStatement {
+        std_statement(name).expect("a std row")
+    }
+
+    #[test]
+    fn an_untyped_place_seeds_a_draft_with_no_selection() {
+        let draft = PlaceDraft::from_detail(&detail(None));
+        assert_eq!(draft.place_type, None, "no City fallback on an untyped place");
+        assert_eq!(draft.edits_against(&draft.clone()).len(), 0);
+    }
+
+    #[test]
+    fn picking_city_on_an_untyped_place_emits_set_type_with_the_prefilled_statement() {
+        let seed = PlaceDraft::from_detail(&detail(None));
+        let draft = PlaceDraft {
+            place_type: Some(std_type("city")),
+            ..seed.clone()
+        };
+        let edits = draft.edits_against(&seed);
+        assert_eq!(edits.len(), 1, "{edits:?}");
+        let PlaceEdit::SetType { human_id, place_type } = &edits[0] else {
+            unreachable!("a type edit: {edits:?}");
+        };
+        assert_eq!(human_id, "P0090");
+        assert_eq!(place_type.kind, Some(PlaceKind::Settlement));
+        assert_eq!(place_type.level, Some(PlaceLevel::Settlement));
+        assert_eq!(place_type.type_key, Some(PlaceTypeKey::new("std:city").expect("key")));
+        assert_eq!(place_type.date, None);
+    }
+
+    #[test]
+    fn picking_a_type_over_a_dated_current_one_writes_at_that_date() {
+        let date = gregorian_date(DateParts {
+            year: 1964,
+            month: None,
+            day: None,
+        });
+        let current = PlaceTypeStatement {
+            date: Some(date.clone()),
+            ..std_type("town")
+        };
+        let seed = PlaceDraft::from_detail(&detail(Some(current)));
+        let draft = PlaceDraft {
+            place_type: Some(std_type("city")),
+            ..seed.clone()
+        };
+        let edits = draft.edits_against(&seed);
+        let [PlaceEdit::SetType { place_type, .. }] = edits.as_slice() else {
+            unreachable!("one type edit: {edits:?}");
+        };
+        assert_eq!(place_type.date, Some(date));
+        assert_eq!(place_type.type_key, Some(PlaceTypeKey::new("std:city").expect("key")));
+    }
+
+    #[test]
+    fn keeping_the_same_key_emits_no_type_edit() {
+        let seed = PlaceDraft::from_detail(&detail(Some(std_type("farm"))));
+        let draft = PlaceDraft {
+            code: "x".to_owned(),
+            ..seed.clone()
+        };
+        let edits = draft.edits_against(&seed);
+        assert!(
+            !edits.iter().any(|edit| matches!(edit, PlaceEdit::SetType { .. })),
+            "{edits:?}"
+        );
+    }
+
+    #[test]
+    fn a_create_draft_defaults_to_a_stated_type() {
+        let request = PlaceDraft::new().to_request().expect("a valid draft");
+        assert!(!request.place_type.is_empty());
+    }
+
+    #[test]
+    fn the_avatar_follows_the_kind_not_the_key() {
+        let church = PlaceTypeStatement {
+            kind: Some(PlaceKind::Ecclesiastical),
+            type_key: Some(PlaceTypeKey::new("no:prestegjeld").expect("key")),
+            ..PlaceTypeStatement::default()
+        };
+        assert_eq!(place_avatar(Some(&church)), "\u{26ea}");
+        let farm = std_type("farm");
+        assert_eq!(place_avatar(Some(&farm)), "\u{1f4cd}");
+        let key_only = PlaceTypeStatement {
+            kind: None,
+            level: None,
+            ..std_type("parish")
+        };
+        assert_eq!(
+            place_avatar(Some(&key_only)),
+            "\u{1f4cd}",
+            "no kind stated, so the generic pin"
+        );
+        assert_eq!(place_avatar(None), "\u{1f4cd}");
     }
 }

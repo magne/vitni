@@ -118,8 +118,8 @@ pub(crate) async fn citation_backs_counts(store: &Store) -> Result<HashMap<Citat
         for citation in view.citations() {
             bump(citation);
         }
-        if let Some(place_type) = view.asserted_place_type() {
-            for citation in place_type.citations.iter().filter_map(|e| e.as_citation()) {
+        for place_type in view.place_types_with_assertions() {
+            for citation in place_type.value.citations.iter().filter_map(|e| e.as_citation()) {
                 bump(citation);
             }
         }
@@ -280,8 +280,8 @@ async fn scan_places(
         for citation in view.citations() {
             push(map, citation, make(CitingContext::Record));
         }
-        if let Some(place_type) = view.asserted_place_type() {
-            for citation in place_type.citations.iter().filter_map(|e| e.as_citation()) {
+        for place_type in view.place_types_with_assertions() {
+            for citation in place_type.value.citations.iter().filter_map(|e| e.as_citation()) {
                 push(map, citation, make(CitingContext::PlaceType));
             }
         }

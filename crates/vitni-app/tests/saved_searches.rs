@@ -14,7 +14,7 @@ use vitni_app::{
     create_tag, delete_saved_search, list_persons_page, list_places_page, list_saved_searches, rename_saved_search,
     resolve_saved_search, resolve_saved_search_id, save_saved_search, tag_person, update_saved_search,
 };
-use vitni_core::enums::{EvidenceLevel, PlaceType};
+use vitni_core::enums::EvidenceLevel;
 use vitni_core::ids::AgentId;
 use vitni_core::provenance::{Agent, AgentKind};
 
@@ -465,7 +465,7 @@ async fn a_missing_record_in_an_is_clause_matches_nothing() {
     let (ws, store, dir) = workspace_with_store().await;
     let new = NewPlace {
         human_id: None,
-        place_type: PlaceType::Farm,
+        place_type: vitni_app::std_statement("farm").unwrap_or_default(),
         name: Some("Nordgard".to_owned()),
     };
     create_place(&ws, &session(), new, Provenance::default(), &[])
@@ -751,4 +751,25 @@ async fn a_clause_missing_its_column_or_operator_reports_none_not_an_empty_name(
     assert_eq!(first.stale[0].op.as_deref(), Some("contains"));
     assert_eq!(second.stale[0].column.as_deref(), Some("surname"));
     assert_eq!(second.stale[0].op, None);
+}
+
+#[tokio::test]
+async fn a_saved_place_type_choice_clause_is_stale_now_that_type_is_text() {
+    let (_ws, store, dir) = workspace_with_store().await;
+    write_search(
+        &dir,
+        1,
+        "Parishes",
+        "place",
+        "",
+        &clause("type", "is-any-of", &values(&["parish"])),
+    );
+
+    let resolution = resolve_saved_search(&store, "Parishes", Some(ListedKind::Place)).expect("resolve");
+
+    assert_eq!(resolution.stale.len(), 1, "{:?}", resolution.stale);
+    assert_eq!(resolution.stale[0].column.as_deref(), Some("type"));
+    assert_eq!(resolution.stale[0].op.as_deref(), Some("is-any-of"));
+    let error = saved_search_error(vitni_app::runnable_saved_query(&store, "Parishes", ListedKind::Place));
+    assert!(matches!(error, SavedSearchError::Broken { .. }), "{error:?}");
 }

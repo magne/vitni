@@ -4,6 +4,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::date::{GenealogicalDate, GenealogicalDateBody};
+use crate::place::PlaceError;
 
 /// What sort of structure a place is (ADR 0031 §3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -195,6 +196,24 @@ impl PlaceTypeStatement {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.kind.is_none() && self.level.is_none() && self.type_key.is_none()
+    }
+
+    /// Checks the statement against the domain rules every writer shares: a date must state a kind, a level
+    /// or a key, and must be a calendar date, not free text, which has no sort value to resolve or supersede
+    /// by (ADR 0054).
+    ///
+    /// # Errors
+    ///
+    /// [`PlaceError::EmptyPlaceType`] for a date with nothing stated, [`PlaceError::TextOnlyPlaceTypeDate`]
+    /// for a free-text date.
+    pub fn validate(&self) -> Result<(), PlaceError> {
+        if self.date.is_some() && self.is_empty() {
+            return Err(PlaceError::EmptyPlaceType);
+        }
+        if self.has_text_only_date() {
+            return Err(PlaceError::TextOnlyPlaceTypeDate);
+        }
+        Ok(())
     }
 
     /// The date's `sort_value`, by which two statements count as stated at the same date (ADR 0054).

@@ -16,7 +16,7 @@ use vitni_app::{
     create_tag, distinguish_persons, find_similar, find_similar_to_draft, link_place, merge_persons, run_checks,
     set_title, similar_pairs, undo_assertion,
 };
-use vitni_core::enums::{EventType, EvidenceLevel, ParticipantRole, PlaceType, Sex};
+use vitni_core::enums::{EventType, EvidenceLevel, ParticipantRole, Sex};
 use vitni_core::ids::AgentId;
 use vitni_core::provenance::{Agent, AgentKind};
 
@@ -314,7 +314,7 @@ async fn a_renamed_place_moves_its_events_to_the_new_name() {
     for name in ["Nordaas", "Bergen"] {
         let place = NewPlace {
             human_id: None,
-            place_type: PlaceType::Farm,
+            place_type: vitni_app::std_statement("farm").unwrap_or_default(),
             name: Some(name.to_owned()),
         };
         let place = create_place(ws, session, place, Provenance::default(), &[])
@@ -498,7 +498,7 @@ async fn places_sources_and_tags_are_found_by_their_own_keys() {
     let records = Records::new().await;
     let place = |name: &str| NewPlace {
         human_id: None,
-        place_type: PlaceType::Farm,
+        place_type: vitni_app::std_statement("farm").unwrap_or_default(),
         name: Some(name.to_owned()),
     };
     let (ws, session) = (&records.workspace, &records.session);
@@ -550,7 +550,7 @@ async fn the_duplicate_check_reports_a_place_pair_with_the_engines_evidence() {
     let records = Records::new().await;
     let place = |name: &str| NewPlace {
         human_id: None,
-        place_type: PlaceType::Farm,
+        place_type: vitni_app::std_statement("farm").unwrap_or_default(),
         name: Some(name.to_owned()),
     };
     let (ws, session) = (&records.workspace, &records.session);
@@ -592,7 +592,7 @@ async fn the_duplicate_check_ranks_pairs_across_kinds() {
     records.born("Ole", "Olsen", 1856).await;
     let place = |name: &str| NewPlace {
         human_id: None,
-        place_type: PlaceType::Farm,
+        place_type: vitni_app::std_statement("farm").unwrap_or_default(),
         name: Some(name.to_owned()),
     };
     let (ws, session) = (&records.workspace, &records.session);
@@ -892,7 +892,7 @@ async fn place_source_and_repository_drafts_find_their_kind() {
         session,
         NewPlace {
             human_id: None,
-            place_type: PlaceType::Farm,
+            place_type: vitni_app::std_statement("farm").unwrap_or_default(),
             name: Some("Nordaas".to_owned()),
         },
         Provenance::default(),
@@ -927,7 +927,7 @@ async fn place_source_and_repository_drafts_find_their_kind() {
 
     let place = DraftRecord::Place {
         name: "Nordås".to_owned(),
-        place_type: Some(PlaceType::Farm),
+        place_type: Some(vitni_app::std_statement("farm").unwrap_or_default()),
     };
     assert_eq!(similar_to_draft(&records, &place).await, [nordaas]);
     let source = DraftRecord::Source {

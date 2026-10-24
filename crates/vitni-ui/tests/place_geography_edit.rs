@@ -10,7 +10,7 @@ use std::str::FromStr;
 use uuid::Uuid;
 use vitni_app::{
     Agent, AgentId, AgentKind, AppDefaults, ChangeLogEntry, Confidence, GeoCoordinates, Microdegrees, NewPlace,
-    OperatorConfig, PlaceGeometry, PlaceType, Provenance, Session, Workspace, WorkspaceDefaults, change_log_for_place,
+    OperatorConfig, PlaceGeometry, Provenance, Session, Workspace, WorkspaceDefaults, change_log_for_place,
     create_place, show_place, show_place_as_of, year_only_date,
 };
 use vitni_ui::{ConfidenceLevel, PlaceEdit, ProvenanceDraft, dispatch_place_edit};
@@ -63,7 +63,7 @@ async fn a_map_click_to_drop_a_point_lands_a_geometry_asserted_event_with_proven
         &session,
         NewPlace {
             human_id: None,
-            place_type: PlaceType::Farm,
+            place_type: vitni_app::std_statement("farm").unwrap_or_default(),
             name: Some("Nordgarden".to_owned()),
         },
         Provenance::default(),
@@ -115,7 +115,7 @@ async fn a_dated_map_edit_resolves_only_from_its_year_onward() {
         &session,
         NewPlace {
             human_id: None,
-            place_type: PlaceType::Parish,
+            place_type: vitni_app::std_statement("parish").unwrap_or_default(),
             name: Some("Vågå".to_owned()),
         },
         Provenance::default(),

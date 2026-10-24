@@ -115,7 +115,7 @@ const EVENT: &[ListColumn] = &[
 ];
 const PLACE: &[ListColumn] = &[
     column("name", ColumnType::Text),
-    column("type", ColumnType::Choice),
+    column("type", ColumnType::Text),
     column("enclosed-by", ColumnType::Record),
     TAGS,
 ];

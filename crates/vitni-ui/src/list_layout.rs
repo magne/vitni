@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 use std::hash::BuildHasher;
 
-use vitni_app::{ColumnType, ListCell, ListPreferences, ListQuery, ListSort, ListedKind, SortDirection};
+use vitni_app::{ColumnType, ListCell, ListPreferences, ListQuery, ListSort, ListedKind, PlaceTypeKey, SortDirection};
 
 use crate::i18n::Localizer;
 use crate::view_model::choice_options;
@@ -233,6 +233,14 @@ pub fn cells_line<S: BuildHasher>(
     (!parts.is_empty()).then(|| parts.join(" · "))
 }
 
+/// The label of a choice column's `key`, the key itself when no option carries it.
+fn choice_label(loc: &Localizer, kind: ListedKind, column: &str, key: &str) -> String {
+    choice_options(loc, kind, column)
+        .into_iter()
+        .find(|option| option.key == key)
+        .map_or_else(|| key.to_owned(), |option| option.label)
+}
+
 /// One cell as a row shows it; `None` when it has nothing to show. A number reads with its column's
 /// label (`Children 3`), which a bare figure would not tell.
 fn cell_text<S: BuildHasher>(
@@ -243,13 +251,11 @@ fn cell_text<S: BuildHasher>(
     tags: &HashMap<String, String, S>,
 ) -> Option<String> {
     let text = match cell {
+        ListCell::Text(text) if kind == ListedKind::Place && column == "type" => place_type_cell(loc, text.trim()),
         ListCell::Text(text) => text.trim().to_owned(),
         ListCell::Date(date) => loc.date(date),
         ListCell::Number(number) => loc.list_number_cell(&loc.list_column_label(column), &number.to_string()),
-        ListCell::Choice(key) => choice_options(loc, kind, column)
-            .into_iter()
-            .find(|option| option.key == *key)
-            .map_or_else(|| key.clone(), |option| option.label),
+        ListCell::Choice(key) => choice_label(loc, kind, column, key),
         ListCell::Tags(ids) => {
             let mut names = Vec::with_capacity(ids.len());
             for id in ids {
@@ -260,6 +266,15 @@ fn cell_text<S: BuildHasher>(
         ListCell::Record { title, .. } => title.clone().unwrap_or_default(),
     };
     (!text.is_empty()).then_some(text)
+}
+
+/// A place's `type` cell: its key's label for a `std` or `custom:` key, any other key as itself, so a key
+/// never reads as a bare `std:farm` (ADR 0031 §4).
+fn place_type_cell(loc: &Localizer, key: &str) -> String {
+    PlaceTypeKey::new(key)
+        .ok()
+        .and_then(|key| loc.place_key_label(&key))
+        .unwrap_or_else(|| key.to_owned())
 }
 
 #[cfg(test)]
@@ -477,6 +492,31 @@ mod tests {
         assert_eq!(
             cells_line(&loc(), ListedKind::Person, &columns, &[None, None], &tags),
             None
+        );
+    }
+
+    #[test]
+    fn the_place_type_cell_shows_the_keys_label_and_never_a_bare_std_key() {
+        let tags = HashMap::new();
+        let line = |loc: &Localizer, key: &str| {
+            cells_line(
+                loc,
+                ListedKind::Place,
+                &ids(&["type"]),
+                &[Some(ListCell::Text(key.to_owned()))],
+                &tags,
+            )
+        };
+        assert_eq!(line(&loc(), "std:farm").as_deref(), Some("Farm"));
+        assert_eq!(
+            line(&Localizer::for_test("no"), "std:farm").as_deref(),
+            Some("G\u{e5}rd")
+        );
+        assert_eq!(line(&loc(), "custom:Sokn").as_deref(), Some("Sokn"));
+        assert_eq!(
+            line(&loc(), "no:prestegjeld").as_deref(),
+            Some("no:prestegjeld"),
+            "another namespace shows its key, not kind and key"
         );
     }
 

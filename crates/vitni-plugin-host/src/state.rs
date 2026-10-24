@@ -20,14 +20,14 @@ use vitni_app::{
     Address, Age, AgeBound, AiConfig, AssociationRole, Attribute, Calendar, Confidence, DateInput, DateModifier,
     DatePoint, DateQuality, ExternalId, FactType, FileDate, GenealogicalDate, GenealogicalDateBody, MediaRefInput,
     MediaRefSummary, MutationMeta, NameType, NewCitation, NewEvent, NewMedia, NewNote, NewParticipation, NewPerson,
-    NewPlace, NewSource, PersonName, PersonNameParts, Provenance, RecordGraph, Rect, RepositoryLinkRef, Session,
-    Workspace, build_genealogical_date,
+    NewPlace, NewSource, PersonName, PersonNameParts, PlaceKind, PlaceLevel, PlaceTypeKey, PlaceTypeStatement,
+    Provenance, RecordGraph, Rect, RepositoryLinkRef, Session, Workspace, build_genealogical_date,
 };
 use vitni_app::{AppError, ChosenDataset, DatasetChoice, choose_dataset, dataset_required, propose_dataset};
 use vitni_core::enums::{
-    ChildParentRelationship, EventType, EvidenceLevel, NoteType, ParticipantRole, PlaceType, Restriction, Sex,
-    SourceMediaType,
+    ChildParentRelationship, EventType, EvidenceLevel, NoteType, ParticipantRole, Restriction, Sex, SourceMediaType,
 };
+use vitni_core::place::PlaceError;
 use wasmtime::StoreLimits;
 use wasmtime::component::ResourceTable;
 use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
@@ -435,8 +435,8 @@ impl commands::Host for HostState {
             &self.session,
             NewPlace {
                 human_id: None,
-                // GEDCOM `PLAC` carries no granularity; record it as a custom type.
-                place_type: vitni_app::unstated_place_type(),
+                // GEDCOM `PLAC` carries no granularity.
+                place_type: PlaceTypeStatement::default(),
                 name: Some(name),
             },
             self.provenance(),
@@ -861,15 +861,19 @@ impl commands::Host for HostState {
         place_type: types::PlaceType,
     ) -> Result<(), types::CapabilityError> {
         self.begin_write()?;
-        vitni_app::set_place_type(
-            &self.workspace,
-            &self.session,
-            &place,
-            to_place_type(place_type),
-            self.mutation_meta(),
-        )
-        .await
-        .map_err(|error| to_capability_error(&error))
+        let statement = to_place_type(place_type)
+            .map_err(|why| format!("place {place}: {why}"))
+            .and_then(|statement| {
+                if statement.is_empty() {
+                    Err(format!("place {place}: {}", PlaceError::EmptyPlaceType))
+                } else {
+                    Ok(statement)
+                }
+            })
+            .map_err(types::CapabilityError::InvalidInput)?;
+        vitni_app::set_place_type(&self.workspace, &self.session, &place, statement, self.mutation_meta())
+            .await
+            .map_err(|error| to_capability_error(&error))
     }
 
     async fn set_place_enclosed_by(&mut self, place: String, enclosing: String) -> Result<(), types::CapabilityError> {
@@ -2034,35 +2038,96 @@ fn from_note_type(note_type: NoteType) -> types::NoteType {
     }
 }
 
-/// Maps the WIT `place-type` variant onto the domain [`PlaceType`].
-pub(crate) fn to_place_type(place_type: types::PlaceType) -> PlaceType {
-    match place_type {
-        types::PlaceType::Country => PlaceType::Country,
-        types::PlaceType::County => PlaceType::County,
-        types::PlaceType::Municipality => PlaceType::Municipality,
-        types::PlaceType::Parish => PlaceType::Parish,
-        types::PlaceType::City => PlaceType::City,
-        types::PlaceType::Town => PlaceType::Town,
-        types::PlaceType::Village => PlaceType::Village,
-        types::PlaceType::Farm => PlaceType::Farm,
-        types::PlaceType::Building => PlaceType::Building,
-        types::PlaceType::Custom(value) => PlaceType::Custom(value),
+/// Maps the WIT `place-type` record onto a domain statement, filled from the `std` table when it names
+/// only a `std` key. An empty record is an empty statement, which the caller decides how to treat.
+///
+/// # Errors
+///
+/// A message when the key is malformed or the statement fails [`PlaceTypeStatement::validate`].
+pub(crate) fn to_place_type(record: types::PlaceType) -> Result<PlaceTypeStatement, String> {
+    let type_key = record
+        .type_key
+        .as_deref()
+        .map(PlaceTypeKey::new)
+        .transpose()
+        .map_err(|error| error.to_string())?;
+    let statement = PlaceTypeStatement {
+        kind: record.kind.map(to_place_kind),
+        level: record.level.map(to_place_level),
+        type_key,
+        date: record.date.map(to_genealogical_date),
+    };
+    statement.validate().map_err(|error| error.to_string())?;
+    Ok(vitni_app::prefill_from_std(statement))
+}
+
+/// Maps a domain statement back onto the WIT `place-type` record.
+pub(crate) fn from_place_type(statement: PlaceTypeStatement) -> types::PlaceType {
+    types::PlaceType {
+        kind: statement.kind.map(from_place_kind),
+        level: statement.level.map(from_place_level),
+        type_key: statement.type_key.map(String::from),
+        date: statement.date.as_ref().map(from_genealogical_date),
     }
 }
 
-/// Maps the domain [`PlaceType`] back onto the WIT `place-type` variant.
-pub(crate) fn from_place_type(place_type: PlaceType) -> types::PlaceType {
-    match place_type {
-        PlaceType::Country => types::PlaceType::Country,
-        PlaceType::County => types::PlaceType::County,
-        PlaceType::Municipality => types::PlaceType::Municipality,
-        PlaceType::Parish => types::PlaceType::Parish,
-        PlaceType::City => types::PlaceType::City,
-        PlaceType::Town => types::PlaceType::Town,
-        PlaceType::Village => types::PlaceType::Village,
-        PlaceType::Farm => types::PlaceType::Farm,
-        PlaceType::Building => types::PlaceType::Building,
-        PlaceType::Custom(value) => types::PlaceType::Custom(value),
+fn to_place_kind(kind: types::PlaceKind) -> PlaceKind {
+    match kind {
+        types::PlaceKind::Administrative => PlaceKind::Administrative,
+        types::PlaceKind::Ecclesiastical => PlaceKind::Ecclesiastical,
+        types::PlaceKind::Judicial => PlaceKind::Judicial,
+        types::PlaceKind::Registration => PlaceKind::Registration,
+        types::PlaceKind::Fiscal => PlaceKind::Fiscal,
+        types::PlaceKind::Military => PlaceKind::Military,
+        types::PlaceKind::Manorial => PlaceKind::Manorial,
+        types::PlaceKind::Cadastral => PlaceKind::Cadastral,
+        types::PlaceKind::Statistical => PlaceKind::Statistical,
+        types::PlaceKind::Settlement => PlaceKind::Settlement,
+        types::PlaceKind::Building => PlaceKind::Building,
+        types::PlaceKind::Natural => PlaceKind::Natural,
+    }
+}
+
+fn from_place_kind(kind: PlaceKind) -> types::PlaceKind {
+    match kind {
+        PlaceKind::Administrative => types::PlaceKind::Administrative,
+        PlaceKind::Ecclesiastical => types::PlaceKind::Ecclesiastical,
+        PlaceKind::Judicial => types::PlaceKind::Judicial,
+        PlaceKind::Registration => types::PlaceKind::Registration,
+        PlaceKind::Fiscal => types::PlaceKind::Fiscal,
+        PlaceKind::Military => types::PlaceKind::Military,
+        PlaceKind::Manorial => types::PlaceKind::Manorial,
+        PlaceKind::Cadastral => types::PlaceKind::Cadastral,
+        PlaceKind::Statistical => types::PlaceKind::Statistical,
+        PlaceKind::Settlement => types::PlaceKind::Settlement,
+        PlaceKind::Building => types::PlaceKind::Building,
+        PlaceKind::Natural => types::PlaceKind::Natural,
+    }
+}
+
+fn to_place_level(level: types::PlaceLevel) -> PlaceLevel {
+    match level {
+        types::PlaceLevel::Country => PlaceLevel::Country,
+        types::PlaceLevel::Adm1 => PlaceLevel::Adm1,
+        types::PlaceLevel::Adm2 => PlaceLevel::Adm2,
+        types::PlaceLevel::Adm3 => PlaceLevel::Adm3,
+        types::PlaceLevel::Adm4 => PlaceLevel::Adm4,
+        types::PlaceLevel::Adm5 => PlaceLevel::Adm5,
+        types::PlaceLevel::Settlement => PlaceLevel::Settlement,
+        types::PlaceLevel::SubSettlement => PlaceLevel::SubSettlement,
+    }
+}
+
+fn from_place_level(level: PlaceLevel) -> types::PlaceLevel {
+    match level {
+        PlaceLevel::Country => types::PlaceLevel::Country,
+        PlaceLevel::Adm1 => types::PlaceLevel::Adm1,
+        PlaceLevel::Adm2 => types::PlaceLevel::Adm2,
+        PlaceLevel::Adm3 => types::PlaceLevel::Adm3,
+        PlaceLevel::Adm4 => types::PlaceLevel::Adm4,
+        PlaceLevel::Adm5 => types::PlaceLevel::Adm5,
+        PlaceLevel::Settlement => types::PlaceLevel::Settlement,
+        PlaceLevel::SubSettlement => types::PlaceLevel::SubSettlement,
     }
 }
 
@@ -2468,6 +2533,77 @@ mod tests {
     /// Seeds a record through `commands`, returning its `human_id`.
     fn created(result: Result<types::ImportResult, types::CapabilityError>) -> String {
         result.expect("seed record").human_id
+    }
+
+    fn record(kind: bool, key: Option<&str>, date: Option<types::GenealogicalDate>) -> types::PlaceType {
+        types::PlaceType {
+            kind: kind.then_some(types::PlaceKind::Settlement),
+            level: None,
+            type_key: key.map(str::to_owned),
+            date,
+        }
+    }
+
+    fn date(modifier: types::DateModifier) -> types::GenealogicalDate {
+        types::GenealogicalDate {
+            calendar: types::DateCalendar::Gregorian,
+            quality: types::DateQuality::Normal,
+            modifier,
+            new_year_begins: None,
+            original_text: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn set_place_type_refuses_an_empty_dated_only_or_text_dated_record() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let mut host = low_template_host(&dir).await;
+        let place = commands::Host::create_place(&mut host, "Haugen".to_owned())
+            .await
+            .expect("place");
+        let exact = date(types::DateModifier::Exact(types::DatePoint {
+            year: Some(1838),
+            month: None,
+            day: None,
+        }));
+        let refused = [
+            record(false, None, None),
+            record(false, None, Some(exact)),
+            record(
+                true,
+                Some("std:farm"),
+                Some(date(types::DateModifier::TextOnly("long ago".to_owned()))),
+            ),
+            record(true, Some("farm"), None),
+        ];
+        for refused in refused {
+            let result = commands::Host::set_place_type(&mut host, place.clone(), refused).await;
+            let Err(types::CapabilityError::InvalidInput(message)) = result else {
+                panic!("expected InvalidInput, got {result:?}");
+            };
+            assert!(
+                message.contains(&format!("place {place}")),
+                "the message names the place: {message}"
+            );
+        }
+        let kept = record(true, Some("std:farm"), None);
+        commands::Host::set_place_type(&mut host, place, kept)
+            .await
+            .expect("a stated record is accepted");
+    }
+
+    #[tokio::test]
+    async fn a_place_created_through_the_host_has_no_type_and_a_set_type_is_the_only_one() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let mut host = low_template_host(&dir).await;
+        let place = commands::Host::create_place(&mut host, "Haugen".to_owned())
+            .await
+            .expect("place");
+        let summary = vitni_app::show_place(&host.workspace, &place)
+            .await
+            .expect("show")
+            .expect("place");
+        assert_eq!(summary.place_type, None, "GEDCOM PLAC states no granularity");
     }
 
     #[tokio::test]

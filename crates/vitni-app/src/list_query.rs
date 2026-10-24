@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use vitni_core::date::{DateModifier, DatePoint, GenealogicalDate, GenealogicalDateBody};
 use vitni_core::dna::{DnaProvider, DnaTestType};
 use vitni_core::dna_match::MatchStatus;
-use vitni_core::enums::{EventType, NoteType, PlaceType, RepositoryType, Sex};
+use vitni_core::enums::{EventType, NoteType, RepositoryType, Sex};
 use vitni_core::provenance::Confidence;
 use vitni_db::{
     ColumnType, ListCell, ListColumn, ListPage, ListPredicate, ListResult, ListSpec, ListTest, ListWindow, ListedKind,
@@ -699,7 +699,6 @@ fn is_choice(kind: ListedKind, column: &str, key: &str) -> bool {
     match (kind, column) {
         (ListedKind::Person, "sex") => names::<Sex>(key),
         (ListedKind::Event, "type") => names::<EventType>(key),
-        (ListedKind::Place, "type") => names::<PlaceType>(key),
         (ListedKind::Citation, "confidence") => names::<Confidence>(key),
         (ListedKind::Repository, "type") => names::<RepositoryType>(key),
         (ListedKind::Note, "type") => names::<NoteType>(key),

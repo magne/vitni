@@ -36,7 +36,7 @@ use vitni_app::{
     run_checks, workspace_counts,
 };
 use vitni_core::date::{Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody};
-use vitni_core::enums::{EventType, EvidenceLevel, ParticipantRole, PlaceType, Sex};
+use vitni_core::enums::{EventType, EvidenceLevel, ParticipantRole, Sex};
 use vitni_core::event::command::EventCommand;
 use vitni_core::event::{EventRefs, EventState};
 use vitni_core::ids::{AgentId, AssertionId, EventId, HumanId, PersonId, PlaceId};
@@ -321,7 +321,7 @@ fn country_rows(counter: &mut u128) -> Vec<RawEvent> {
         PlaceCommand::CreatePlace {
             place_id,
             human_id: HumanId::new("P0000001"),
-            place_type: PlaceType::Country,
+            type_statement: vitni_app::std_statement("country").unwrap_or_default(),
         },
         PlaceCommand::AssertName {
             place_id,

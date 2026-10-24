@@ -196,12 +196,12 @@ fn creating_a_likely_duplicate_hints_at_the_stored_record_on_stderr() {
         );
 
     vitni(dir.path())
-        .args(["place", "create", "--type", "farm", "--name", "Nordaas"])
+        .args(["place", "create", "--type", "std:farm", "--name", "Nordaas"])
         .assert()
         .success()
         .stderr(predicate::str::is_empty());
     vitni(dir.path())
-        .args(["place", "create", "--type", "farm", "--name", "Nordås"])
+        .args(["place", "create", "--type", "std:farm", "--name", "Nordås"])
         .assert()
         .success()
         .stderr(predicate::str::contains("vitni match show place P0002 P0001"));
@@ -246,7 +246,7 @@ fn place_create_show_list_round_trip() {
     init(dir.path());
 
     vitni(dir.path())
-        .args(["place", "create", "--type", "parish", "--name", "Vågå"])
+        .args(["place", "create", "--type", "std:parish", "--name", "Vågå"])
         .assert()
         .success()
         .stdout(predicate::str::contains("Created P0001"));
@@ -385,7 +385,7 @@ fn event_create_link_place_and_participation_round_trip() {
     init(dir.path());
 
     vitni(dir.path())
-        .args(["place", "create", "--type", "parish", "--name", "Vågå"])
+        .args(["place", "create", "--type", "std:parish", "--name", "Vågå"])
         .assert()
         .success();
     vitni(dir.path())
@@ -549,7 +549,7 @@ fn place_aggregate_ids_are_independent_of_persons() {
         .success()
         .stdout(predicate::str::contains("Created I0001"));
     vitni(dir.path())
-        .args(["place", "create", "--type", "farm"])
+        .args(["place", "create", "--type", "std:farm"])
         .assert()
         .success()
         .stdout(predicate::str::contains("Created P0001"));
@@ -565,7 +565,7 @@ fn place_assert_succession_merges_two_municipalities_into_one() {
 
     for name in ["Aker", "Kristiania", "Oslo"] {
         vitni(dir.path())
-            .args(["place", "create", "--type", "municipality", "--name", name])
+            .args(["place", "create", "--type", "std:municipality", "--name", name])
             .assert()
             .success();
     }
@@ -597,7 +597,7 @@ fn place_assert_succession_splits_one_county_into_two() {
 
     for name in ["Old County", "North County", "South County"] {
         vitni(dir.path())
-            .args(["place", "create", "--type", "county", "--name", name])
+            .args(["place", "create", "--type", "std:county", "--name", name])
             .assert()
             .success();
     }
@@ -625,7 +625,7 @@ fn place_assert_succession_to_an_unknown_place_fails() {
     init(dir.path());
 
     vitni(dir.path())
-        .args(["place", "create", "--type", "parish", "--name", "Vågå"])
+        .args(["place", "create", "--type", "std:parish", "--name", "Vågå"])
         .assert()
         .success();
 
@@ -1243,7 +1243,7 @@ fn try_create_restrictable(dir: &Path, aggregate: &str) -> Option<String> {
     let id = match aggregate {
         "person" => create_record(dir, &["person", "create", "--given", "Ada"]),
         "family" => create_record(dir, &["family", "create"]),
-        "place" => create_record(dir, &["place", "create", "--type", "farm", "--name", "Nordås"]),
+        "place" => create_record(dir, &["place", "create", "--type", "std:farm", "--name", "Nordås"]),
         "source" => create_record(dir, &["source", "create", "--title", "Folketelling 1801"]),
         "citation" => {
             let source = create_record(dir, &["source", "create", "--title", "Parish register"]);
@@ -1659,4 +1659,150 @@ fn a_list_filter_takes_a_tag_by_name_and_a_record_by_its_human_id() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("P0999"));
+}
+
+const STD_PLACE_TYPES: [(&str, &str, &str); 20] = [
+    ("country", "country", "land"),
+    ("state", "state", "delstat"),
+    ("county", "county", "grevskap"),
+    ("city", "city", "by"),
+    ("parish", "parish", "sogn"),
+    ("locality", "locality", "lokalitet"),
+    ("street", "street", "gate"),
+    ("province", "province", "provins"),
+    ("region", "region", "region"),
+    ("department", "department", "departement"),
+    ("neighborhood", "neighborhood", "nabolag"),
+    ("district", "district", "distrikt"),
+    ("borough", "borough", "bydel"),
+    ("municipality", "municipality", "kommune"),
+    ("town", "town", "tettsted"),
+    ("village", "village", "landsby"),
+    ("hamlet", "hamlet", "grend"),
+    ("farm", "farm", "gård"),
+    ("building", "building", "bygning"),
+    ("number", "number", "nummer"),
+];
+
+fn create_typed_places(dir: &Path) {
+    for (n, (name, _, _)) in STD_PLACE_TYPES.iter().enumerate() {
+        let key = format!("std:{name}");
+        vitni(dir)
+            .args(["place", "create", "--type", &key, "--name", &format!("Place {n:02}")])
+            .assert()
+            .success();
+    }
+}
+
+#[test]
+fn place_type_is_a_vocabulary_key_and_each_std_key_lists_in_english() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    create_typed_places(dir.path());
+
+    let listed = vitni(dir.path()).args(["place", "list"]).output().unwrap();
+    let listed = String::from_utf8(listed.stdout).unwrap();
+    for (n, (_, english, _)) in STD_PLACE_TYPES.iter().enumerate() {
+        let line = listed
+            .lines()
+            .find(|line| line.contains(&format!("Place {n:02}")))
+            .unwrap();
+        assert!(line.contains(&format!("type: {english}")), "{line}");
+    }
+}
+
+#[test]
+fn each_std_key_lists_in_norwegian_when_the_ui_language_is() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    create_typed_places(dir.path());
+    set_ui_language_norwegian(dir.path());
+
+    let listed = vitni(dir.path()).args(["place", "list"]).output().unwrap();
+    let listed = String::from_utf8(listed.stdout).unwrap();
+    for (n, (_, _, norwegian)) in STD_PLACE_TYPES.iter().enumerate() {
+        let line = listed
+            .lines()
+            .find(|line| line.contains(&format!("Place {n:02}")))
+            .unwrap();
+        assert!(line.contains(&format!("type: {norwegian}")), "{line}");
+    }
+}
+
+#[test]
+fn a_custom_key_shows_its_text_as_typed_and_another_namespace_shows_its_key() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    vitni(dir.path())
+        .args(["place", "create", "--type", "custom:Sokn", "--name", "Vågå"])
+        .assert()
+        .success();
+    vitni(dir.path())
+        .args(["place", "create", "--type", "no:prestegjeld", "--name", "Fana"])
+        .assert()
+        .success();
+
+    vitni(dir.path())
+        .args(["place", "show", "P0001"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("type: Sokn").and(predicate::str::contains("custom:").not()));
+    vitni(dir.path())
+        .args(["place", "show", "P0002"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("type: no:prestegjeld"));
+}
+
+#[test]
+fn a_bare_word_is_not_a_place_type_key() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+
+    vitni(dir.path())
+        .args(["place", "create", "--type", "farm", "--name", "Nordaas"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("farm"));
+    vitni(dir.path())
+        .args(["place", "list"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Nordaas").not());
+
+    vitni(dir.path())
+        .args(["place", "create", "--name", "Haugen"])
+        .assert()
+        .success();
+    vitni(dir.path())
+        .args(["place", "set-type", "P0001", "--type", "parish"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("parish"));
+}
+
+#[test]
+fn a_place_created_without_a_type_has_none_and_set_type_gives_it_one() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    vitni(dir.path())
+        .args(["place", "create", "--name", "Fana"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Created P0001"));
+    vitni(dir.path())
+        .args(["place", "list"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("type: -"));
+
+    vitni(dir.path())
+        .args(["place", "set-type", "P0001", "--type", "std:parish"])
+        .assert()
+        .success();
+    vitni(dir.path())
+        .args(["place", "show", "P0001"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("type: parish"));
 }

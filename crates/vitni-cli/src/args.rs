@@ -9,9 +9,9 @@ use clap::{Args, ValueEnum};
 use vitni_app::{
     AppError, ChildParentRelationship, ChromosomeSide, ColumnType, Confidence, DnaGenomeBuild, DnaProvider,
     DnaTestType, EventType, EvidenceKind, FileConfigStore, FilterOp, FilterValue, GenealogicalDate, InformationKind,
-    ListFilter, ListPage, ListQuery, ListQueryError, ListSort, ListedKind, NoteType, ParticipantRole, PlaceType,
-    RepositoryType, Restriction, SortDirection, SourceMediaType, SourceQuality, SuccessionKind, Workspace,
-    gregorian_date, reference_id, runnable_saved_query,
+    ListFilter, ListPage, ListQuery, ListQueryError, ListSort, ListedKind, NoteType, ParticipantRole, RepositoryType,
+    Restriction, SortDirection, SourceMediaType, SourceQuality, SuccessionKind, Workspace, gregorian_date,
+    reference_id, runnable_saved_query,
 };
 use vitni_core::enums::EvidenceLevel;
 
@@ -260,46 +260,6 @@ impl From<RelationshipArg> for ChildParentRelationship {
             RelationshipArg::Step => Self::Step,
             RelationshipArg::Sealed => Self::Sealed,
             RelationshipArg::Unknown => Self::Unknown,
-        }
-    }
-}
-
-// ADR 0031 §3 replaces `PlaceType`, and with it this mirror, by a kind, a level and a vocabulary key.
-/// CLI mirror of [`PlaceType`]'s closed variants. The domain's `Custom` escape is not exposed yet.
-#[derive(Clone, Copy, ValueEnum)]
-pub enum PlaceTypeArg {
-    /// A country.
-    Country,
-    /// A county-like division, whose level varies by country.
-    County,
-    /// A municipality / kommune.
-    Municipality,
-    /// An ecclesiastical parish.
-    Parish,
-    /// A city.
-    City,
-    /// A town.
-    Town,
-    /// A village.
-    Village,
-    /// A farm / gård.
-    Farm,
-    /// A single building.
-    Building,
-}
-
-impl From<PlaceTypeArg> for PlaceType {
-    fn from(value: PlaceTypeArg) -> Self {
-        match value {
-            PlaceTypeArg::Country => Self::Country,
-            PlaceTypeArg::County => Self::County,
-            PlaceTypeArg::Municipality => Self::Municipality,
-            PlaceTypeArg::Parish => Self::Parish,
-            PlaceTypeArg::City => Self::City,
-            PlaceTypeArg::Town => Self::Town,
-            PlaceTypeArg::Village => Self::Village,
-            PlaceTypeArg::Farm => Self::Farm,
-            PlaceTypeArg::Building => Self::Building,
         }
     }
 }

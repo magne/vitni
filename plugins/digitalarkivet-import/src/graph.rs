@@ -124,7 +124,7 @@ fn add_census(
         .map(|municipality| add_municipality(references, &municipality.code, &municipality.name));
     let residence_key = format!("residence:{}", residence.id);
     references.add(&residence_key, |key| {
-        let place_type = residence.rural.then_some(PlaceType::Farm);
+        let place_type = residence.rural.then(|| std_place_type("std:farm"));
         let mut graph = place_graph(key, &residence.name, place_type);
         if let Some(municipality) = municipality {
             graph.link(
@@ -248,8 +248,20 @@ fn add_churchbook_event(graph: &mut Graph, references: &mut References, record: 
 /// The municipality's graph, added once, and a reference to it.
 fn add_municipality(references: &mut References, code: &str, name: &str) -> EntityRef {
     let key = format!("municipality:{code}");
-    references.add(&key, |key| place_graph(key, name, Some(PlaceType::Municipality)));
+    references.add(&key, |key| {
+        place_graph(key, name, Some(std_place_type("std:municipality")))
+    });
     origin_ref(EntityKind::Place, &key, None)
+}
+
+/// A place type stating only the `std` key `key`; the host fills in the kind and level.
+fn std_place_type(key: &str) -> PlaceType {
+    PlaceType {
+        kind: None,
+        level: None,
+        type_key: Some(key.to_owned()),
+        date: None,
+    }
 }
 
 /// A graph of one place, its own entity.

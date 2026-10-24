@@ -3,11 +3,15 @@
 //!
 //! A place's name, enclosing parent, and geometry are each dated, accumulating assertions (never
 //! last-writer-wins — `place_name.rs`, `place_ref.rs`, `place_geometry.rs`). Reading "the" value as
-//! of some date needs one rule, used identically everywhere: treat each assertion's date as
+//! of some date needs one rule, used by names, enclosures and geometry alike: treat each assertion's date as
 //! **effective from**, and pick the one with the latest effective date that is still `<=` the target,
 //! falling back to the first undated ("primary") assertion when none qualifies. Assertions stay
 //! unordered in the log; this is a pure read over the already-accumulated set — no `[from, until)`
 //! validity interval is introduced (deferred per ADR 0026 §1).
+//!
+//! Place types are the one exception: with no dated type qualifying, the latest live undated type
+//! wins rather than the first (ADR 0054), so `PlaceView::place_type_as_of` does not call
+//! [`resolve_as_of`] for its fallback.
 //!
 //! This one rule drives the generated place title, the transitive hierarchy walk
 //! (`vitni-app/src/place.rs`), and — later — the geography view's time slider (ADR 0025).

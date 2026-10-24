@@ -207,9 +207,11 @@ history-operator-unknown = unknown operator
 history-undo = Undo: { $what }
 history-undo-short = Undo
 # The value a History row names beside its phrase (#545): what a correction replaced, a linked record
-# as its label and id, the role it was linked in, a DNA match's totals, and cleared restrictions.
+# as its label and id, a dated value with its date, the role it was linked in, a DNA match's totals, and
+# cleared restrictions.
 history-replaced = was { $value }
 history-value-record = { $label } ({ $id })
+history-value-dated = { $label } ({ $date })
 history-value-role = { $record } ({ $role })
 history-value-dna = { $cm } cM over { $segments ->
     [one] 1 segment
@@ -780,14 +782,47 @@ succession-kind-renamed = renamed
 action-add-participant = Add participant
 action-add-enclosing = Add enclosing place
 place-type-country = Country
+place-type-state = State
 place-type-county = County
-place-type-municipality = Municipality
-place-type-parish = Parish
 place-type-city = City
+place-type-parish = Parish
+place-type-locality = Locality
+place-type-street = Street
+place-type-province = Province
+place-type-region = Region
+place-type-department = Department
+place-type-neighborhood = Neighborhood
+place-type-district = District
+place-type-borough = Borough
+place-type-municipality = Municipality
 place-type-town = Town
 place-type-village = Village
+place-type-hamlet = Hamlet
 place-type-farm = Farm
 place-type-building = Building
+place-type-number = Number
+place-type-none = No type
+place-kind-administrative = Administrative
+place-kind-ecclesiastical = Ecclesiastical
+place-kind-judicial = Judicial
+place-kind-registration = Registration
+place-kind-fiscal = Fiscal
+place-kind-military = Military
+place-kind-manorial = Manorial
+place-kind-cadastral = Cadastral
+place-kind-statistical = Statistical
+place-kind-settlement = Settlement
+place-kind-building = Building
+place-kind-natural = Natural
+place-level-country = Country
+place-level-adm1 = First-level division
+place-level-adm2 = Second-level division
+place-level-adm3 = Third-level division
+place-level-adm4 = Fourth-level division
+place-level-adm5 = Fifth-level division
+place-level-settlement = Settlement
+place-level-sub-settlement = Sub-settlement
+place-type-kind-key = { $kind } · { $key }
 
 # Errors
 error-prefix = error: { $message }

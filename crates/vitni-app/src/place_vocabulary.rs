@@ -1,5 +1,7 @@
 //! The `std` place-type vocabulary table and the prefill and merge helpers over it (ADR 0031 §3, §10).
 
+use std::sync::LazyLock;
+
 use vitni_core::date::GenealogicalDate;
 use vitni_core::place_type::{PlaceKind, PlaceLevel, PlaceTypeKey, PlaceTypeStatement};
 
@@ -42,27 +44,25 @@ fn statement_of(row: &StdRow) -> Option<PlaceTypeStatement> {
     })
 }
 
+static STD_STATEMENTS: LazyLock<Vec<PlaceTypeStatement>> =
+    LazyLock::new(|| STD_TABLE.iter().filter_map(statement_of).collect());
+
 /// The twenty pre-filled, undated `std` statements in table order.
 #[must_use]
-pub fn std_statements() -> Vec<PlaceTypeStatement> {
-    let mut statements = Vec::with_capacity(STD_TABLE.len());
-    for row in &STD_TABLE {
-        if let Some(statement) = statement_of(row) {
-            statements.push(statement);
-        }
-    }
-    statements
+pub fn std_statements() -> &'static [PlaceTypeStatement] {
+    &STD_STATEMENTS
 }
 
 /// The pre-filled `std` statement for `name` (`"city"`), if the table has that row.
 #[must_use]
 pub fn std_statement(name: &str) -> Option<PlaceTypeStatement> {
-    STD_TABLE.iter().find(|row| row.0 == name).and_then(statement_of)
+    let row = STD_TABLE.iter().position(|row| row.0 == name)?;
+    STD_STATEMENTS.get(row).cloned()
 }
 
 /// The kind and level the table suggests for a `std` key; `None` for any other key or a `std` key with no row.
 #[must_use]
-pub fn suggest(key: &PlaceTypeKey) -> Option<(PlaceKind, Option<PlaceLevel>)> {
+fn suggest(key: &PlaceTypeKey) -> Option<(PlaceKind, Option<PlaceLevel>)> {
     if key.namespace() != STD_NAMESPACE {
         return None;
     }
@@ -178,7 +178,7 @@ mod tests {
             .map(|s| s.type_key.as_ref().expect("every row has a key").as_str().to_owned())
             .collect();
         assert_eq!(keys.len(), 20);
-        for statement in &statements {
+        for statement in statements {
             assert!(statement.date.is_none());
             assert_eq!(statement.type_key.as_ref().map(PlaceTypeKey::namespace), Some("std"));
         }

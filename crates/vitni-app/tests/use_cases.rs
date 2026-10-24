@@ -25,7 +25,7 @@ use vitni_app::{
 };
 use vitni_app::{CitingContext, CitingKind};
 use vitni_app::{EvidenceAnalysis, EvidenceKind, InformationKind, SourceQuality};
-use vitni_core::enums::{AssociationRole, EventType, EvidenceLevel, FactType, PlaceType, Restriction};
+use vitni_core::enums::{AssociationRole, EventType, EvidenceLevel, FactType, Restriction};
 use vitni_core::ids::AgentId;
 use vitni_core::person::PersonError;
 use vitni_core::provenance::{Agent, AgentKind, Confidence};
@@ -671,7 +671,7 @@ async fn list_family_rows_matches_partners_marriage_date_and_child_count() {
 #[tokio::test]
 async fn list_event_rows_matches_type_date_and_place() {
     use vitni_app::{
-        DateParts, EventType, NewEvent, NewPlace, PlaceType, assert_event_date, create_event, create_place, link_place,
+        DateParts, EventType, NewEvent, NewPlace, assert_event_date, create_event, create_place, link_place,
         list_event_rows, list_events,
     };
 
@@ -682,7 +682,7 @@ async fn list_event_rows_matches_type_date_and_place() {
         &session,
         NewPlace {
             human_id: None,
-            place_type: PlaceType::City,
+            place_type: vitni_app::std_statement("city").unwrap_or_default(),
             name: Some("Oslo".to_owned()),
         },
         Provenance::default(),
@@ -1670,7 +1670,7 @@ async fn place_code_records_the_supplied_rationale() {
         &session,
         NewPlace {
             human_id: None,
-            place_type: PlaceType::City,
+            place_type: vitni_app::std_statement("city").unwrap_or_default(),
             name: None,
         },
         Provenance::default(),
@@ -3004,8 +3004,8 @@ async fn research_note_argues_about_a_person_and_is_found_by_subject() {
 #[tokio::test]
 async fn research_note_subjects_resolve_to_the_ids_a_frontend_links_by() {
     use vitni_app::{
-        NewPlace, NewResearchNote, NewResearchNoteSubject, PlaceType, create_place, create_research_note,
-        list_research_notes, show_research_note,
+        NewPlace, NewResearchNote, NewResearchNoteSubject, create_place, create_research_note, list_research_notes,
+        show_research_note,
     };
 
     let (ws, _dir) = workspace().await;
@@ -3018,7 +3018,7 @@ async fn research_note_subjects_resolve_to_the_ids_a_frontend_links_by() {
         &session,
         NewPlace {
             human_id: None,
-            place_type: PlaceType::City,
+            place_type: vitni_app::std_statement("city").unwrap_or_default(),
             name: Some("London".to_owned()),
         },
         Provenance::default(),

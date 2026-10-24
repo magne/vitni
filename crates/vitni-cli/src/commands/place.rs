@@ -3,14 +3,15 @@
 use clap::Subcommand;
 use uuid::Uuid;
 use vitni_app::{
-    AppError, DateParts, ListedKind, MatchableKind, MediaRefInput, MutationMeta, NewPlace, PlaceSuccessionInput,
-    Provenance, Session, Workspace, add_place_citation, add_place_name, assert_place_coordinates,
-    assert_place_enclosed_by, assert_place_succession, attach_place_media, attach_place_note, create_place,
-    gregorian_date, list_places_page, set_place_code, set_place_restrictions, set_place_type, show_place, tag_place,
+    AppError, DateParts, ListedKind, MatchableKind, MediaRefInput, MutationMeta, NewPlace, PlaceError,
+    PlaceSuccessionInput, PlaceTypeKey, PlaceTypeStatement, Provenance, Session, Workspace, add_place_citation,
+    add_place_name, assert_place_coordinates, assert_place_enclosed_by, assert_place_succession, attach_place_media,
+    attach_place_note, create_place, gregorian_date, list_places_page, prefill_from_std, set_place_code,
+    set_place_restrictions, set_place_type, show_place, tag_place,
 };
 use vitni_core::geo::{GeoCoordinates, Microdegrees};
 
-use crate::args::{ListArgs, PlaceTypeArg, RestrictionsArgs, SuccessionKindArg, narrows};
+use crate::args::{ListArgs, RestrictionsArgs, SuccessionKindArg, narrows};
 use crate::commands::similar::hint_similar;
 use crate::i18n::Localizer;
 
@@ -22,9 +23,10 @@ pub enum PlaceCmd {
         /// A specific human id (e.g. `P0500`); omitted to auto-allocate the next free one.
         #[arg(long, value_name = "HUMAN_ID")]
         id: Option<String>,
-        /// The place's type.
-        #[arg(long, value_enum, default_value_t = PlaceTypeArg::Parish)]
-        r#type: PlaceTypeArg,
+        /// The place's type as a vocabulary key: `std:farm`, `no:prestegjeld` or `custom:<text>`. Omitted
+        /// when the type is not known.
+        #[arg(long, value_name = "KEY")]
+        r#type: Option<String>,
         /// An initial name for the place.
         #[arg(long)]
         name: Option<String>,
@@ -33,9 +35,9 @@ pub enum PlaceCmd {
     SetType {
         /// The place's human id (e.g. `P0001`).
         human_id: String,
-        /// The new place type.
-        #[arg(long, value_enum)]
-        r#type: PlaceTypeArg,
+        /// The new place type as a vocabulary key: `std:farm`, `no:prestegjeld` or `custom:<text>`.
+        #[arg(long, value_name = "KEY")]
+        r#type: String,
     },
     /// Assert an additional name on an existing place.
     AddName {
@@ -158,6 +160,19 @@ pub enum PlaceCmd {
     List(ListArgs),
 }
 
+/// The statement for a `--type KEY` argument, pre-filled from the `std` table; an empty one when none
+/// is given.
+fn type_statement(key: Option<&str>) -> Result<PlaceTypeStatement, AppError> {
+    let Some(key) = key else {
+        return Ok(PlaceTypeStatement::default());
+    };
+    let type_key = PlaceTypeKey::new(key).map_err(|_| PlaceError::InvalidTypeKey(key.to_owned()))?;
+    Ok(prefill_from_std(PlaceTypeStatement {
+        type_key: Some(type_key),
+        ..PlaceTypeStatement::default()
+    }))
+}
+
 /// Runs a place subcommand against the open workspace.
 pub async fn run(
     workspace: &Workspace,
@@ -173,7 +188,7 @@ pub async fn run(
                 session,
                 NewPlace {
                     human_id: id,
-                    place_type: r#type.into(),
+                    place_type: type_statement(r#type.as_deref())?,
                     name,
                 },
                 Provenance::default(),
@@ -185,7 +200,7 @@ pub async fn run(
             Ok(())
         }
         PlaceCmd::SetType { human_id, r#type } => {
-            set_place_type(workspace, session, &human_id, r#type.into(), meta).await?;
+            set_place_type(workspace, session, &human_id, type_statement(Some(&r#type))?, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }

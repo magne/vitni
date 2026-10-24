@@ -519,21 +519,102 @@ impl Localizer {
         }
     }
 
-    /// The localized label for a place type; a [`PlaceType::Custom`] value renders verbatim.
+    /// The localized label for a place's type (ADR 0031 §4): a `std` key by its label, `custom:<text>` as
+    /// typed, any other key after the kind (`Ecclesiastical · no:prestegjeld`), no key by the kind, else
+    /// the level, and an empty statement as "No type".
     #[must_use]
-    pub fn place_type_label(&self, place_type: &vitni_app::PlaceType) -> String {
-        use vitni_app::PlaceType;
-        match place_type {
-            PlaceType::Country => fl!(self.loader, "place-type-country"),
-            PlaceType::County => fl!(self.loader, "place-type-county"),
-            PlaceType::Municipality => fl!(self.loader, "place-type-municipality"),
-            PlaceType::Parish => fl!(self.loader, "place-type-parish"),
-            PlaceType::City => fl!(self.loader, "place-type-city"),
-            PlaceType::Town => fl!(self.loader, "place-type-town"),
-            PlaceType::Village => fl!(self.loader, "place-type-village"),
-            PlaceType::Farm => fl!(self.loader, "place-type-farm"),
-            PlaceType::Building => fl!(self.loader, "place-type-building"),
-            PlaceType::Custom(value) => value.clone(),
+    pub fn place_type_label(&self, statement: &vitni_app::PlaceTypeStatement) -> String {
+        let Some(key) = &statement.type_key else {
+            return match (statement.kind, statement.level) {
+                (Some(kind), _) => self.place_kind_label(kind),
+                (None, Some(level)) => self.place_level_label(level),
+                (None, None) => fl!(self.loader, "place-type-none"),
+            };
+        };
+        match self.place_key_label(key) {
+            Some(label) => label,
+            None => match statement.kind {
+                Some(kind) => fl!(
+                    self.loader,
+                    "place-type-kind-key",
+                    kind = self.place_kind_label(kind),
+                    key = key.as_str()
+                ),
+                None => key.as_str().to_owned(),
+            },
+        }
+    }
+
+    /// The label a place-type key stands for on its own: the `std` label, or the text of a `custom:` key.
+    /// `None` for any other key, which has no label of its own.
+    #[must_use]
+    pub fn place_key_label(&self, key: &vitni_app::PlaceTypeKey) -> Option<String> {
+        match (key.namespace(), key.name()) {
+            ("custom", text) => Some(text.to_owned()),
+            ("std", name) => self.std_place_type_label(name),
+            _ => None,
+        }
+    }
+
+    fn std_place_type_label(&self, name: &str) -> Option<String> {
+        Some(match name {
+            "country" => fl!(self.loader, "place-type-country"),
+            "state" => fl!(self.loader, "place-type-state"),
+            "county" => fl!(self.loader, "place-type-county"),
+            "city" => fl!(self.loader, "place-type-city"),
+            "parish" => fl!(self.loader, "place-type-parish"),
+            "locality" => fl!(self.loader, "place-type-locality"),
+            "street" => fl!(self.loader, "place-type-street"),
+            "province" => fl!(self.loader, "place-type-province"),
+            "region" => fl!(self.loader, "place-type-region"),
+            "department" => fl!(self.loader, "place-type-department"),
+            "neighborhood" => fl!(self.loader, "place-type-neighborhood"),
+            "district" => fl!(self.loader, "place-type-district"),
+            "borough" => fl!(self.loader, "place-type-borough"),
+            "municipality" => fl!(self.loader, "place-type-municipality"),
+            "town" => fl!(self.loader, "place-type-town"),
+            "village" => fl!(self.loader, "place-type-village"),
+            "hamlet" => fl!(self.loader, "place-type-hamlet"),
+            "farm" => fl!(self.loader, "place-type-farm"),
+            "building" => fl!(self.loader, "place-type-building"),
+            "number" => fl!(self.loader, "place-type-number"),
+            _ => return None,
+        })
+    }
+
+    /// The localized label for a place's kind.
+    #[must_use]
+    pub fn place_kind_label(&self, kind: vitni_app::PlaceKind) -> String {
+        use vitni_app::PlaceKind;
+        match kind {
+            PlaceKind::Administrative => fl!(self.loader, "place-kind-administrative"),
+            PlaceKind::Ecclesiastical => fl!(self.loader, "place-kind-ecclesiastical"),
+            PlaceKind::Judicial => fl!(self.loader, "place-kind-judicial"),
+            PlaceKind::Registration => fl!(self.loader, "place-kind-registration"),
+            PlaceKind::Fiscal => fl!(self.loader, "place-kind-fiscal"),
+            PlaceKind::Military => fl!(self.loader, "place-kind-military"),
+            PlaceKind::Manorial => fl!(self.loader, "place-kind-manorial"),
+            PlaceKind::Cadastral => fl!(self.loader, "place-kind-cadastral"),
+            PlaceKind::Statistical => fl!(self.loader, "place-kind-statistical"),
+            PlaceKind::Settlement => fl!(self.loader, "place-kind-settlement"),
+            PlaceKind::Building => fl!(self.loader, "place-kind-building"),
+            PlaceKind::Natural => fl!(self.loader, "place-kind-natural"),
+        }
+    }
+
+    /// The localized label for a place's level.
+    #[must_use]
+    pub fn place_level_label(&self, level: vitni_app::PlaceLevel) -> String {
+        use vitni_app::PlaceLevel;
+        match level {
+            PlaceLevel::Country => fl!(self.loader, "place-level-country"),
+            PlaceLevel::Adm1 => fl!(self.loader, "place-level-adm1"),
+            PlaceLevel::Adm2 => fl!(self.loader, "place-level-adm2"),
+            PlaceLevel::Adm3 => fl!(self.loader, "place-level-adm3"),
+            PlaceLevel::Adm4 => fl!(self.loader, "place-level-adm4"),
+            PlaceLevel::Adm5 => fl!(self.loader, "place-level-adm5"),
+            PlaceLevel::Settlement => fl!(self.loader, "place-level-settlement"),
+            PlaceLevel::SubSettlement => fl!(self.loader, "place-level-sub-settlement"),
         }
     }
 
@@ -1785,7 +1866,8 @@ impl Localizer {
     }
 
     /// The value a change asserted (#545), worded for the History row beside its phrase: a scalar
-    /// through the same label the record screens use, a linked record as its label and id.
+    /// through its localized label (a dated place type with its date beside it), a linked record as its
+    /// label and id.
     #[must_use]
     pub fn change_value(&self, value: &ChangeValue) -> String {
         match value {
@@ -1793,7 +1875,15 @@ impl Localizer {
             ChangeValue::Date(date) => self.date(date),
             ChangeValue::Sex(sex) => self.sex_label(Some(sex)),
             ChangeValue::EventType(event_type) => self.event_type_label(event_type),
-            ChangeValue::PlaceType(place_type) => self.place_type_label(place_type),
+            ChangeValue::PlaceType(place_type) => match &place_type.date {
+                Some(date) => fl!(
+                    self.loader,
+                    "history-value-dated",
+                    label = self.place_type_label(place_type),
+                    date = self.date(date)
+                ),
+                None => self.place_type_label(place_type),
+            },
             ChangeValue::NoteType(note_type) => self.note_type_label(note_type),
             ChangeValue::RepositoryType(repository_type) => self.repository_type_label(repository_type),
             ChangeValue::DnaProvider(provider) => self.dna_provider_label(provider),
@@ -4165,6 +4255,108 @@ mod tests {
             value: None,
             replaced: None,
             merged_from: None,
+        }
+    }
+
+    fn statement(
+        kind: Option<vitni_app::PlaceKind>,
+        level: Option<vitni_app::PlaceLevel>,
+        key: Option<&str>,
+    ) -> vitni_app::PlaceTypeStatement {
+        vitni_app::PlaceTypeStatement {
+            kind,
+            level,
+            type_key: key.map(|key| vitni_app::PlaceTypeKey::new(key).expect("key")),
+            date: None,
+        }
+    }
+
+    #[test]
+    fn a_dated_place_type_change_value_carries_its_date() {
+        let en = Localizer::for_test("en");
+        let mut dated = statement(None, None, Some("std:parish"));
+        let undated = vitni_app::ChangeValue::PlaceType(dated.clone());
+        dated.date = Some(vitni_app::gregorian_date(vitni_app::DateParts {
+            year: 1838,
+            month: None,
+            day: None,
+        }));
+        let first = en.change_value(&vitni_app::ChangeValue::PlaceType(dated.clone()));
+        dated.date = Some(vitni_app::gregorian_date(vitni_app::DateParts {
+            year: 1964,
+            month: None,
+            day: None,
+        }));
+        let second = en.change_value(&vitni_app::ChangeValue::PlaceType(dated));
+        assert_ne!(first, second);
+        assert_eq!(first, "Parish (1838)");
+        assert_eq!(en.change_value(&undated), "Parish");
+        for catalogue in [
+            include_str!("../i18n/en/vitni-ui.ftl"),
+            include_str!("../i18n/no/vitni-ui.ftl"),
+        ] {
+            assert!(
+                catalogue.contains("\nhistory-value-dated = "),
+                "the dated value is a Fluent message"
+            );
+        }
+    }
+
+    #[test]
+    fn a_std_key_shows_its_label_and_a_custom_key_its_text_as_typed() {
+        let (en, no) = (Localizer::for_test("en"), Localizer::for_test("no"));
+        let farm = statement(None, None, Some("std:farm"));
+        assert_eq!(en.place_type_label(&farm), "Farm");
+        assert_eq!(no.place_type_label(&farm), "Gård");
+        let parish = statement(None, None, Some("std:parish"));
+        assert_eq!(no.place_type_label(&parish), "Sogn");
+        let county = statement(None, None, Some("std:county"));
+        assert_eq!(no.place_type_label(&county), "Grevskap");
+        let custom = statement(None, None, Some("custom:Sokn"));
+        assert_eq!(en.place_type_label(&custom), "Sokn");
+        assert_eq!(no.place_type_label(&custom), "Sokn");
+    }
+
+    #[test]
+    fn another_namespaces_key_shows_the_kind_label_then_the_key() {
+        use vitni_app::PlaceKind;
+        let en = Localizer::for_test("en");
+        let with_kind = statement(Some(PlaceKind::Ecclesiastical), None, Some("no:prestegjeld"));
+        assert_eq!(en.place_type_label(&with_kind), "Ecclesiastical \u{b7} no:prestegjeld");
+        let bare = statement(None, None, Some("no:prestegjeld"));
+        assert_eq!(en.place_type_label(&bare), "no:prestegjeld");
+    }
+
+    #[test]
+    fn a_statement_with_no_key_shows_the_kind_then_the_level_and_an_empty_one_says_no_type() {
+        use vitni_app::{PlaceKind, PlaceLevel};
+        let en = Localizer::for_test("en");
+        let kind_only = statement(Some(PlaceKind::Ecclesiastical), Some(PlaceLevel::Adm1), None);
+        assert_eq!(en.place_type_label(&kind_only), "Ecclesiastical");
+        let level_only = en.place_type_label(&statement(None, Some(PlaceLevel::Adm1), None));
+        assert!(!level_only.is_empty() && level_only != "No type", "{level_only}");
+        assert_eq!(en.place_type_label(&statement(None, None, None)), "No type");
+        assert_eq!(
+            Localizer::for_test("no").place_type_label(&statement(None, None, None)),
+            "Ingen type"
+        );
+    }
+
+    #[test]
+    fn every_std_key_has_a_label_in_both_languages() {
+        for statement in vitni_app::place_vocabulary::std_statements() {
+            for lang in ["en", "no"] {
+                let label = Localizer::for_test(lang).place_type_label(statement);
+                let key = statement
+                    .type_key
+                    .as_ref()
+                    .map(vitni_app::PlaceTypeKey::as_str)
+                    .unwrap_or_default();
+                assert!(
+                    !label.is_empty() && !label.contains("std:") && label != key,
+                    "{lang} {key}: {label}"
+                );
+            }
         }
     }
 

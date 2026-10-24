@@ -30,7 +30,7 @@ use vitni_app::{
 };
 use vitni_core::date::{DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody};
 use vitni_core::enums::EvidenceLevel;
-use vitni_core::enums::{EventType, ParticipantRole, PlaceType};
+use vitni_core::enums::{EventType, ParticipantRole};
 use vitni_core::ids::AgentId;
 use vitni_core::matching::MatchableKind;
 use vitni_core::provenance::{Agent, AgentKind};
@@ -951,7 +951,7 @@ async fn a_census_person_imports_its_census_its_birth_their_places_and_its_house
         .expect("the residence");
     assert_eq!(
         residence.place_type,
-        Some(PlaceType::Farm),
+        Some(vitni_app::std_statement("farm").unwrap_or_default()),
         "a rural residence is a farm"
     );
     assert!(
@@ -959,7 +959,7 @@ async fn a_census_person_imports_its_census_its_birth_their_places_and_its_house
             .enclosing
             .iter()
             .any(|enclosing| enclosing.name.as_deref() == Some("Eksempelvik")
-                && enclosing.place_type == Some(PlaceType::Municipality)),
+                && enclosing.place_type == Some(vitni_app::std_statement("municipality").unwrap_or_default())),
         "the residence lies in the census municipality: {residence:#?}"
     );
 

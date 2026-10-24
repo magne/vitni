@@ -60,7 +60,7 @@ fn a_new_persons_unreadable_birth_is_flagged() {
 
 fn place_view() -> Element {
     card(&RecordLink::New(NewRecordDraft::Place(NewPlaceFields {
-        place_type: vitni_app::PlaceType::City,
+        place_type: vitni_app::std_statement("city").unwrap_or_default(),
         name: "Ellis Island".to_owned(),
     })))
 }

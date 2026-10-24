@@ -11,10 +11,10 @@ use vitni_app::{
     AppDefaults, CommitControl, CommitOutcome, DatasetId, DateParts, Disposition, EntityFields, EntityRef, ExternalId,
     GeoCoordinates, IdentityDecision, ImportCounts, ImportPlan, ImportReview, LinkBasis, LinkKind, MatchGroup,
     MutationMeta, NewEvent, NewFact, NewImportRun, NewParticipation, NewPerson, NewPlace, NewSource, OperatorConfig,
-    PairAnswer, PairDecision, PendingRun, PersonNameParts, PlaceType, PlanCounts, PlannedChange, PlannedField,
-    PlannedRecord, Provenance, RecordGraph, ResolutionDecision, RunToEnd, Session, StagedEntity, StagedEvent,
-    StagedFamily, StagedLink, StagedPerson, StagedPlace, StagedSource, StagedTag, Workspace, WorkspaceDefaults,
-    WriteScope, commit_import, gregorian_date, plan_import, record_origin,
+    PairAnswer, PairDecision, PendingRun, PersonNameParts, PlanCounts, PlannedChange, PlannedField, PlannedRecord,
+    Provenance, RecordGraph, ResolutionDecision, RunToEnd, Session, StagedEntity, StagedEvent, StagedFamily,
+    StagedLink, StagedPerson, StagedPlace, StagedSource, StagedTag, Workspace, WorkspaceDefaults, WriteScope,
+    commit_import, gregorian_date, plan_import, record_origin,
 };
 use vitni_core::enums::{EventType, EvidenceLevel, FactType, ParticipantRole, Restriction, Sex};
 use vitni_core::ids::AgentId;
@@ -1341,7 +1341,7 @@ async fn a_same_on_a_source_plans_the_fields_it_adds() {
 }
 
 /// A place `name` of type `place_type` the record states.
-fn typed_place(record: &str, name: &str, place_type: PlaceType) -> RecordGraph {
+fn typed_place(record: &str, name: &str, place_type: vitni_app::PlaceTypeStatement) -> RecordGraph {
     let mut graph = place(record, name);
     if let EntityFields::Place(fields) = &mut graph.entities[0].fields {
         fields.place_type = Some(place_type);
@@ -1364,11 +1364,64 @@ async fn a_place_decided_same_gains_the_type_an_import_left_unset() {
     let stored = vitni_app::list_places(&workspace).await.expect("places")[0]
         .human_id
         .clone();
-    decide_same(&workspace, vec![typed_place("plac:Mandal", "Mandal", PlaceType::City)]).await;
+    decide_same(
+        &workspace,
+        vec![typed_place(
+            "plac:Mandal",
+            "Mandal",
+            vitni_app::std_statement("city").unwrap_or_default(),
+        )],
+    )
+    .await;
 
     let place = place_summary(&workspace, &stored).await;
-    assert_eq!(place.place_type, Some(PlaceType::City));
+    assert_eq!(
+        place.place_type,
+        Some(vitni_app::std_statement("city").unwrap_or_default())
+    );
     assert_eq!(place.names.len(), 1, "the name it already has is not added again");
+}
+
+#[tokio::test]
+async fn an_empty_staged_type_on_a_matched_place_is_ignored() {
+    let (workspace, _dir) = workspace().await;
+    let other = importer(dataset(2));
+    import(&workspace, &other, vec![place("plac:Mandal", "Mandal")]).await;
+    let stored = vitni_app::list_places(&workspace).await.expect("places")[0]
+        .human_id
+        .clone();
+    decide_same(
+        &workspace,
+        vec![typed_place(
+            "plac:Mandal",
+            "Mandal",
+            vitni_app::PlaceTypeStatement::default(),
+        )],
+    )
+    .await;
+
+    assert_eq!(place_summary(&workspace, &stored).await.place_type, None);
+}
+
+#[tokio::test]
+async fn an_empty_staged_type_on_a_new_place_creates_it_untyped() {
+    let (workspace, _dir) = workspace().await;
+    let other = importer(dataset(2));
+    import(
+        &workspace,
+        &other,
+        vec![typed_place(
+            "plac:Mandal",
+            "Mandal",
+            vitni_app::PlaceTypeStatement::default(),
+        )],
+    )
+    .await;
+
+    let stored = vitni_app::list_places(&workspace).await.expect("places")[0]
+        .human_id
+        .clone();
+    assert_eq!(place_summary(&workspace, &stored).await.place_type, None);
 }
 
 #[tokio::test]
@@ -1407,7 +1460,7 @@ async fn a_place_decided_same_is_reused_and_resolves_so_on_the_next_run() {
     let (workspace, _dir) = workspace().await;
     let new = NewPlace {
         human_id: None,
-        place_type: PlaceType::City,
+        place_type: vitni_app::std_statement("city").unwrap_or_default(),
         name: Some("Mandal".to_owned()),
     };
     let stored = vitni_app::create_place(&workspace, &human(), new, Provenance::default(), &[])
@@ -1463,7 +1516,7 @@ async fn the_position_moves_on_past_a_reused_record() {
     let (workspace, _dir) = workspace().await;
     let new = NewPlace {
         human_id: None,
-        place_type: PlaceType::City,
+        place_type: vitni_app::std_statement("city").unwrap_or_default(),
         name: Some("Mandal".to_owned()),
     };
     vitni_app::create_place(&workspace, &human(), new, Provenance::default(), &[])
@@ -1594,7 +1647,7 @@ async fn stored_census(workspace: &Workspace, title: &str) -> String {
 async fn stored_place(workspace: &Workspace, name: &str) -> String {
     let new = NewPlace {
         human_id: None,
-        place_type: PlaceType::City,
+        place_type: vitni_app::std_statement("city").unwrap_or_default(),
         name: Some(name.to_owned()),
     };
     vitni_app::create_place(workspace, &human(), new, Provenance::default(), &[])

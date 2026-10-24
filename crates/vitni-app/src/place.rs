@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use vitni_core::citation::CitationView;
 use vitni_core::date::GenealogicalDate;
-use vitni_core::enums::{PlaceType, Restriction, SuccessionKind};
+use vitni_core::enums::{Restriction, SuccessionKind};
 use vitni_core::geo::{GeoCoordinates, PlaceGeometry};
 use vitni_core::ids::{AssertionId, CitationId, HumanId, MediaId, NoteId, PlaceId, TagId};
 use vitni_core::place::PlaceView;
@@ -17,6 +17,7 @@ use vitni_core::place::command::{PlaceCommand, PlaceCommandEnvelope};
 use vitni_core::place::error::PlaceError;
 use vitni_core::place_name::PlaceName;
 use vitni_core::place_ref::PlaceRef;
+use vitni_core::place_type::PlaceTypeStatement;
 use vitni_core::provenance::Confidence;
 use vitni_core::provenance::EvidenceRef;
 use vitni_core::text::MediaRef;
@@ -67,7 +68,7 @@ pub struct PlaceEnclosingRef {
     /// The enclosing place's primary name, if resolved.
     pub name: Option<String>,
     /// The enclosing place's type, if resolved.
-    pub place_type: Option<PlaceType>,
+    pub place_type: Option<PlaceTypeStatement>,
     /// The date the enclosing relationship was valid (structured so the frontend localizes it).
     pub date: Option<GenealogicalDate>,
     /// The operator's surety in the enclosing-by assertion.
@@ -132,8 +133,12 @@ pub struct PlaceSummary {
     /// The date this summary is resolved **as of** (ADR 0026 §1) — `None` for the current/primary
     /// resolution `show_place`/`list_places` use; `Some` only from `show_place_as_of`.
     pub resolved_as_of: Option<GenealogicalDate>,
-    /// The place's type. Structured (not a label) so the frontend localizes it (ADR 0003).
-    pub place_type: Option<PlaceType>,
+    /// The record's own type, resolved as [`Self::place_type`] is but never taken from a merged member —
+    /// the statement an edit of this record's type builds on.
+    pub own_place_type: Option<PlaceTypeStatement>,
+    /// The place's type. Structured (not a label) so the frontend localizes it (ADR 0003). On a merged
+    /// cluster whose root states none, the first member's that does.
+    pub place_type: Option<PlaceTypeStatement>,
     /// The operator's surety in the place type, if set.
     pub place_type_confidence: Option<Confidence>,
     /// The asserted names, in assertion order, each with its language/date + provenance.
@@ -216,8 +221,8 @@ impl PlaceSummary {
 pub struct NewPlace {
     /// A caller-supplied `human_id`; `None` auto-allocates the next free one.
     pub human_id: Option<String>,
-    /// The place's type.
-    pub place_type: PlaceType,
+    /// The place's type statement; empty when the record states none.
+    pub place_type: PlaceTypeStatement,
     /// An optional name text for an initial `AssertName`.
     pub name: Option<String>,
 }
@@ -258,7 +263,7 @@ pub async fn create_place(
         PlaceCommand::CreatePlace {
             place_id,
             human_id: HumanId::new(&human_id),
-            place_type: new.place_type,
+            type_statement: new.place_type,
         },
         provenance,
         citation_refs,
@@ -297,7 +302,7 @@ pub(crate) async fn create_place_returning_id(
     session: &Session,
     store: &Store,
     human_id: &str,
-    place_type: PlaceType,
+    type_statement: PlaceTypeStatement,
     name: Option<String>,
     provenance: Provenance,
 ) -> Result<PlaceId, AppError> {
@@ -310,7 +315,7 @@ pub(crate) async fn create_place_returning_id(
         PlaceCommand::CreatePlace {
             place_id,
             human_id: HumanId::new(human_id),
-            place_type,
+            type_statement,
         },
         provenance.clone(),
         Vec::new(),
@@ -343,24 +348,6 @@ pub(crate) async fn resolve_place_id_public(store: &Store, human_id: &str) -> Re
     resolve_place_id(store, human_id).await
 }
 
-/// The text of the custom type a place is created with when its record states none, since every
-/// place has a type.
-const UNSTATED_PLACE_TYPE: &str = "place";
-
-/// The type to create a place with when its record states none.
-#[must_use]
-pub fn unstated_place_type() -> PlaceType {
-    PlaceType::Custom(UNSTATED_PLACE_TYPE.to_owned())
-}
-
-/// The place's type, or `None` when it has only [`unstated_place_type`].
-pub(crate) fn stated_place_type(view: &PlaceView) -> Option<&PlaceType> {
-    match view.place_type() {
-        Some(PlaceType::Custom(text)) if text == UNSTATED_PLACE_TYPE => None,
-        place_type => place_type,
-    }
-}
-
 /// Sets (or changes) an existing place's type, identified by `human_id`.
 ///
 /// # Errors
@@ -370,7 +357,7 @@ pub async fn set_place_type(
     workspace: &Workspace,
     session: &Session,
     human_id: &str,
-    place_type: PlaceType,
+    type_statement: PlaceTypeStatement,
     meta: MutationMeta<'_>,
 ) -> Result<(), AppError> {
     let store = workspace.store();
@@ -379,7 +366,10 @@ pub async fn set_place_type(
         store,
         session,
         place_id,
-        PlaceCommand::SetPlaceType { place_id, place_type },
+        PlaceCommand::SetPlaceType {
+            place_id,
+            type_statement,
+        },
         meta,
     )
     .await
@@ -1058,7 +1048,7 @@ struct PlaceInfo {
     id: PlaceId,
     human_id: String,
     name: Option<String>,
-    place_type: Option<PlaceType>,
+    place_type: Option<PlaceTypeStatement>,
 }
 
 /// The lookups `summarize` needs to join a place's enclosing chain, succession relations, and
@@ -1550,14 +1540,16 @@ fn summarize_as_of(view: &PlaceView, lookups: &PlaceLookups, as_of: Option<&Gene
         .collect();
     let title = generated_title(own_name.as_deref(), &human_id, &ancestor_names);
     let resolved_geometry_ref = resolved_geometry(view, lookups, as_of_sort_value);
+    let asserted_type = view.asserted_place_type_as_of(as_of_sort_value.unwrap_or(i64::MAX));
     PlaceSummary {
         human_id,
         id: view.place_id().map(|id| id.to_string()).unwrap_or_default(),
         generated_title: title,
         resolved_name: own_name.clone(),
         resolved_as_of: as_of.cloned(),
-        place_type: view.place_type().cloned(),
-        place_type_confidence: view.asserted_place_type().and_then(|a| a.confidence),
+        own_place_type: asserted_type.map(|asserted| asserted.value.clone()),
+        place_type: asserted_type.map(|asserted| asserted.value.clone()),
+        place_type_confidence: asserted_type.and_then(|asserted| asserted.confidence),
         names,
         code: view.code().map(ToOwned::to_owned),
         code_confidence: view.asserted_code().and_then(|a| a.confidence),

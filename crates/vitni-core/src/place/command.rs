@@ -7,12 +7,13 @@
 use std::collections::BTreeSet;
 
 use crate::date::GenealogicalDate;
-use crate::enums::{PlaceType, Restriction, SuccessionKind};
+use crate::enums::{Restriction, SuccessionKind};
 use crate::geo::{GeoCoordinates, PlaceGeometry};
 use crate::ids::{AssertionId, CitationId, HumanId, NoteId, PlaceId, TagId};
 use crate::matching::MatchEvidence;
 use crate::place_name::PlaceName;
 use crate::place_ref::PlaceRef;
+use crate::place_type::PlaceTypeStatement;
 use crate::provenance::AssertionMeta;
 use crate::text::MediaRef;
 
@@ -25,15 +26,15 @@ pub enum PlaceCommand {
         place_id: PlaceId,
         /// The user-facing identifier.
         human_id: HumanId,
-        /// The place's type.
-        place_type: PlaceType,
+        /// The place's type statement; empty when no type is stated.
+        type_statement: PlaceTypeStatement,
     },
-    /// Set (or change) the place's type.
+    /// Assert a (possibly dated) type for the place. The statement must state something.
     SetPlaceType {
         /// The target place.
         place_id: PlaceId,
-        /// The new place type.
-        place_type: PlaceType,
+        /// The type statement.
+        type_statement: PlaceTypeStatement,
     },
     /// Assert a name for the place.
     AssertName {

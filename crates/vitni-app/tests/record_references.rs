@@ -16,7 +16,7 @@ use vitni_app::{
     merge_citations, merge_media, merge_notes, merge_places, merge_repositories, merge_sources, show_citation,
     show_event, show_geography, show_media, show_note, show_place, show_repository, show_source,
 };
-use vitni_core::enums::{EventType, PlaceType};
+use vitni_core::enums::EventType;
 use vitni_core::ids::AgentId;
 use vitni_core::provenance::{Agent, AgentKind};
 
@@ -53,7 +53,7 @@ fn meta() -> MutationMeta<'static> {
 async fn place(ws: &Workspace, name: &str) -> String {
     let new = NewPlace {
         human_id: None,
-        place_type: PlaceType::Farm,
+        place_type: vitni_app::std_statement("farm").unwrap_or_default(),
         name: Some(name.to_owned()),
     };
     create_place(ws, &session(), new, Provenance::default(), &[])

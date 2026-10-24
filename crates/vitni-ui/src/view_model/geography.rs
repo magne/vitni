@@ -281,7 +281,7 @@ mod tests {
     use std::str::FromStr;
     use vitni_app::{
         Calendar, DateModifier, DatePoint, DateQuality, EventPin, EventType, GenealogicalDate, GenealogicalDateBody,
-        GeoCoordinates, Microdegrees, PlaceGeometry, PlaceMarker, PlaceType, UnplottedPlace, UnplottedReason,
+        GeoCoordinates, Microdegrees, PlaceGeometry, PlaceMarker, UnplottedPlace, UnplottedReason,
     };
 
     fn coord(lat: &str, lon: &str) -> GeoCoordinates {
@@ -318,7 +318,7 @@ mod tests {
                 human_id: "P0001".to_owned(),
                 id: "place-1".to_owned(),
                 name: "Oslo".to_owned(),
-                place_type: Some(PlaceType::City),
+                place_type: Some(vitni_app::std_statement("city").unwrap_or_default()),
                 geometry: PlaceGeometry::Point(coord("59.9139", "10.7522")),
             }],
             events: Vec::new(),
@@ -345,7 +345,7 @@ mod tests {
                 human_id: "P0002".to_owned(),
                 id: "place-2".to_owned(),
                 name: "Old County".to_owned(),
-                place_type: Some(PlaceType::County),
+                place_type: Some(vitni_app::std_statement("county").unwrap_or_default()),
                 geometry: PlaceGeometry::Polygon {
                     exterior: vec![coord("60.0", "5.0"), coord("61.0", "5.0"), coord("61.0", "6.0")],
                     holes: vec![vec![coord("60.3", "5.3"), coord("60.4", "5.3"), coord("60.4", "5.4")]],
@@ -411,7 +411,7 @@ mod tests {
             human_id: human_id.to_owned(),
             id: format!("place-{human_id}"),
             name: name.to_owned(),
-            place_type: Some(PlaceType::Parish),
+            place_type: Some(vitni_app::std_statement("parish").unwrap_or_default()),
             reason,
         }
     }
@@ -444,7 +444,7 @@ mod tests {
                 human_id: "P0002".to_owned(),
                 id: "place-2".to_owned(),
                 name: "Lom".to_owned(),
-                place_type: Some(PlaceType::Parish),
+                place_type: Some(vitni_app::std_statement("parish").unwrap_or_default()),
                 geometry: PlaceGeometry::Point(coord("61.8", "8.5")),
             }],
             events: Vec::new(),
@@ -466,7 +466,7 @@ mod tests {
                 human_id: "P0001".to_owned(),
                 id: "place-1".to_owned(),
                 name: "Oslo".to_owned(),
-                place_type: Some(PlaceType::City),
+                place_type: Some(vitni_app::std_statement("city").unwrap_or_default()),
                 geometry: PlaceGeometry::Point(coord("59.9", "10.7")),
             }],
             events: Vec::new(),
@@ -510,7 +510,7 @@ mod tests {
                 human_id: "P0001".to_owned(),
                 id: "place-1".to_owned(),
                 name: "Oslo".to_owned(),
-                place_type: Some(PlaceType::City),
+                place_type: Some(vitni_app::std_statement("city").unwrap_or_default()),
                 geometry: PlaceGeometry::Point(coord("59.9", "10.7")),
             }],
             events: Vec::new(),

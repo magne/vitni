@@ -1,4 +1,4 @@
-use vitni_app::{MapProvider, PlaceGeometry, PlaceType};
+use vitni_app::{MapProvider, PlaceGeometry, PlaceTypeStatement};
 // The place row view-models the prelude doesn't re-export; they seed the per-row Name / enclosing edits.
 use vitni_ui::{
     DateDraft, MarkerShapeVm, PickerState, PlaceGeometryVm, PlaceHierarchyVm, PlaceNameVm, place_map_display_shape,
@@ -94,21 +94,23 @@ pub fn place_record_fields(
     let editing = record.editing.read().to_owned();
     let mut draft = record.draft;
     let seed = record.seed;
-    let types = place_type_choices();
-    let options: Vec<SelectChoice> = types
-        .iter()
-        .enumerate()
-        .map(|(index, place_type)| SelectChoice {
-            value: index.to_string(),
-            label: loc.place_type_label(place_type),
-        })
-        .collect();
-    let index_of = |place_type: &PlaceType| {
-        place_type_choices()
-            .iter()
-            .position(|t| t == place_type)
-            .unwrap_or(0)
-            .to_string()
+    let types = place_type_choices(seed.read().place_type.as_ref());
+    let mut options: Vec<SelectChoice> = Vec::new();
+    if seed.read().place_type.is_none() {
+        options.push(SelectChoice {
+            value: String::new(),
+            label: loc.place_type_label(&PlaceTypeStatement::default()),
+        });
+    }
+    options.extend(types.iter().enumerate().map(|(index, place_type)| SelectChoice {
+        value: index.to_string(),
+        label: loc.place_type_label(place_type),
+    }));
+    let index_of = |place_type: &Option<PlaceTypeStatement>| {
+        place_type
+            .as_ref()
+            .and_then(|current| types.iter().position(|t| t.type_key == current.type_key))
+            .map_or_else(String::new, |index| index.to_string())
     };
     let current = draft();
     let committed = seed.read().clone();
@@ -141,9 +143,9 @@ pub fn place_record_fields(
                     reset_label: loc.action_reset_field(&loc.field_label("type")),
                     options,
                     onchange: move |value: String| {
-                        let types = place_type_choices();
+                        let types = place_type_choices(seed.read().place_type.as_ref());
                         if let Some(place_type) = value.parse::<usize>().ok().and_then(|index| types.get(index).cloned()) {
-                            draft.write().place_type = place_type;
+                            draft.write().place_type = Some(place_type);
                         }
                     },
                     onreset: move |()| {
@@ -1626,10 +1628,17 @@ fn PlaceTagForm(human_id: String, onsubmit: EventHandler<(PlaceEdit, ProvenanceD
     }
 }
 
-/// The place types offered by the type picker — [`vitni_ui::NEW_PLACE_TYPES`], the list the
-/// find-or-create attach card's Place body offers too, so the two never disagree.
-fn place_type_choices() -> [PlaceType; 9] {
-    vitni_ui::NEW_PLACE_TYPES
+/// The place types offered by the type picker — [`vitni_ui::new_place_types`], the list the
+/// find-or-create attach card's Place body offers too, so the two never disagree — plus the place's
+/// current type when it is not one of them, so the select can show it.
+fn place_type_choices(current: Option<&PlaceTypeStatement>) -> Vec<PlaceTypeStatement> {
+    let mut choices = vitni_ui::new_place_types();
+    if let Some(current) = current
+        && !choices.iter().any(|choice| choice.type_key == current.type_key)
+    {
+        choices.push(current.clone());
+    }
+    choices
 }
 
 #[cfg(test)]

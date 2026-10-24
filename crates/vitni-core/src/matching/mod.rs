@@ -95,7 +95,7 @@ impl CultureId {
 pub struct EngineVersion(pub u32);
 
 /// The engine version of this build. Bump it when a comparator, weight or shipped pack changes scores.
-pub const ENGINE_VERSION: EngineVersion = EngineVersion(4);
+pub const ENGINE_VERSION: EngineVersion = EngineVersion(5);
 
 /// How sure the engine is that two records describe one individual.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -238,7 +238,7 @@ pub enum FeatureValue {
     /// The source record an item was imported from.
     Origin(RecordOrigin),
     /// A place's type.
-    PlaceType(crate::enums::PlaceType),
+    PlaceType(crate::place_type::PlaceTypeStatement),
     /// A place's coordinates.
     Coordinates(crate::geo::GeoCoordinates),
     /// A repository's address.

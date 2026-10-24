@@ -13,11 +13,11 @@ use vitni_core::address::Address;
 use vitni_core::age::Age;
 use vitni_core::date::GenealogicalDate;
 use vitni_core::enums::{
-    AssociationRole, ChildParentRelationship, EventType, NoteType, ParticipantRole, PlaceType, Restriction, Sex,
-    SourceMediaType,
+    AssociationRole, ChildParentRelationship, EventType, NoteType, ParticipantRole, Restriction, Sex, SourceMediaType,
 };
 use vitni_core::geo::GeoCoordinates;
 use vitni_core::matching::MatchableKind;
+use vitni_core::place_type::PlaceTypeStatement;
 use vitni_core::provenance::Confidence;
 use vitni_core::text::{Attribute, ExternalId, Rect};
 
@@ -135,7 +135,7 @@ pub struct StagedPlace {
     /// The place's name.
     pub name: String,
     /// The kind of place, when the record says.
-    pub place_type: Option<PlaceType>,
+    pub place_type: Option<PlaceTypeStatement>,
     /// Where the place lies, when the record gives a point.
     pub coordinates: Option<GeoCoordinates>,
     /// The place's code, when the record gives one.

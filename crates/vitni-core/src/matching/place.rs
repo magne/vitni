@@ -14,7 +14,6 @@
 
 use strsim::jaro_winkler;
 
-use crate::enums::PlaceType;
 use crate::geo::GeoCoordinates;
 use crate::matching::name::{Applied, fold};
 use crate::matching::profile::PlaceProfile;
@@ -24,6 +23,7 @@ use crate::matching::{
     Feature, FeatureComparison, FeatureValue, Identity, MatchAssessment, MatchData, MatchSettings, applied, conclude,
     grade, missing,
 };
+use crate::place_type::{PlaceTypeKey, PlaceTypeStatement};
 
 /// The similarity of a place and a place enclosing it.
 pub(crate) const ENCLOSED_SIMILARITY: f64 = 0.8;
@@ -122,17 +122,47 @@ fn compare_names(a: &PlaceProfile, b: &PlaceProfile, applied: &Applied<'_>) -> F
     term(Feature::PlaceName, graded, weights::PLACE_NAME, (value(a), value(b)))
 }
 
-/// Compares two place types; a custom type is compared by its folded text.
-fn compare_types(a: Option<&PlaceType>, b: Option<&PlaceType>) -> FeatureComparison {
-    let key = |place_type: &PlaceType| {
-        if let PlaceType::Custom(text) = place_type {
-            Err(fold(text.trim()))
-        } else {
-            Ok(place_type.clone())
+/// How two place type statements compare: kind first, then level, then key. A field counts only when
+/// both sides state it, and keys only when both lie in one namespace (a `custom:` key by its folded
+/// text). The first counted field that differs disagrees; otherwise one that agrees makes a match, and
+/// when nothing counts the comparison is neutral (`None`).
+fn type_similarity(a: &PlaceTypeStatement, b: &PlaceTypeStatement) -> Option<f64> {
+    let mut agreed = false;
+    for differs in [
+        a.kind.zip(b.kind).map(|(x, y)| x != y),
+        a.level.zip(b.level).map(|(x, y)| x != y),
+        a.type_key
+            .as_ref()
+            .zip(b.type_key.as_ref())
+            .and_then(|(x, y)| keys_differ(x, y)),
+    ] {
+        match differs {
+            Some(true) => return Some(0.0),
+            Some(false) => agreed = true,
+            None => {}
         }
-    };
-    let graded = a.zip(b).map(|(x, y)| (if key(x) == key(y) { 1.0 } else { 0.0 }, 0.0));
-    let value = |place_type: &PlaceType| FeatureValue::PlaceType(place_type.clone());
+    }
+    agreed.then_some(1.0)
+}
+
+/// Whether two keys differ, or `None` when they lie in different namespaces and so cannot be compared.
+fn keys_differ(a: &PlaceTypeKey, b: &PlaceTypeKey) -> Option<bool> {
+    if a.namespace() != b.namespace() {
+        return None;
+    }
+    if a.is_custom() {
+        return Some(fold(a.name().trim()) != fold(b.name().trim()));
+    }
+    Some(a != b)
+}
+
+/// Compares two place types (ADR 0031 §3).
+fn compare_types(a: Option<&PlaceTypeStatement>, b: Option<&PlaceTypeStatement>) -> FeatureComparison {
+    let graded = a
+        .zip(b)
+        .and_then(|(x, y)| type_similarity(x, y))
+        .map(|similarity| (similarity, 0.0));
+    let value = |statement: &PlaceTypeStatement| FeatureValue::PlaceType(statement.clone());
     term(
         Feature::PlaceType,
         graded,
