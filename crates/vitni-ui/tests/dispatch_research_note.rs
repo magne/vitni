@@ -12,8 +12,8 @@ use uuid::Uuid;
 use vitni_app::EventType;
 use vitni_app::{
     Agent, AgentId, AgentKind, AppDefaults, EvidenceLevel, NewEvent, NewPerson, NewPlace, OperatorConfig,
-    PersonNameParts, PlaceType, Provenance, Session, Workspace, WorkspaceDefaults, change_log_for_research_note,
-    create_event, create_person, create_place, create_tag, show_research_note,
+    PersonNameParts, Provenance, Session, Workspace, WorkspaceDefaults, change_log_for_research_note, create_event,
+    create_person, create_place, create_tag, show_research_note,
 };
 use vitni_ui::{
     Category, Intent, IntentOutcome, Localizer, ProvenanceDraft, ResearchNoteChangeSetRequest, ResearchNoteEdit,
@@ -237,7 +237,7 @@ async fn subjects_are_added_and_removed_across_all_four_kinds() {
         &session,
         NewPlace {
             human_id: None,
-            place_type: PlaceType::City,
+            place_type: vitni_app::std_statement("city").unwrap_or_default(),
             name: Some("London".to_owned()),
         },
         Provenance::default(),
@@ -445,7 +445,7 @@ async fn the_reverse_lookup_rows_reach_all_four_subject_detail_screens() {
         &session,
         NewPlace {
             human_id: None,
-            place_type: PlaceType::City,
+            place_type: vitni_app::std_statement("city").unwrap_or_default(),
             name: Some("London".to_owned()),
         },
         Provenance::default(),

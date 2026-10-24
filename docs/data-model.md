@@ -214,7 +214,7 @@ synthesis* derived from the log; none is edited directly.
 | **Person**     | An individual (conclusion or persona).                           | `id`, `human_id`, names (`PersonName` list), `sex`, facts (`Fact` list: occupation/residence/…), event participations (birth, death, and other vitals live here as Events — §7), associations, citations, media, notes, tags, `external_ids`, merged personas (`PersonsMerged` links), persons it is distinct from (`PersonsDistinguished` links), `evidence_level` (conclusion vs persona), `restrictions` (a `Restriction` set). |
 | **Family**     | A union and its children.                                        | `id`, `human_id`, partner participations (neutral roles), child list (`ChildParentRelationship` per partner per child), family-level events (marriage/divorce), citations, media, notes, tags, `external_ids`, merged copies (`FamiliesMerged` links), families it is distinct from (`FamiliesDistinguished` links), `restrictions` (a `Restriction` set).                                                |
 | **Event**      | Something that happened at a date/place, shared by participants. | `id`, `human_id`, `event_type`, `date` (`GenealogicalDate`), `place_id`, `description`, participants (a projection of the person-side `ParticipationAsserted` rows that reference this event — the Person aggregate owns participation), addresses, citations, media, notes, tags, merged copies (`EventsMerged` links), events it is distinct from (`EventsDistinguished` links), `restrictions` (a `Restriction` set). |
-| **Place**      | A location, hierarchical and dated.                              | `id`, `human_id`, `place_type` (ADR 0031 §3–§4 replaces it with an optional `kind`, `level` and vocabulary key), names (`PlaceName` list, dated), enclosed-by (`PlaceRef`, dated), `coordinates`, `code`, citations, media, notes, tags, merged duplicate records (`PlacesMerged` links), places it is distinct from (`PlacesDistinguished` links), `restrictions` (a `Restriction` set).                                                                                                       |
+| **Place**      | A location, hierarchical and dated.                              | `id`, `human_id`, type statements (`PlaceTypeStatement`: an optional `kind`, `level`, vocabulary `type_key` and date, accumulating and resolved by date, ADR 0054), names (`PlaceName` list, dated), enclosed-by (`PlaceRef`, dated), `coordinates`, `code`, citations, media, notes, tags, merged duplicate records (`PlacesMerged` links), places it is distinct from (`PlacesDistinguished` links), `restrictions` (a `Restriction` set).                                                                                                       |
 | **Source**     | A work / document.                                               | `id`, `human_id`, `title`, `author`, `pub_info`, `abbrev`, repository links (`RepoRef` with call number + media type), attributes, media, notes, tags, merged copies (`SourcesMerged` links), sources it is distinct from (`SourcesDistinguished` links), `restrictions` (a `Restriction` set).                                                                                                        |
 | **Citation**   | A specific reference within a Source.                            | `id`, `human_id`, `source_id`, `page`, `date`, `confidence`, `evidence_analysis`, attributes, media, notes, tags, a typed `CreationStamp` (creator `Agent` + time), merged copies (`CitationsMerged` links), citations it is distinct from (`CitationsDistinguished` links), `restrictions` (a `Restriction` set).                                                                                                 |
 | **Repository** | A place that holds sources.                                      | `id`, `human_id`, `repository_type`, `name`, addresses, urls, notes, tags, merged copies (`RepositoriesMerged` links), repositories it is distinct from (`RepositoriesDistinguished` links), `restrictions` (a `Restriction` set).                                                                                                                                                                                    |
@@ -328,13 +328,12 @@ hence in projections). Newtypes are used over bare primitives (Rust standards).
   in a group photo), a caption, and citations for using it here. Same indirection as `CitationRef`;
   it keeps per-use detail off the shared file.
 - **`CitationRef`** — `{ citation_id }` (citations are aggregates; this is the link).
-- **Enumerated type sets** — `EventType`, `FactType`, `NameType`, `PlaceType`, `AttributeType`,
+- **Enumerated type sets** — `EventType`, `FactType`, `NameType`, `AttributeType`,
   `RepositoryType`, `SourceMediaType`, `ParticipantRole`, `AssociationRole`. Each is a closed enum
   **plus a `Custom(String)` escape hatch**, mirroring Gramps' "custom type" pattern. The standard
   GEDCOM 5.5.1/7.0 enumerated values are **first-class variants**, not `Custom` strings, so they
   round-trip, deduplicate, and localize as codes; `Custom` is reserved for genuinely non-standard
-  values. (ADR 0031 §3–§4 replaces `PlaceType` with an optional `kind`, `level` and vocabulary
-  `type_key`; this section describes the shipped enum until that lands.)
+  values. (A place's type is not one of these: it is the `PlaceTypeStatement` below.)
   `EventType` carries the civil/common GEDCOM events (birth/death/marriage, the
   baptism/christening pair, cremation, adoption, confirmation, naturalization, ordination, probate,
   retirement, will, engagement, annulment, divorce/divorce-filed, and the marriage banns/contract/
@@ -553,8 +552,11 @@ Representative **commands** (not exhaustive):
   `AddCitation`, `AttachMedia`, `AttachNote`, `Tag`, `MergeEvents`, `DistinguishEvents`. (Participation is asserted on the Person
   aggregate via `AssertParticipation`; the event's participant list is a projection of those rows.)
 - **Place:** `CreatePlace`, `SetPlaceType`, `AssertName`, `AssertEnclosedBy`, `AssertCoordinates`,
-  `SetCode`, `AddCitation`, `Tag`, `MergePlaces`, `DistinguishPlaces`. ADR 0031 dates `SetPlaceType`
-  and the name and enclosure writes, and adds `AddExternalId` (§2, §3, §8).
+  `SetCode`, `AddCitation`, `Tag`, `MergePlaces`, `DistinguishPlaces`. `CreatePlace` carries a
+  `PlaceTypeStatement` that may be empty ("no type stated"); `SetPlaceType` carries one that must state
+  a kind, a level or a key (`EmptyPlaceType` otherwise), and a statement dated by free text is refused
+  on both (`TextOnlyPlaceTypeDate`, ADR 0054). ADR 0031 dates `SetPlaceType` and the name and enclosure
+  writes, and adds `AddExternalId` (§2, §3, §8).
 - **Source / Citation / Repository / Media / Note / Tag / DnaTest / DnaMatch:** the imperative form
   of each aggregate's events below (`CreateSource`/`SetTitle`/…, `CreateCitation`/`SetPage`/…,
   `CreateDnaMatch`/`ObserveMatch`/`ConfirmMatch`/`RejectMatch`/…). Source, Citation, Repository,
@@ -588,8 +590,18 @@ verbs (not exhaustive):
   (dated `PlaceRef`), `CoordinatesAsserted`, `CodeSet`, `CitationAdded`, `Tagged`,
   `PlacesMerged` / `PlacesDistinguished` (each with an optional `assessment`, as on Person — and
   distinct from `SuccessionAsserted`, ADR 0039 §6). ADR 0031 widens `PlaceRef`, `PlaceName`, the
-  geometry assertion and `SuccessionKind`, and replaces `PlaceTypeSet`'s `PlaceType` (§1–§3, §6, §9,
-  §10).
+  geometry assertion and `SuccessionKind` (§1–§3, §6, §9, §10). `PlaceCreated` and `PlaceTypeSet`
+  carry a `type_statement` (event version "2.0"); a type accumulates, the current one being the dated
+  statement in effect, else the latest live undated one (ADR 0054).
+
+  **Place type statement.** `kind` (one of 12), `level` (`Country`, `Adm1`–`Adm5`, `Settlement`,
+  `SubSettlement`) and `type_key` (`<namespace>:<name>`, or `custom:<text>` as typed) are each optional
+  and stored as stated. The `std` namespace holds the 20 Gramps standard types, each with a suggested
+  kind and level that an entry point may pre-fill: country (Administrative, Country), state and province
+  (Administrative, Adm1), county, region, department, district, borough and municipality
+  (Administrative), parish (Ecclesiastical), city, town, village and hamlet (Settlement, Settlement),
+  locality, street and neighborhood (Settlement, SubSettlement), farm (Settlement), building and number
+  (Building). The country lookup is `level == Country`; matching compares kind, then level, then key.
 - **Source:** `SourceCreated`, bibliographic setters (`TitleSet`, `AuthorSet`, `PubInfoSet`,
   `AbbrevSet`), `RepositoryLinked` (call number + media type), `AttributeAdded`, `MediaAttached`,
   `NoteAttached`, `Tagged`, `SourcesMerged` / `SourcesDistinguished`.
@@ -862,10 +874,10 @@ genuinely **data**, and those are already covered by small value objects.
 **Presentation — no model impact (UI and per-workspace/user preferences):**
 
 - Display/UI language, date and number formatting, and right-to-left layout.
-- **Localized labels for coded enums.** `EventType`, `NameType`, `PlaceType`, etc. are stored as
+- **Localized labels for coded enums.** `EventType`, `NameType`, etc. are stored as
   language-neutral codes (with a `Custom(String)` escape); their human labels are translated in the
-  UI, never stored. A place type key's label comes from the plugin that ships its vocabulary, and a key
-  with no loaded vocabulary renders as its kind plus the key (ADR 0031 §4). The retained
+  UI, never stored. A `std` place type key's label is built in; `custom:<text>` is user data and shows as
+  typed, like a name; a key with no loaded vocabulary renders as its kind plus the key (ADR 0031 §4). The retained
   `original_text` on `GenealogicalDate` and the coded calendars keep
   dates language-neutral at the core too.
 - **Name collation / sort order** is locale-sensitive (Norwegian *å* sorts after *z*; surname-prefix

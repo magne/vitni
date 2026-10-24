@@ -15,7 +15,7 @@ use vitni_app::{
 
 use crate::i18n::Localizer;
 use crate::list::RowVm;
-use crate::list_layout::cells_line;
+use crate::list_layout::{cells_line, fetch_columns};
 use crate::list_window::WINDOW_ROWS;
 use crate::navigation::Category;
 use crate::view_model::{
@@ -197,6 +197,11 @@ pub async fn list_page(
         query,
         tags: tag_names(workspace, query).await?,
     };
+    let fetched = ListQuery {
+        columns: query.columns.as_deref().map(|shown| fetch_columns(query.kind, shown)),
+        ..query.clone()
+    };
+    let query = &fetched;
     let rows = match query.kind {
         ListedKind::Person => paged(
             &list_persons_page(workspace, query, window).await?,

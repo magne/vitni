@@ -14,7 +14,7 @@ use vitni_app::{
     Confidence, DateInput, DateModifier, DatePoint, DateQuality, DnaProvider, EngineVersion, EventType, EvidenceLevel,
     FactType, GenealogicalDate, GenealogicalDateBody, MatchBand, MatchEvidence, MutationMeta, NewCitation, NewDnaMatch,
     NewDnaTest, NewEvent, NewMedia, NewNote, NewPerson, NewPlace, NewRepository, NewSource, OperatorConfig,
-    ParticipantRole, PersonNameParts, PlaceType, Provenance, Rect, Session, Workspace, WorkspaceDefaults, add_child,
+    ParticipantRole, PersonNameParts, Provenance, Rect, Session, Workspace, WorkspaceDefaults, add_child,
     build_genealogical_date, change_log_for_citation, change_log_for_dna_match, change_log_for_dna_test,
     change_log_for_event, change_log_for_family, change_log_for_media, change_log_for_person, change_log_for_place,
     change_log_for_repository, change_log_for_source, create_citation, create_dna_test, create_event, create_family,
@@ -1250,7 +1250,7 @@ async fn set_media_region_supersedes_the_place_media_crop() {
         &session,
         NewPlace {
             human_id: None,
-            place_type: PlaceType::City,
+            place_type: vitni_app::std_statement("city").unwrap_or_default(),
             name: Some("Trondheim".to_owned()),
         },
         Provenance::default(),
@@ -1417,7 +1417,7 @@ async fn a_place_pair_is_queued_compared_and_merged_from_the_matches_tool() {
     let loc = Localizer::for_workspace(&dir.path().join("ws"), None);
     let farm = |name: &str| NewPlace {
         human_id: None,
-        place_type: PlaceType::Farm,
+        place_type: vitni_app::std_statement("farm").unwrap_or_default(),
         name: Some(name.to_owned()),
     };
     let nordaas = create_place(&ws, &session, farm("Nordaas"), Provenance::default(), &[])
@@ -1585,7 +1585,7 @@ async fn attaching_to_a_place_carries_the_drafts_provenance() {
         &session,
         NewPlace {
             human_id: None,
-            place_type: PlaceType::City,
+            place_type: vitni_app::std_statement("city").unwrap_or_default(),
             name: Some("Trondheim".to_owned()),
         },
         Provenance::default(),

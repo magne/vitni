@@ -211,13 +211,6 @@ pub fn event_record_fields(loc: &Localizer, ctx: &EventEditCtx) -> Element {
     }
 }
 
-/// The place types offered for an inline "new place" — [`vitni_ui::NEW_PLACE_TYPES`], the same list
-/// the Places category's own create form and the find-or-create attach card's Place body offer, so the
-/// choices never disagree by entry point.
-fn event_place_type_choices() -> [vitni_app::PlaceType; 9] {
-    vitni_ui::NEW_PLACE_TYPES
-}
-
 /// The event's place field in the whole-record editor: a read-first existing-place picker
 /// ([`draft_picker_field`]). The collapsed selection is derived from the draft's place link (so
 /// `use_record_edit` reseeds cleanly), and it is modified when the link differs from the committed one.
@@ -319,7 +312,7 @@ fn event_place_create_field(loc: &Localizer, draft: Signal<vitni_ui::EventDraft>
 /// The inline new-place fields inside the event create form's draft card: a place-type select and a
 /// name input, both bound to the draft's new-place link.
 fn event_new_place_body(loc: &Localizer, mut draft: Signal<vitni_ui::EventDraft>) -> Element {
-    let place_types = event_place_type_choices();
+    let place_types = vitni_ui::new_place_types();
     let current = match &draft().place {
         RecordLink::New(fields) => fields.clone(),
         _ => NewPlaceFields::default(),
@@ -337,7 +330,7 @@ fn event_new_place_body(loc: &Localizer, mut draft: Signal<vitni_ui::EventDraft>
             value: Some(type_selected),
             options: type_options,
             onchange: move |event: FormEvent| {
-                let place_types = event_place_type_choices();
+                let place_types = vitni_ui::new_place_types();
                 if let Some(place_type) = event.value().parse::<usize>().ok().and_then(|index| place_types.get(index).cloned())
                     && let RecordLink::New(fields) = &mut draft.write().place
                 {

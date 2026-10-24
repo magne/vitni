@@ -15,9 +15,7 @@ use vitni_app::{
     distinguish_persons, link_family_event, link_place, link_source_repository, merge_persons, remove_child,
     set_repository_name, set_title, similar_pairs, undo_assertion, undo_event_assertion, undo_place_assertion,
 };
-use vitni_core::enums::{
-    ChildParentRelationship, EventType, EvidenceLevel, ParticipantRole, PlaceType, Sex, SourceMediaType,
-};
+use vitni_core::enums::{ChildParentRelationship, EventType, EvidenceLevel, ParticipantRole, Sex, SourceMediaType};
 use vitni_core::ids::AgentId;
 use vitni_core::provenance::{Agent, AgentKind};
 
@@ -135,10 +133,11 @@ impl Records {
         family
     }
 
-    async fn place(&self, name: &str, place_type: PlaceType) -> String {
+    /// Creates a place `name` of the `std` type `std_name` (`"farm"`).
+    async fn place(&self, name: &str, std_name: &str) -> String {
         let new = NewPlace {
             human_id: None,
-            place_type,
+            place_type: vitni_app::std_statement(std_name).unwrap_or_default(),
             name: Some(name.to_owned()),
         };
         create_place(&self.workspace, &self.session, new, Provenance::default(), &[])
@@ -193,11 +192,11 @@ struct Scenario {
 impl Scenario {
     async fn new(records: &Records) -> Self {
         let (ws, session) = (&records.workspace, &records.session);
-        let county = records.place("Akershus", PlaceType::County).await;
-        let parish = records.place("Asker", PlaceType::Parish).await;
+        let county = records.place("Akershus", "county").await;
+        let parish = records.place("Asker", "parish").await;
         let farms = [
-            records.place("Nordaas", PlaceType::Farm).await,
-            records.place("Nordås", PlaceType::Farm).await,
+            records.place("Nordaas", "farm").await,
+            records.place("Nordås", "farm").await,
         ];
         for farm in &farms {
             assert_place_enclosed_by(ws, session, farm, &parish, MutationMeta::default())
@@ -328,7 +327,7 @@ async fn the_pairs_follow_every_record_a_score_reads() {
         .expect("unsex a son");
     records.assert_refreshed_as_rebuilt("a son lost his sex").await;
 
-    let denmark = records.place("Danmark", PlaceType::Country).await;
+    let denmark = records.place("Danmark", "country").await;
     link_place(
         ws,
         session,
@@ -342,7 +341,7 @@ async fn the_pairs_follow_every_record_a_score_reads() {
         .assert_refreshed_as_rebuilt("a father was born in Denmark")
         .await;
 
-    let country = records.place("Norge", PlaceType::Country).await;
+    let country = records.place("Norge", "country").await;
     assert_place_enclosed_by(ws, session, &scenario.county, &country, MutationMeta::default())
         .await
         .expect("put the county in a country");

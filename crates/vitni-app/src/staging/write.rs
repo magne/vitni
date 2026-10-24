@@ -13,6 +13,7 @@ use vitni_core::enums::{EvidenceLevel, Restriction};
 use vitni_core::ids::ImportRunId;
 use vitni_core::matching::MatchableKind;
 use vitni_core::origin::{DatasetId, RecordOrigin};
+use vitni_core::place_type::PlaceTypeStatement;
 use vitni_core::provenance::Timestamp;
 
 use crate::error::AppError;
@@ -63,7 +64,7 @@ impl Held {
             restrictions: view.restrictions().clone(),
             ..Self::default()
         };
-        if place::stated_place_type(view).is_some() {
+        if view.place_type().is_some() {
             held.filled.insert("place_type");
         }
         if view.coordinates().is_some() {
@@ -239,7 +240,7 @@ impl Writer<'_> {
                 let new = NewPlace {
                     human_id: None,
                     // The type, when the record states one, is its own assertion below.
-                    place_type: place::unstated_place_type(),
+                    place_type: PlaceTypeStatement::default(),
                     name: Some(fields.name.clone()),
                 };
                 place::create_place(ws, session, new, provenance, &[]).await?
@@ -386,7 +387,11 @@ impl Writer<'_> {
         if held.name(&fields.name) {
             place::add_place_name(ws, session, human_id, fields.name.clone(), meta()).await?;
         }
-        let place_type = fields.place_type.as_ref().filter(|_| held.filled.insert("place_type"));
+        let place_type = fields
+            .place_type
+            .as_ref()
+            .filter(|statement| !statement.is_empty())
+            .filter(|_| held.filled.insert("place_type"));
         if let Some(place_type) = place_type {
             place::set_place_type(ws, session, human_id, place_type.clone(), meta()).await?;
         }
@@ -516,7 +521,7 @@ impl Writer<'_> {
                 }
             }
             EntityFields::Place(fields) => {
-                if let Some(place_type) = &fields.place_type {
+                if let Some(place_type) = fields.place_type.as_ref().filter(|statement| !statement.is_empty()) {
                     place::set_place_type(ws, session, human_id, place_type.clone(), meta()).await?;
                 }
                 if let Some(coordinates) = fields.coordinates {

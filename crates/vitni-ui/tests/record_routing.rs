@@ -1,21 +1,22 @@
 //! Edits on a merged place, source, citation, repository, note or media detail are routed to the
 //! record that owns the row (ADR 0039 §5): an undo of a member's row is written to that member's
-//! stream, the pane keeps showing the root, and the row names the member it came from.
+//! stream, the pane keeps showing the root, and the row names the member it came from. A type edit on a
+//! merged place's root is based on the root's own type, never a member's.
 
 #![expect(clippy::expect_used, reason = "tests abort on setup failure")]
 
 use uuid::Uuid;
 use vitni_app::{
     Agent, AgentId, AgentKind, AppDefaults, IdentityDecision, MutationMeta, NewCitation, NewMedia, NewNote, NewPlace,
-    NewRepository, NewSource, OperatorConfig, PlaceType, Provenance, Session, Url, Workspace, WorkspaceDefaults,
+    NewRepository, NewSource, OperatorConfig, Provenance, Session, Url, Workspace, WorkspaceDefaults,
     add_citation_attribute, add_media_attribute, add_note_translation, add_place_name, add_repository_url,
     add_source_attribute, create_citation, create_media, create_note, create_place, create_repository, create_source,
-    merge_citations, merge_media, merge_notes, merge_places, merge_repositories, merge_sources, show_citation,
-    show_media, show_note, show_place, show_repository, show_source,
+    merge_citations, merge_media, merge_notes, merge_places, merge_repositories, merge_sources, set_place_type,
+    show_citation, show_media, show_note, show_place, show_repository, show_source,
 };
 use vitni_ui::{
-    CitationDetail, CitationEdit, Localizer, MediaDetail, MediaEdit, NoteDetail, NoteEdit, PlaceDetail, PlaceEdit,
-    ProvenanceDraft, RepositoryDetail, RepositoryEdit, SourceDetail, SourceEdit, dispatch_citation_edit,
+    CitationDetail, CitationEdit, Localizer, MediaDetail, MediaEdit, NoteDetail, NoteEdit, PlaceDetail, PlaceDraft,
+    PlaceEdit, ProvenanceDraft, RepositoryDetail, RepositoryEdit, SourceDetail, SourceEdit, dispatch_citation_edit,
     dispatch_media_edit, dispatch_note_edit, dispatch_place_edit, dispatch_repository_edit, dispatch_source_edit,
 };
 
@@ -49,7 +50,7 @@ async fn workspace() -> (Workspace, tempfile::TempDir, Localizer) {
 async fn new_place(ws: &Workspace) -> String {
     let new = NewPlace {
         human_id: None,
-        place_type: PlaceType::Farm,
+        place_type: vitni_app::std_statement("farm").unwrap_or_default(),
         name: None,
     };
     create_place(ws, &session(), new, Provenance::default(), &[])
@@ -274,3 +275,52 @@ routing_test!(
     edit: MediaEdit,
     dispatch: dispatch_media_edit,
 );
+
+async fn untyped_place(ws: &Workspace) -> String {
+    let new = NewPlace {
+        human_id: None,
+        place_type: vitni_app::PlaceTypeStatement::default(),
+        name: None,
+    };
+    create_place(ws, &session(), new, Provenance::default(), &[])
+        .await
+        .expect("place")
+}
+
+#[tokio::test]
+async fn editing_a_merged_roots_type_takes_no_date_from_a_members_type() {
+    let (ws, _dir, loc) = workspace().await;
+    let root = untyped_place(&ws).await;
+    let member = untyped_place(&ws).await;
+    let parish = vitni_app::PlaceTypeStatement {
+        date: Some(vitni_app::gregorian_date(vitni_app::DateParts {
+            year: 1838,
+            month: None,
+            day: None,
+        })),
+        ..vitni_app::std_statement("parish").expect("std:parish")
+    };
+    set_place_type(&ws, &session(), &member, parish, MutationMeta::default())
+        .await
+        .expect("member type");
+    merge_places(&ws, &session(), &root, &member, IdentityDecision::default())
+        .await
+        .expect("merge");
+    let summary = show_place(&ws, &root).await.expect("show").expect("root");
+    let seed = PlaceDraft::from_detail(&PlaceDetail::from_summary(&summary, &loc));
+    let draft = PlaceDraft {
+        place_type: vitni_app::std_statement("farm"),
+        ..seed.clone()
+    };
+
+    let edits = draft.edits_against(&seed);
+
+    let written = edits
+        .iter()
+        .find_map(|edit| match edit {
+            PlaceEdit::SetType { place_type, .. } => Some(place_type),
+            _ => None,
+        })
+        .expect("a type edit");
+    assert_eq!(written.date, None, "the root's own type is undated: {written:?}");
+}

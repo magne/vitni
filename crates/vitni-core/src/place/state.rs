@@ -1,7 +1,7 @@
 //! [`PlaceState`] — the folded aggregate state used by the decision core.
 //!
 //! `Default` (an unseen place) and serializable (for snapshotting), rebuilt by replaying events
-//! through `evolve`. Names and enclosures accumulate; the type, code, and coordinates are
+//! through `evolve`. Names, enclosures and types accumulate; the code and coordinates are
 //! last-writer-wins. Each projected value is kept attributed to the [`AssertionId`] that introduced
 //! it, so a retraction or supersession can remove exactly the right entry (data-model §10), and the
 //! provenance-bearing facts ([`Asserted`]) carry their surety + backing citations for the read model.
@@ -12,13 +12,14 @@ use std::collections::BTreeSet;
 use serde::{Deserialize, Serialize};
 
 use crate::assertions::{Asserted, Attributed};
-use crate::enums::{PlaceType, Restriction};
+use crate::enums::Restriction;
 use crate::geo::GeoCoordinates;
 use crate::ids::{AssertionId, CitationId, HumanId, NoteId, PlaceId, TagId};
 use crate::place_geometry::PlaceGeometryAssertion;
 use crate::place_name::PlaceName;
 use crate::place_ref::PlaceRef;
 use crate::place_succession::PlaceSuccessionAssertion;
+use crate::place_type::PlaceTypeStatement;
 use crate::text::MediaRef;
 
 /// The folded state of a Place aggregate (data-model §6).
@@ -30,8 +31,13 @@ pub struct PlaceState {
     pub place_id: Option<PlaceId>,
     /// The user-facing identifier.
     pub human_id: Option<HumanId>,
-    /// The place's type (last writer wins), with its provenance.
-    pub place_type: Option<Attributed<Asserted<PlaceType>>>,
+    /// All currently-live non-empty type statements, in assertion order, each with its provenance — these
+    /// accumulate and are resolved by date (ADR 0031 §3, ADR 0054).
+    #[serde(default)]
+    pub place_types: Vec<Attributed<Asserted<PlaceTypeStatement>>>,
+    /// The assertion that created the place, so a retype never supersedes it (ADR 0054).
+    #[serde(default)]
+    pub created_assertion: Option<AssertionId>,
     /// All currently-live asserted names, in assertion order, each with its provenance.
     pub names: Vec<Attributed<Asserted<PlaceName>>>,
     /// All currently-live enclosing-place relationships, in assertion order, each with its provenance.
@@ -89,9 +95,7 @@ impl PlaceState {
     pub(crate) fn remove_assertion(&mut self, target: AssertionId) {
         self.names.retain(|n| n.assertion_id != target);
         self.enclosed_by.retain(|e| e.assertion_id != target);
-        if self.place_type.as_ref().is_some_and(|t| t.assertion_id == target) {
-            self.place_type = None;
-        }
+        self.place_types.retain(|t| t.assertion_id != target);
         if self.coordinates.as_ref().is_some_and(|c| c.assertion_id == target) {
             self.coordinates = None;
         }

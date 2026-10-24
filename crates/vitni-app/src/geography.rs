@@ -10,8 +10,9 @@
 //! needs it.
 
 use vitni_core::date::GenealogicalDate;
-use vitni_core::enums::{EventType, PlaceType};
+use vitni_core::enums::EventType;
 use vitni_core::geo::{GeoCoordinates, PlaceGeometry};
+use vitni_core::place_type::PlaceTypeStatement;
 
 use crate::error::AppError;
 use crate::event::{DateParts, EventSummary, gregorian_date, list_events};
@@ -30,7 +31,7 @@ pub struct PlaceMarker {
     /// The place's display name (falls back to the `human_id`).
     pub name: String,
     /// The place's type, if set. Structured (not a label) so the frontend localizes it (ADR 0003).
-    pub place_type: Option<PlaceType>,
+    pub place_type: Option<PlaceTypeStatement>,
     /// The resolved shape (a point or a polygon) to plot.
     pub geometry: PlaceGeometry,
 }
@@ -82,7 +83,7 @@ pub struct UnplottedPlace {
     /// The place's display name (falls back to the `human_id`).
     pub name: String,
     /// The place's type, if set. Structured (not a label) so the frontend localizes it (ADR 0003).
-    pub place_type: Option<PlaceType>,
+    pub place_type: Option<PlaceTypeStatement>,
     /// Why this place has no marker.
     pub reason: UnplottedReason,
 }

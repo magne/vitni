@@ -13,8 +13,7 @@ use vitni_core::dna::{Centimorgans, DnaGenomeBuild, DnaProvider, DnaTestType};
 use vitni_core::dna_match::DnaMatchEventBody;
 use vitni_core::dna_test::DnaTestEventBody;
 use vitni_core::enums::{
-    AssociationRole, ChildParentRelationship, EventType, NoteType, ParticipantRole, PlaceType, RepositoryType,
-    Restriction, Sex,
+    AssociationRole, ChildParentRelationship, EventType, NoteType, ParticipantRole, RepositoryType, Restriction, Sex,
 };
 use vitni_core::event::EventEventBody;
 use vitni_core::family::FamilyEventBody;
@@ -23,6 +22,7 @@ use vitni_core::media::MediaEventBody;
 use vitni_core::note::NoteEventBody;
 use vitni_core::person::event::PersonEventBody;
 use vitni_core::place::PlaceEventBody;
+use vitni_core::place_type::PlaceTypeStatement;
 use vitni_core::provenance::{Confidence, EvidenceAnalysis};
 use vitni_core::repository::RepositoryEventBody;
 use vitni_core::research_note::{ResearchNoteEventBody, SubjectRef};
@@ -47,8 +47,8 @@ pub enum ChangeValue {
     Sex(Sex),
     /// An event's type.
     EventType(EventType),
-    /// A place's type.
-    PlaceType(PlaceType),
+    /// A place's type statement (never empty).
+    PlaceType(PlaceTypeStatement),
     /// A note's type.
     NoteType(NoteType),
     /// A repository's type.
@@ -232,8 +232,8 @@ fn event_value(body: EventEventBody) -> Option<ChangeValue> {
 
 fn place_value(body: PlaceEventBody) -> Option<ChangeValue> {
     match body {
-        PlaceEventBody::PlaceCreated { place_type, .. } | PlaceEventBody::PlaceTypeSet { place_type, .. } => {
-            Some(ChangeValue::PlaceType(place_type))
+        PlaceEventBody::PlaceCreated { type_statement, .. } | PlaceEventBody::PlaceTypeSet { type_statement, .. } => {
+            (!type_statement.is_empty()).then_some(ChangeValue::PlaceType(type_statement))
         }
         PlaceEventBody::NameAsserted { name, .. } => text(name.text),
         PlaceEventBody::EnclosedByAsserted { enclosed_by, .. } => Some(record("place", &enclosed_by.place_id)),

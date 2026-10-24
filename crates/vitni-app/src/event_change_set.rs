@@ -8,9 +8,10 @@
 //! rides here — the structured date is asserted afterwards via [`crate::event::assert_event_date_value`].
 //! Provenance follows the shared change-set rule.
 
-use vitni_core::enums::{EventType, PlaceType};
+use vitni_core::enums::EventType;
 use vitni_core::event::command::{EventCommand, EventCommandEnvelope};
 use vitni_core::ids::{HumanId, PlaceId};
+use vitni_core::place_type::PlaceTypeStatement;
 use vitni_core::provenance::EvidenceRef;
 use vitni_db::Store;
 
@@ -34,8 +35,8 @@ pub enum PlaceRefInput {
 pub struct NewPlaceEntry {
     /// The placeholder the event's place reference points at.
     pub placeholder: PlaceholderRef,
-    /// The new place's type.
-    pub place_type: PlaceType,
+    /// The new place's type statement; empty when none is stated.
+    pub place_type: PlaceTypeStatement,
     /// The new place's name, if given.
     pub name: Option<String>,
 }
@@ -194,7 +195,7 @@ mod tests {
     use crate::workspace::Workspace;
     use tempfile::TempDir;
     use uuid::Uuid;
-    use vitni_core::enums::{EventType, PlaceType};
+    use vitni_core::enums::EventType;
     use vitni_core::ids::AgentId;
     use vitni_core::provenance::{Agent, AgentKind, Confidence};
 
@@ -268,7 +269,7 @@ mod tests {
                 place: Some(PlaceRefInput::Pending(PlaceholderRef("p1".to_owned()))),
                 new_places: vec![NewPlaceEntry {
                     placeholder: PlaceholderRef("p1".to_owned()),
-                    place_type: PlaceType::Building,
+                    place_type: crate::std_statement("building").unwrap_or_default(),
                     name: Some("Trinity Church".to_owned()),
                 }],
                 ..draft(EventType::Baptism)

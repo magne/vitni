@@ -10,7 +10,7 @@ use vitni_app::{
     PersonNameParts, PersonSummary, Provenance, Session, Workspace, WorkspaceDefaults, create_person, create_place,
     list_persons, list_persons_page, list_places, list_places_page, merge_persons, merge_places,
 };
-use vitni_core::enums::{EvidenceLevel, PlaceType};
+use vitni_core::enums::EvidenceLevel;
 use vitni_core::ids::AgentId;
 use vitni_core::provenance::{Agent, AgentKind};
 
@@ -58,7 +58,7 @@ async fn person(ws: &Workspace, given: &str) -> String {
 async fn place(ws: &Workspace, name: &str) -> String {
     let new = NewPlace {
         human_id: None,
-        place_type: PlaceType::Farm,
+        place_type: vitni_app::std_statement("farm").unwrap_or_default(),
         name: Some(name.to_owned()),
     };
     create_place(ws, &session(), new, Provenance::default(), &[])

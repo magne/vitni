@@ -556,7 +556,7 @@ mod event_draft_tests {
     use crate::navigation::{EventEdit, EventPlaceRequest};
     use crate::picker::PickerSelection;
     use crate::presentation::RestrictionKind;
-    use vitni_app::{EventType, PlaceType};
+    use vitni_app::EventType;
 
     fn existing_place(human_id: &str) -> RecordLink<NewPlaceFields> {
         RecordLink::Existing(PickerSelection {
@@ -721,14 +721,14 @@ mod event_draft_tests {
     fn a_new_place_maps_to_a_pending_place_request() {
         let draft = EventDraft {
             place: RecordLink::New(NewPlaceFields {
-                place_type: PlaceType::Building,
+                place_type: vitni_app::std_statement("building").unwrap_or_default(),
                 name: "Trinity Church".to_owned(),
             }),
             ..EventDraft::new()
         };
         match draft.to_request().place {
             EventPlaceRequest::New { place_type, name } => {
-                assert_eq!(place_type, PlaceType::Building);
+                assert_eq!(place_type, vitni_app::std_statement("building").unwrap_or_default());
                 assert_eq!(name.as_deref(), Some("Trinity Church"));
             }
             other => panic!("expected a New place request, got {other:?}"),
@@ -803,7 +803,7 @@ mod event_draft_tests {
 mod event_display_label_tests {
     use super::{DateDraft, EventDraft, NewPlaceFields, RecordDraft, RecordLink};
     use crate::picker::PickerSelection;
-    use vitni_app::{EventType, PlaceType};
+    use vitni_app::EventType;
 
     #[test]
     fn a_fully_populated_event_draft_still_has_no_label() {
@@ -827,7 +827,7 @@ mod event_display_label_tests {
         assert_eq!(draft.display_label(), None);
         let inline_place = EventDraft {
             place: RecordLink::New(NewPlaceFields {
-                place_type: PlaceType::City,
+                place_type: vitni_app::std_statement("city").unwrap_or_default(),
                 name: "Kristiania".to_owned(),
             }),
             ..draft

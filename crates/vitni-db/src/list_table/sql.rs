@@ -406,7 +406,7 @@ fn predicate(binder: &mut Binder, kind: ListedKind, column: &str, test: &ListTes
             dialect.contains(&format!("t.{stem}_fold"), &needle)
         }
         (ColumnType::Text, ListTest::Is(value)) => format!("t.{stem}_fold = {}", binder.text(&fold(value))),
-        (ColumnType::Text | ColumnType::Record, ListTest::IsEmpty) => format!("t.{stem} IS NULL"),
+        (ColumnType::Text | ColumnType::Choice | ColumnType::Record, ListTest::IsEmpty) => format!("t.{stem} IS NULL"),
         (ColumnType::Date, ListTest::IsEmpty) => format!("t.{stem}_key IS NULL"),
         (ColumnType::Date, ListTest::Before(key)) => format!("t.{stem}_key < {}", binder.bind(Value::Int(Some(*key)))),
         (ColumnType::Date, ListTest::After(key)) => format!("t.{stem}_key > {}", binder.bind(Value::Int(Some(*key)))),

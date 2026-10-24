@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use vitni_app::{
     Address, Age, AssociationRole, Attribute, Centimorgans, ChildParentRelationship, DateInput, DateParts,
     DnaGenomeBuild, DnaProvider, DnaSegment, DnaTestType, EventType, EvidenceAnalysis, FactType, GeoCoordinates,
-    NoteType, ParticipantRole, PercentShared, PersonNameParts, PlaceGeometry, PlaceType, Rect, RepositoryType, Sex,
+    NoteType, ParticipantRole, PercentShared, PersonNameParts, PlaceGeometry, Rect, RepositoryType, Sex,
     SourceMediaType, SuccessionKind, Url,
 };
 use vitni_app::{DecidableKind, IdentityDecision, MatchEvidence, MatchQueueFilter, Provenance};
@@ -1701,7 +1701,7 @@ pub enum PlaceEdit {
         /// The place to edit.
         human_id: String,
         /// The place type to set.
-        place_type: PlaceType,
+        place_type: vitni_app::PlaceTypeStatement,
     },
     /// Set (or change) the place's geographic coordinates.
     SetCoordinates {
@@ -2581,8 +2581,8 @@ pub struct MediaChangeSetRequest {
 pub struct PlaceChangeSetRequest {
     /// A caller-supplied `human_id` override; blank ⇒ auto-allocate.
     pub human_id: Option<String>,
-    /// The place type (required).
-    pub place_type: PlaceType,
+    /// The place type statement; empty when none is stated.
+    pub place_type: vitni_app::PlaceTypeStatement,
     /// The place's primary name (blank ⇒ `None`).
     pub name: Option<String>,
     /// The parsed coordinate pair, if both fields were filled and valid.
@@ -2688,7 +2688,7 @@ pub enum EventPlaceRequest {
     /// Create a place inline and link it.
     New {
         /// The new place's type.
-        place_type: PlaceType,
+        place_type: vitni_app::PlaceTypeStatement,
         /// The new place's name, if given.
         name: Option<String>,
     },

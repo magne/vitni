@@ -6,13 +6,14 @@
 use std::collections::BTreeSet;
 use std::str::FromStr;
 
-use vitni_core::enums::{PlaceType, Restriction, SuccessionKind};
+use vitni_core::enums::{Restriction, SuccessionKind};
 use vitni_core::geo::{GeoCoordinates, Microdegrees, PlaceGeometry};
 use vitni_core::ids::{AssertionId, CitationId, HumanId, MediaId, NoteId, PlaceId, TagId};
 use vitni_core::name::LanguageTag;
 use vitni_core::place::{PlaceEvent, PlaceEventBody, PlaceState};
 use vitni_core::place_name::PlaceName;
 use vitni_core::place_ref::PlaceRef;
+use vitni_core::place_type::{PlaceKind, PlaceLevel, PlaceTypeKey, PlaceTypeStatement};
 use vitni_core::text::MediaRef;
 
 use crate::backup_fixture::Builder;
@@ -47,7 +48,7 @@ fn push_municipality(builder: &mut Builder, municipality_id: PlaceId) {
             PlaceEventBody::PlaceCreated {
                 place_id: municipality_id,
                 human_id: HumanId::new("P0002"),
-                place_type: PlaceType::Municipality,
+                type_statement: std_type("municipality"),
             },
         ),
     );
@@ -78,11 +79,16 @@ fn push_created(builder: &mut Builder, farm_id: PlaceId) -> AssertionId {
             PlaceEventBody::PlaceCreated {
                 place_id: farm_id,
                 human_id: HumanId::new("P0001"),
-                place_type: PlaceType::Farm,
+                type_statement: std_type("farm"),
             },
         ),
     );
     assertion_id
+}
+
+/// The undated `std` statement for `name`: kind and level from the app's table, key `std:<name>`.
+fn std_type(name: &str) -> PlaceTypeStatement {
+    vitni_app::std_statement(name).unwrap_or_default()
 }
 
 fn point(lat: &str, lon: &str) -> GeoCoordinates {
@@ -96,7 +102,29 @@ fn push_names_and_shape(builder: &mut Builder, farm_id: PlaceId, municipality_id
     let bodies = [
         PlaceEventBody::PlaceTypeSet {
             place_id: farm_id,
-            place_type: PlaceType::Farm,
+            type_statement: std_type("farm"),
+        },
+        PlaceEventBody::PlaceTypeSet {
+            place_id: farm_id,
+            type_statement: PlaceTypeStatement {
+                date: Some(vitni_app::year_only_date(1838)),
+                ..std_type("parish")
+            },
+        },
+        PlaceEventBody::PlaceTypeSet {
+            place_id: farm_id,
+            type_statement: PlaceTypeStatement {
+                type_key: PlaceTypeKey::new("custom:Sokn").ok(),
+                ..PlaceTypeStatement::default()
+            },
+        },
+        PlaceEventBody::PlaceTypeSet {
+            place_id: farm_id,
+            type_statement: PlaceTypeStatement {
+                kind: Some(PlaceKind::Administrative),
+                level: Some(PlaceLevel::Adm2),
+                ..PlaceTypeStatement::default()
+            },
         },
         PlaceEventBody::NameAsserted {
             place_id: farm_id,

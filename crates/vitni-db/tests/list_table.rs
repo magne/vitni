@@ -8,7 +8,7 @@
 use time::macros::datetime;
 use uuid::Uuid;
 use vitni_core::date::{Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody};
-use vitni_core::enums::{EventType, EvidenceLevel, ParticipantRole, PlaceType, Sex};
+use vitni_core::enums::{EventType, EvidenceLevel, ParticipantRole, Sex};
 use vitni_core::event::command::{EventCommand, EventCommandEnvelope};
 use vitni_core::family::command::{FamilyCommand, FamilyCommandEnvelope};
 use vitni_core::ids::{AgentId, AssertionId, EventId, FamilyId, HumanId, PersonId, PlaceId, TagId};
@@ -16,10 +16,12 @@ use vitni_core::name::{NameType, PersonName, Surname};
 use vitni_core::person::command::{PersonCommand, PersonCommandEnvelope};
 use vitni_core::place::command::{PlaceCommand, PlaceCommandEnvelope};
 use vitni_core::place_name::PlaceName;
+use vitni_core::place_type::{PlaceKind, PlaceLevel, PlaceTypeKey, PlaceTypeStatement};
 use vitni_core::provenance::{Agent, AgentKind, AssertionMeta, EventContext, Timestamp};
 use vitni_core::tag::command::{TagCommand, TagCommandEnvelope};
 use vitni_db::{
-    ListCell, ListPredicate, ListResult, ListSort, ListSpec, ListTest, ListWindow, ListedKind, SortDirection, Store,
+    ColumnType, ListCell, ListPredicate, ListResult, ListSort, ListSpec, ListTest, ListWindow, ListedKind,
+    SortDirection, Store,
 };
 
 fn meta(assertion: u128) -> AssertionMeta {
@@ -158,7 +160,7 @@ async fn create_place(store: &Store, n: u128, name: &str) {
     let create = PlaceCommand::CreatePlace {
         place_id: PlaceId::from_uuid(id(n)),
         human_id: HumanId::new(format!("P{n:04}")),
-        place_type: PlaceType::Parish,
+        type_statement: type_statement(Some("std:parish")),
     };
     place(store, n, n * 100, create).await;
     name_place(store, n, n * 100 + 1, name).await;
@@ -182,6 +184,162 @@ async fn place(store: &Store, n: u128, assertion: u128, command: PlaceCommand) {
         command,
     };
     store.execute_place(&id(n).to_string(), envelope).await.unwrap();
+}
+
+fn type_statement(key: Option<&str>) -> PlaceTypeStatement {
+    PlaceTypeStatement {
+        kind: key.map(|_| PlaceKind::Settlement),
+        level: None,
+        type_key: key.map(|key| PlaceTypeKey::new(key).unwrap()),
+        date: None,
+    }
+}
+
+/// Creates place `n` as `P<n>` named `name`, typed `key` (untyped when `None`).
+async fn create_typed_place(store: &Store, n: u128, name: &str, key: Option<&str>) {
+    let create = PlaceCommand::CreatePlace {
+        place_id: PlaceId::from_uuid(id(n)),
+        human_id: HumanId::new(format!("P{n:04}")),
+        type_statement: type_statement(key),
+    };
+    place(store, n, n * 100, create).await;
+    name_place(store, n, n * 100 + 1, name).await;
+}
+
+async fn the_place_type_column_holds_the_type_key_as_text(store: &Store) {
+    create_typed_place(store, 1, "Haugen", Some("std:farm")).await;
+    create_typed_place(store, 2, "Ringsaker", None).await;
+    let columns = ListSpec {
+        columns: vec!["type".to_owned()],
+        ..spec(ListedKind::Place)
+    };
+    let rows = run(store, &columns).await.rows;
+    assert_eq!(rows[0].cells, vec![Some(ListCell::Text("std:farm".to_owned()))]);
+    assert_eq!(rows[1].cells, vec![None], "a place with no type has no cell");
+    let is = filtered(ListedKind::Place, "type", ListTest::Is("STD:Farm".to_owned()));
+    assert_eq!(
+        human_ids(store, &is).await,
+        ["P0001"],
+        "the type takes the text tests, folded"
+    );
+    let contains = filtered(ListedKind::Place, "type", ListTest::Contains("farm".to_owned()));
+    assert_eq!(human_ids(store, &contains).await, ["P0001"]);
+}
+
+/// Creates place `n` as `P<n>` named `name`, stating `kind` and `level` with no vocabulary key.
+async fn create_classified_place(
+    store: &Store,
+    n: u128,
+    name: &str,
+    kind: Option<PlaceKind>,
+    level: Option<PlaceLevel>,
+) {
+    let create = PlaceCommand::CreatePlace {
+        place_id: PlaceId::from_uuid(id(n)),
+        human_id: HumanId::new(format!("P{n:04}")),
+        type_statement: PlaceTypeStatement {
+            kind,
+            level,
+            type_key: None,
+            date: None,
+        },
+    };
+    place(store, n, n * 100, create).await;
+    name_place(store, n, n * 100 + 1, name).await;
+}
+
+/// Haugen (settlement, settlement), Norge (administrative, country), Hamar (ecclesiastical, adm1),
+/// Nordgard (building, sub-settlement), Ringsaker (nothing stated).
+async fn five_classified_places(store: &Store) {
+    use PlaceLevel as L;
+    create_classified_place(store, 1, "Haugen", Some(PlaceKind::Settlement), Some(L::Settlement)).await;
+    create_classified_place(store, 2, "Norge", Some(PlaceKind::Administrative), Some(L::Country)).await;
+    create_classified_place(store, 3, "Hamar", Some(PlaceKind::Ecclesiastical), Some(L::Adm1)).await;
+    create_classified_place(store, 4, "Nordgard", Some(PlaceKind::Building), Some(L::SubSettlement)).await;
+    create_classified_place(store, 5, "Ringsaker", None, None).await;
+}
+
+async fn the_kind_and_level_columns_carry_choice_cells(store: &Store) {
+    five_classified_places(store).await;
+    let columns = ListSpec {
+        columns: ["kind", "level", "type"].map(str::to_owned).to_vec(),
+        ..spec(ListedKind::Place)
+    };
+    let rows = run(store, &columns).await.rows;
+    let cells: Vec<_> = rows.into_iter().map(|row| row.cells).collect();
+    let choice = |name: &str| Some(ListCell::Choice(name.to_owned()));
+    assert_eq!(cells[0], vec![choice("settlement"), choice("settlement"), None]);
+    assert_eq!(cells[2], vec![choice("ecclesiastical"), choice("adm1"), None]);
+    assert_eq!(cells[3], vec![choice("building"), choice("sub-settlement"), None]);
+    assert_eq!(cells[4], vec![None, None, None], "an unstated field is an empty cell");
+}
+
+async fn kind_and_level_filters_match_sets_and_keep_unstated_fields_per_none_of(store: &Store) {
+    five_classified_places(store).await;
+    let kind = filtered(
+        ListedKind::Place,
+        "kind",
+        ListTest::AnyOf(vec!["settlement".to_owned()]),
+    );
+    assert_eq!(human_ids(store, &kind).await, ["P0001"]);
+    let level = filtered(ListedKind::Place, "level", ListTest::NoneOf(vec!["country".to_owned()]));
+    assert_eq!(
+        human_ids(store, &level).await,
+        ["P0001", "P0003", "P0004", "P0005"],
+        "none of keeps the places whose level is unstated"
+    );
+    let adm1 = filtered(ListedKind::Place, "level", ListTest::AnyOf(vec!["adm1".to_owned()]));
+    assert_eq!(human_ids(store, &adm1).await, ["P0003"]);
+    let sub = filtered(
+        ListedKind::Place,
+        "level",
+        ListTest::AnyOf(vec!["sub-settlement".to_owned()]),
+    );
+    assert_eq!(human_ids(store, &sub).await, ["P0004"]);
+    let empty = filtered(ListedKind::Place, "kind", ListTest::IsEmpty);
+    assert_eq!(human_ids(store, &empty).await, ["P0005"]);
+    let sorted = ListSpec {
+        sort: Some(ListSort {
+            column: "level".to_owned(),
+            direction: SortDirection::Ascending,
+        }),
+        ..spec(ListedKind::Place)
+    };
+    assert_eq!(
+        human_ids(store, &sorted).await.last().map(String::as_str),
+        Some("P0005")
+    );
+}
+
+#[test]
+fn the_place_list_has_kind_and_level_choice_columns_beside_the_text_type() {
+    let place = ListedKind::Place;
+    assert_eq!(place.column("kind").map(|column| column.ty), Some(ColumnType::Choice));
+    assert_eq!(place.column("level").map(|column| column.ty), Some(ColumnType::Choice));
+    assert_eq!(place.column("type").map(|column| column.ty), Some(ColumnType::Text));
+}
+
+#[test]
+fn level_and_kind_choice_keys_are_kebab_case() {
+    assert_eq!(vitni_db::choice_key(&PlaceLevel::Adm1).as_deref(), Some("adm1"));
+    assert_eq!(
+        vitni_db::choice_key(&PlaceLevel::SubSettlement).as_deref(),
+        Some("sub-settlement")
+    );
+    assert_eq!(
+        vitni_db::choice_key(&PlaceKind::Ecclesiastical).as_deref(),
+        Some("ecclesiastical")
+    );
+}
+
+async fn a_search_for_farm_finds_a_std_farm_place(store: &Store) {
+    create_typed_place(store, 1, "Haugen", Some("std:farm")).await;
+    create_typed_place(store, 2, "Ringsaker", Some("std:parish")).await;
+    let search = ListSpec {
+        search: Some("farm".to_owned()),
+        ..spec(ListedKind::Place)
+    };
+    assert_eq!(human_ids(store, &search).await, ["P0001"]);
 }
 
 async fn create_tag(store: &Store, n: u128) {
@@ -747,7 +905,7 @@ async fn a_cluster_root_carries_its_members_tags_and_references(store: &Store) {
 
 #[cfg(feature = "sqlite")]
 mod sqlite {
-    use vitni_db::{ListTest, ListedKind, RecordLink, Store};
+    use vitni_db::{ListSpec, ListTest, ListedKind, RecordLink, Store};
 
     async fn store() -> (Store, tempfile::TempDir) {
         let dir = tempfile::tempdir().unwrap();
@@ -768,6 +926,10 @@ mod sqlite {
     }
 
     sqlite_tests!(
+        the_place_type_column_holds_the_type_key_as_text,
+        a_search_for_farm_finds_a_std_farm_place,
+        the_kind_and_level_columns_carry_choice_cells,
+        kind_and_level_filters_match_sets_and_keep_unstated_fields_per_none_of,
         a_cluster_root_carries_its_members_tags_and_references,
         a_tags_uses_are_read_through_its_links_a_cluster_once,
         a_query_pages_the_listed_records_with_their_total,
@@ -783,6 +945,97 @@ mod sqlite {
         a_rebuild_reproduces_the_rows,
         every_kind_lists_with_every_column,
     );
+
+    /// A place list table from before the type column became text: `type` was a choice, with no fold column.
+    #[tokio::test]
+    async fn a_choice_shaped_place_table_is_refilled_with_the_text_type_column() {
+        let dir = tempfile::tempdir().unwrap();
+        let url = format!("sqlite://{}", dir.path().join("ws.sqlite3").display());
+        let store = Store::open(&url).await.unwrap();
+        super::create_typed_place(&store, 1, "Haugen", Some("std:farm")).await;
+        drop(store);
+
+        let pool = sqlx::SqlitePool::connect(&url).await.unwrap();
+        let table = ListedKind::Place.table();
+        sqlx::query(&format!("DROP TABLE {table}"))
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query(&format!(
+            "CREATE TABLE {table} (view_id TEXT NOT NULL PRIMARY KEY, human_id TEXT, search TEXT NOT NULL, \
+             signature TEXT NOT NULL, c_name TEXT, c_name_fold TEXT, c_type TEXT, c_enclosed_by TEXT, \
+             c_enclosed_by_title TEXT, c_enclosed_by_fold TEXT)"
+        ))
+        .execute(&pool)
+        .await
+        .unwrap();
+        pool.close().await;
+
+        let store = Store::open(&url).await.unwrap();
+        let columns = ListSpec {
+            columns: vec!["type".to_owned()],
+            ..super::spec(ListedKind::Place)
+        };
+        let rows = super::run(&store, &columns).await.rows;
+        assert_eq!(rows.len(), 1, "the table is refilled from the projections");
+        assert_eq!(
+            rows[0].cells,
+            vec![Some(vitni_db::ListCell::Text("std:farm".to_owned()))]
+        );
+        let search = ListSpec {
+            search: Some("farm".to_owned()),
+            ..super::spec(ListedKind::Place)
+        };
+        assert_eq!(super::human_ids(&store, &search).await, ["P0001"]);
+    }
+
+    /// A place list table from T5: the text `type` column but no `kind` or `level`.
+    #[tokio::test]
+    async fn a_place_table_without_the_kind_and_level_columns_is_refilled_with_them() {
+        let dir = tempfile::tempdir().unwrap();
+        let url = format!("sqlite://{}", dir.path().join("ws.sqlite3").display());
+        let store = Store::open(&url).await.unwrap();
+        super::create_classified_place(
+            &store,
+            1,
+            "Hamar",
+            Some(vitni_core::place_type::PlaceKind::Ecclesiastical),
+            Some(vitni_core::place_type::PlaceLevel::Adm1),
+        )
+        .await;
+        drop(store);
+
+        let pool = sqlx::SqlitePool::connect(&url).await.unwrap();
+        let table = ListedKind::Place.table();
+        sqlx::query(&format!("DROP TABLE {table}"))
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query(&format!(
+            "CREATE TABLE {table} (view_id TEXT NOT NULL PRIMARY KEY, human_id TEXT, search TEXT NOT NULL, \
+             signature TEXT NOT NULL, c_name TEXT, c_name_fold TEXT, c_type TEXT, c_type_fold TEXT, \
+             c_enclosed_by TEXT, c_enclosed_by_title TEXT, c_enclosed_by_fold TEXT)"
+        ))
+        .execute(&pool)
+        .await
+        .unwrap();
+        pool.close().await;
+
+        let store = Store::open(&url).await.unwrap();
+        let columns = ListSpec {
+            columns: vec!["kind".to_owned(), "level".to_owned()],
+            ..super::spec(ListedKind::Place)
+        };
+        let rows = super::run(&store, &columns).await.rows;
+        assert_eq!(rows.len(), 1, "the table is refilled from the projections");
+        assert_eq!(
+            rows[0].cells,
+            vec![
+                Some(vitni_db::ListCell::Choice("ecclesiastical".to_owned())),
+                Some(vitni_db::ListCell::Choice("adm1".to_owned())),
+            ]
+        );
+    }
 
     /// A workspace from before the list tables: none of them, and no `tagged` links.
     #[tokio::test]
@@ -843,6 +1096,8 @@ mod postgres {
     }
 
     postgres_tests!(
+        the_place_type_column_holds_the_type_key_as_text,
+        a_search_for_farm_finds_a_std_farm_place,
         a_cluster_root_carries_its_members_tags_and_references,
         a_tags_uses_are_read_through_its_links_a_cluster_once,
         a_query_pages_the_listed_records_with_their_total,

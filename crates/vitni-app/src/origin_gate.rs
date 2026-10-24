@@ -1082,4 +1082,81 @@ mod tests {
         assert_eq!(runs.len(), 1);
         assert_eq!(runs[0].id, run.id());
     }
+
+    #[tokio::test]
+    async fn a_bare_and_a_wrapped_set_place_type_digest_the_same_field_and_value() {
+        use vitni_core::place::command::{PlaceCommand, PlaceCommandEnvelope};
+        use vitni_core::place_type::{PlaceKind, PlaceTypeKey, PlaceTypeStatement};
+
+        use super::GatedEnvelope;
+        use crate::place::{NewPlace, create_place};
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let workspace = workspace(dir.path()).await;
+        let (session, run) = importer(None);
+        let typed = |key: &str| PlaceTypeStatement {
+            kind: Some(PlaceKind::Settlement),
+            level: None,
+            type_key: Some(PlaceTypeKey::new(key).expect("key")),
+            date: None,
+        };
+        let new = NewPlace {
+            human_id: None,
+            place_type: typed("std:farm"),
+            name: None,
+        };
+        let human_id = create_place(&workspace, &session, new, from(&run, "P1", None), &[])
+            .await
+            .expect("place");
+        let view = workspace
+            .store()
+            .find_place(&human_id)
+            .await
+            .expect("find")
+            .expect("place");
+        let place_id = view.place_id().expect("place id");
+        let aggregate_id = place_id.to_string();
+        let target = view.place_types_with_assertions()[0].assertion_id;
+
+        let envelope = |command| PlaceCommandEnvelope {
+            meta: session.new_meta(from(&run, "P1", None), Vec::new()),
+            command,
+        };
+        let set = || PlaceCommand::SetPlaceType {
+            place_id,
+            type_statement: typed("std:parish"),
+        };
+        let bare = envelope(set());
+        let wrapped = envelope(set()).supersede(place_id.as_uuid(), target);
+        let mut digests = Vec::new();
+        for candidate in [bare, wrapped] {
+            let previewed = PlaceCommandEnvelope::preview(workspace.store(), &aggregate_id, candidate)
+                .await
+                .expect("preview");
+            let mut fields = Vec::new();
+            for event in &previewed {
+                if let Some(field) = vitni_db::indexed_field("place", &event.body).expect("field") {
+                    fields.push((field.field_key, field.digest));
+                }
+            }
+            assert_eq!(
+                fields.len(),
+                1,
+                "only the type statement is an indexed field: {fields:?}"
+            );
+            digests.push(fields.remove(0));
+        }
+        assert_eq!(digests[0], digests[1]);
+        let other = envelope(PlaceCommand::SetPlaceType {
+            place_id,
+            type_statement: typed("std:municipality"),
+        });
+        let previewed = PlaceCommandEnvelope::preview(workspace.store(), &aggregate_id, other)
+            .await
+            .expect("preview");
+        let field = vitni_db::indexed_field("place", &previewed[0].body)
+            .expect("field")
+            .expect("indexed");
+        assert_ne!(field.digest, digests[0].1, "the digest covers the statement");
+    }
 }

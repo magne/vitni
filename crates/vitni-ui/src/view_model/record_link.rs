@@ -6,7 +6,7 @@
 //! cascade is one nested value the parent draft owns whole — dirtiness, validity, and Save flow
 //! through the existing record-edit machinery unchanged.
 
-use vitni_app::{DraftRecord, EventType, NameType, PersonNameParts, PlaceType};
+use vitni_app::{DraftRecord, EventType, NameType, PersonNameParts};
 
 use super::{non_blank, parse_birth};
 use crate::navigation::{
@@ -110,8 +110,8 @@ impl NewPersonFields {
 /// The inline fields of a new place (an event place created from the picker's "+ New place").
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NewPlaceFields {
-    /// The place's type (required; defaults to [`PlaceType::City`]).
-    pub place_type: PlaceType,
+    /// The place's type (required; defaults to the `std:city` statement).
+    pub place_type: vitni_app::PlaceTypeStatement,
     /// The place's name (blank ⇒ no name).
     pub name: String,
 }
@@ -119,7 +119,7 @@ pub struct NewPlaceFields {
 impl Default for NewPlaceFields {
     fn default() -> Self {
         Self {
-            place_type: PlaceType::City,
+            place_type: crate::view_model::place::default_place_type(),
             name: String::new(),
         }
     }
@@ -239,7 +239,7 @@ impl NewRecordDraft {
                 description: query.trim().to_owned(),
             })),
             Category::Places => Some(Self::Place(NewPlaceFields {
-                place_type: PlaceType::City,
+                place_type: vitni_app::std_statement("city").unwrap_or_default(),
                 name: query.trim().to_owned(),
             })),
             Category::Sources => Some(Self::Source(NewSourceFields {
@@ -481,7 +481,7 @@ mod tests {
     };
     use crate::navigation::{Category, NewRecordRequest};
     use crate::picker::PickerSelection;
-    use vitni_app::{EventType, PlaceType};
+    use vitni_app::EventType;
 
     #[test]
     fn a_default_link_is_empty_and_unset() {
@@ -515,7 +515,7 @@ mod tests {
     #[test]
     fn a_new_place_defaults_to_a_city_with_no_name() {
         let fields = NewPlaceFields::default();
-        assert_eq!(fields.place_type, PlaceType::City);
+        assert_eq!(fields.place_type, vitni_app::std_statement("city").unwrap_or_default());
         assert!(fields.name.is_empty(), "{:?}", fields.name);
     }
 
@@ -637,7 +637,7 @@ mod tests {
                 born: String::new(),
             }),
             NewRecordDraft::Place(NewPlaceFields {
-                place_type: PlaceType::City,
+                place_type: vitni_app::std_statement("city").unwrap_or_default(),
                 name: "Ellis Island".to_owned(),
             }),
             NewRecordDraft::Source(NewSourceFields {

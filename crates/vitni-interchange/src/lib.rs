@@ -3,19 +3,22 @@
 //! These are the *leaf* value types every record-interchange format (`vitni-gedcom`,
 //! `vitni-gramps-xml`, the assisted-import `vitni-digitalarkivet` crate, a future GEDCOM X
 //! crate) and the WASM plugin bridge speak: sex, name parts, the date grammar, postal addresses,
-//! and the event/fact/association/name kinds. They are deliberately *simple and serde-free*: no
-//! `Custom(String)` escapes, no event-payload tagging, no provenance, no sort keys. Those richer
-//! concerns belong to `vitni-core`'s domain types; this crate is the lossy interchange shape the
-//! plugins convert to and from the host's WIT types.
+//! and the event, fact, association and name kinds plus the Gramps place-type labels. They are deliberately
+//! *simple and serde-free*: no `Custom(String)` variants (a custom value is plain text, as in `custom:`
+//! place-type keys), no event-payload tagging, no provenance, no sort keys. Those richer concerns belong to
+//! `vitni-core`'s domain types; this crate is the lossy interchange shape the plugins convert to and from
+//! the host's WIT types.
 //!
 //! Container/reference types (a format's document tree, its xref/handle links) stay in the format
 //! crate — only the value vocabulary lives here.
 
 mod age;
 mod coordinates;
+mod place_type;
 
 pub use age::{Age, AgeBound, age_value, parse_age};
 pub use coordinates::Coordinates;
+pub use place_type::{GRAMPS_PLACE_TYPE_LABELS, gramps_label_from_place_type_key, place_type_key_from_gramps_label};
 
 /// Biological sex as recorded.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

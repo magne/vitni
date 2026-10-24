@@ -1077,7 +1077,7 @@ mod tests {
     use time::macros::datetime;
     use uuid::Uuid;
     use vitni_core::citation::{CitationCommand, CitationCommandEnvelope};
-    use vitni_core::enums::{EvidenceLevel, PlaceType};
+    use vitni_core::enums::EvidenceLevel;
     use vitni_core::ids::{
         AgentId, AssertionId, CitationId, HumanId, MediaId, NoteId, PersonId, PlaceId, RepositoryId, SourceId,
     };
@@ -1086,6 +1086,7 @@ mod tests {
     use vitni_core::note::{NoteCommand, NoteCommandEnvelope};
     use vitni_core::person::command::{PersonCommand, PersonCommandEnvelope};
     use vitni_core::place::{PlaceCommand, PlaceCommandEnvelope};
+    use vitni_core::place_type::{PlaceTypeKey, PlaceTypeStatement};
     use vitni_core::provenance::{Agent, AgentKind, AssertionMeta, Confidence, EventContext, Timestamp};
     use vitni_core::repository::{RepositoryCommand, RepositoryCommandEnvelope};
     use vitni_core::source::{SourceCommand, SourceCommandEnvelope};
@@ -1095,6 +1096,14 @@ mod tests {
         let url = format!("sqlite://{}", dir.path().join("ws.sqlite3").display());
         let store = SqliteStore::open(&url).await.unwrap();
         (store, dir)
+    }
+
+    /// A place-type statement that states only the vocabulary key.
+    fn key_only_type(key: &str) -> PlaceTypeStatement {
+        PlaceTypeStatement {
+            type_key: PlaceTypeKey::new(key).ok(),
+            ..PlaceTypeStatement::default()
+        }
     }
 
     /// A minimal assertion meta for command tests (the application layer builds this — ADR 0004 §3).
@@ -1427,7 +1436,7 @@ mod tests {
 
     #[tokio::test]
     async fn event_linking_a_present_place_succeeds_and_projects() {
-        use vitni_core::enums::{EventType, PlaceType};
+        use vitni_core::enums::EventType;
         use vitni_core::event::command::{EventCommand, EventCommandEnvelope};
         use vitni_core::ids::{EventId, PlaceId};
         use vitni_core::place::command::{PlaceCommand, PlaceCommandEnvelope};
@@ -1442,7 +1451,7 @@ mod tests {
                     command: PlaceCommand::CreatePlace {
                         place_id,
                         human_id: HumanId::new("P0001"),
-                        place_type: PlaceType::Parish,
+                        type_statement: key_only_type("std:parish"),
                     },
                 },
             )
@@ -1646,7 +1655,7 @@ mod tests {
     #[tokio::test]
     async fn rebuild_reproduces_identical_projections() {
         use vitni_core::citation::command::{CitationCommand, CitationCommandEnvelope};
-        use vitni_core::enums::{EventType, PlaceType};
+        use vitni_core::enums::EventType;
         use vitni_core::event::command::{EventCommand, EventCommandEnvelope};
         use vitni_core::family::command::{FamilyCommand, FamilyCommandEnvelope};
         use vitni_core::ids::{CitationId, EventId, FamilyId, PlaceId, SourceId};
@@ -1679,7 +1688,7 @@ mod tests {
                     command: PlaceCommand::CreatePlace {
                         place_id,
                         human_id: HumanId::new("P0001"),
-                        place_type: PlaceType::Parish,
+                        type_statement: key_only_type("std:parish"),
                     },
                 },
             )
@@ -1793,7 +1802,6 @@ mod tests {
 
     #[tokio::test]
     async fn place_enclosed_by_a_missing_place_is_rejected_through_services() {
-        use vitni_core::enums::PlaceType;
         use vitni_core::ids::PlaceId;
         use vitni_core::place::command::{PlaceCommand, PlaceCommandEnvelope};
         use vitni_core::place::error::PlaceError;
@@ -1809,7 +1817,7 @@ mod tests {
                     command: PlaceCommand::CreatePlace {
                         place_id,
                         human_id: HumanId::new("P0001"),
-                        place_type: PlaceType::Farm,
+                        type_statement: key_only_type("std:farm"),
                     },
                 },
             )
@@ -1843,7 +1851,6 @@ mod tests {
 
     #[tokio::test]
     async fn place_enclosure_coordinates_and_code_project_and_rebuild_identically() {
-        use vitni_core::enums::PlaceType;
         use vitni_core::geo::{GeoCoordinates, Microdegrees};
         use vitni_core::ids::PlaceId;
         use vitni_core::place::command::{PlaceCommand, PlaceCommandEnvelope};
@@ -1852,7 +1859,10 @@ mod tests {
         let (store, _dir) = store().await;
         let parish = PlaceId::from_uuid(Uuid::from_u128(1));
         let farm = PlaceId::from_uuid(Uuid::from_u128(2));
-        for (id, human, ty) in [(parish, "P0001", PlaceType::Parish), (farm, "P0002", PlaceType::Farm)] {
+        for (id, human, ty) in [
+            (parish, "P0001", key_only_type("std:parish")),
+            (farm, "P0002", key_only_type("std:farm")),
+        ] {
             store
                 .execute_place(
                     &id.to_string(),
@@ -1861,7 +1871,7 @@ mod tests {
                         command: PlaceCommand::CreatePlace {
                             place_id: id,
                             human_id: HumanId::new(human),
-                            place_type: ty,
+                            type_statement: ty,
                         },
                     },
                 )
@@ -1924,7 +1934,6 @@ mod tests {
 
     #[tokio::test]
     async fn place_geometry_index_updates_live_and_rebuilds_identically() {
-        use vitni_core::enums::PlaceType;
         use vitni_core::geo::{GeoCoordinates, Microdegrees, PlaceGeometry};
         use vitni_core::ids::PlaceId;
         use vitni_core::place::command::{PlaceCommand, PlaceCommandEnvelope};
@@ -1939,7 +1948,7 @@ mod tests {
                     command: PlaceCommand::CreatePlace {
                         place_id: parish,
                         human_id: HumanId::new("P0001"),
-                        place_type: PlaceType::Parish,
+                        type_statement: key_only_type("std:parish"),
                     },
                 },
             )
@@ -2348,7 +2357,7 @@ mod tests {
         let create_place = |place_id, human_id| PlaceCommand::CreatePlace {
             place_id,
             human_id,
-            place_type: PlaceType::Parish,
+            type_statement: key_only_type("std:parish"),
         };
         let (place, places) = merged_pair!(
             store,
@@ -2522,7 +2531,7 @@ mod tests {
 
     #[tokio::test]
     async fn place_succession_index_is_symmetric_and_rebuilds_identically() {
-        use vitni_core::enums::{PlaceType, SuccessionKind};
+        use vitni_core::enums::SuccessionKind;
         use vitni_core::ids::PlaceId;
         use vitni_core::place::command::{PlaceCommand, PlaceCommandEnvelope};
 
@@ -2539,7 +2548,7 @@ mod tests {
                         command: PlaceCommand::CreatePlace {
                             place_id,
                             human_id: HumanId::new(human_id),
-                            place_type: PlaceType::Municipality,
+                            type_statement: key_only_type("std:municipality"),
                         },
                     },
                 )
@@ -2593,7 +2602,7 @@ mod tests {
 
     #[tokio::test]
     async fn retracting_a_succession_clears_the_sqlite_index() {
-        use vitni_core::enums::{PlaceType, SuccessionKind};
+        use vitni_core::enums::SuccessionKind;
         use vitni_core::ids::PlaceId;
         use vitni_core::place::command::{PlaceCommand, PlaceCommandEnvelope};
 
@@ -2610,7 +2619,7 @@ mod tests {
                         command: PlaceCommand::CreatePlace {
                             place_id,
                             human_id: HumanId::new(human_id),
-                            place_type: PlaceType::Municipality,
+                            type_statement: key_only_type("std:municipality"),
                         },
                     },
                 )

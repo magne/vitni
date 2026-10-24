@@ -16,7 +16,7 @@ use tempfile::TempDir;
 use time::macros::datetime;
 use uuid::Uuid;
 use vitni_core::citation::command::{CitationCommand, CitationCommandEnvelope};
-use vitni_core::enums::{EvidenceLevel, FactType, PlaceType, Sex};
+use vitni_core::enums::{EvidenceLevel, FactType, Sex};
 use vitni_core::fact::Fact;
 use vitni_core::family::command::{FamilyCommand, FamilyCommandEnvelope};
 use vitni_core::geo::{GeoCoordinates, Microdegrees};
@@ -27,6 +27,7 @@ use vitni_core::ids::{
 use vitni_core::name::{NameType, PersonName, Surname};
 use vitni_core::person::command::{PersonCommand, PersonCommandEnvelope};
 use vitni_core::place::command::{PlaceCommand, PlaceCommandEnvelope};
+use vitni_core::place_type::{PlaceTypeKey, PlaceTypeStatement};
 use vitni_core::provenance::{Agent, AgentKind, AssertionMeta, Confidence, EventContext, Timestamp};
 use vitni_core::research_note::command::{ResearchNoteCommand, ResearchNoteCommandEnvelope};
 use vitni_core::research_note::subject::SubjectRef;
@@ -166,7 +167,10 @@ async fn add_place(store: &Store, i: usize, counter: &mut u128) -> u64 {
         PlaceCommand::CreatePlace {
             place_id,
             human_id: HumanId::new(format!("P{:07}", i + 1)),
-            place_type: PlaceType::Farm,
+            type_statement: PlaceTypeStatement {
+                type_key: PlaceTypeKey::new("std:farm").ok(),
+                ..PlaceTypeStatement::default()
+            },
         },
         PlaceCommand::AssertCoordinates {
             place_id,

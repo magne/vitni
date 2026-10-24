@@ -3,7 +3,7 @@
 
 use crate::address::Address;
 use crate::date::GenealogicalDate;
-use crate::enums::{EventType, ParticipantRole, PlaceType, Sex};
+use crate::enums::{EventType, ParticipantRole, Sex};
 use crate::geo::GeoCoordinates;
 use crate::ids::{PlaceId, RepositoryId, SourceId};
 use crate::matching::date::DateBasis;
@@ -11,6 +11,7 @@ use crate::media_path::MediaPath;
 use crate::name::{LanguageTag, PersonName};
 use crate::origin::RecordOrigin;
 use crate::place_name::PlaceName;
+use crate::place_type::PlaceTypeStatement;
 use crate::text::ExternalId;
 
 /// A person's evidence: names, sex, vital events, occupations, the places that select name cultures, and
@@ -86,8 +87,8 @@ pub struct PlaceProfile {
     pub id: Option<PlaceId>,
     /// Every name of the place, dated and with language.
     pub names: Vec<PlaceName>,
-    /// What kind of place it is, if known.
-    pub place_type: Option<PlaceType>,
+    /// What kind of place it is, if stated.
+    pub place_type: Option<PlaceTypeStatement>,
     /// Every place enclosing this one, transitively (farm → parish → county → country).
     pub enclosing: Vec<PlaceId>,
     /// The name of the country the place lies in, which selects name cultures by region.

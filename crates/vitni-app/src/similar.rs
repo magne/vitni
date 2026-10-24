@@ -23,7 +23,6 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
-use vitni_core::enums::PlaceType;
 use vitni_core::matching::profile::{
     PersonProfile, PlaceProfile, RepositoryProfile, SourceProfile, VitalEvent, VitalKind,
 };
@@ -32,6 +31,7 @@ use vitni_core::matching::{
     assess_events, assess_families, assess_media, assess_notes, assess_persons, assess_places, assess_repositories,
     assess_sources, assess_tags, prefix_end,
 };
+use vitni_core::place_type::PlaceTypeStatement;
 use vitni_db::{DirtyRecord, KeyedRecord, MatchPair, PairRefresh, PairScope, RecordLink, Store};
 
 use crate::dto::AggRef;
@@ -533,7 +533,7 @@ pub enum DraftRecord {
         /// The name as typed.
         name: String,
         /// The place's type, if chosen.
-        place_type: Option<PlaceType>,
+        place_type: Option<PlaceTypeStatement>,
     },
     /// A source: its title and author.
     Source {

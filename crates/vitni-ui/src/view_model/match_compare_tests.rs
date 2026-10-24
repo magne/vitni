@@ -3,7 +3,7 @@ use crate::i18n::Localizer;
 use uuid::Uuid;
 use vitni_app::{
     DatasetId, DateParts, Feature, FeatureComparison, FeatureValue, GeoCoordinates, ImportRunId, MatchAssessment,
-    MatchBand, Microdegrees, Outcome, PlaceType, RecordOrigin, Rect, VitalKind, gregorian_date,
+    MatchBand, Microdegrees, Outcome, RecordOrigin, Rect, VitalKind, gregorian_date,
 };
 
 fn year(value: i32) -> vitni_app::GenealogicalDate {
@@ -130,7 +130,7 @@ fn a_person_pair_gets_one_row_per_compared_feature_in_the_engines_order() {
     );
     assert_eq!(vm.left.label, "Ole Hansen");
     assert_eq!(vm.right.human_id, "I0002");
-    assert_eq!(vm.assessment_line, "Matched at 87% · probable match · engine 4");
+    assert_eq!(vm.assessment_line, "Matched at 87% · probable match · engine 5");
     assert_eq!(
         vm.assessment,
         assessed.evidence(),
@@ -159,8 +159,12 @@ fn a_place_pair_gets_the_places_own_rows() {
             Feature::PlaceType,
             Outcome::Agree,
             1.0,
-            Some(FeatureValue::PlaceType(PlaceType::Municipality)),
-            Some(FeatureValue::PlaceType(PlaceType::Municipality)),
+            Some(FeatureValue::PlaceType(
+                vitni_app::std_statement("municipality").unwrap_or_default(),
+            )),
+            Some(FeatureValue::PlaceType(
+                vitni_app::std_statement("municipality").unwrap_or_default(),
+            )),
         ),
         term(
             Feature::Coordinates,

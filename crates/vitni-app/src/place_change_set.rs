@@ -7,11 +7,11 @@
 //! ([`crate::change_set`]). Editing an existing place is the per-field `dispatch_place_edit` path
 //! (PR27), not this create.
 
-use vitni_core::enums::PlaceType;
 use vitni_core::geo::GeoCoordinates;
 use vitni_core::ids::HumanId;
 use vitni_core::place::command::{PlaceCommand, PlaceCommandEnvelope};
 use vitni_core::place_name::PlaceName;
+use vitni_core::place_type::PlaceTypeStatement;
 use vitni_core::provenance::EvidenceRef;
 use vitni_db::Store;
 
@@ -26,8 +26,8 @@ use crate::workspace::Workspace;
 pub struct PlaceChangeSet {
     /// A caller-supplied `human_id` override (dup-checked before any write); `None` auto-allocates.
     pub human_id: Option<String>,
-    /// The place type (required).
-    pub place_type: PlaceType,
+    /// The place type statement; empty when none is stated.
+    pub place_type: PlaceTypeStatement,
     /// The place's primary name.
     pub name: Option<String>,
     /// The place's coordinates (already parsed from the UI's decimal-degree fields).
@@ -76,7 +76,7 @@ pub async fn commit_place_change_set(
         PlaceCommand::CreatePlace {
             place_id,
             human_id: HumanId::new(&human_id),
-            place_type: change_set.place_type.clone(),
+            type_statement: change_set.place_type.clone(),
         },
         change_set.provenance.clone(),
         Vec::new(),
@@ -157,9 +157,9 @@ mod tests {
     use std::str::FromStr;
     use tempfile::TempDir;
     use uuid::Uuid;
-    use vitni_core::enums::PlaceType;
     use vitni_core::geo::{GeoCoordinates, Microdegrees};
     use vitni_core::ids::AgentId;
+    use vitni_core::place_type::PlaceTypeStatement;
     use vitni_core::provenance::{Agent, AgentKind, Confidence};
 
     fn operator() -> OperatorConfig {
@@ -188,7 +188,7 @@ mod tests {
         (workspace, session(), dir)
     }
 
-    fn draft(place_type: PlaceType) -> PlaceChangeSet {
+    fn draft(place_type: PlaceTypeStatement) -> PlaceChangeSet {
         PlaceChangeSet {
             human_id: None,
             place_type,
@@ -214,14 +214,14 @@ mod tests {
                 name: Some("New York".to_owned()),
                 coordinates: Some(coordinates),
                 code: Some("NYC".to_owned()),
-                ..draft(PlaceType::City)
+                ..draft(crate::std_statement("city").unwrap_or_default())
             },
         )
         .await
         .expect("create");
 
         let place = show_place(&workspace, &human_id).await.expect("show").expect("place");
-        assert_eq!(place.place_type, Some(PlaceType::City));
+        assert_eq!(place.place_type, Some(crate::std_statement("city").unwrap_or_default()));
         assert_eq!(place.names.first().map(|n| n.text.as_str()), Some("New York"));
         assert_eq!(place.code.as_deref(), Some("NYC"));
         assert!(place.coordinates.is_some(), "coordinates asserted");
@@ -230,11 +230,18 @@ mod tests {
     #[tokio::test]
     async fn a_type_only_draft_creates_a_bare_place() {
         let (workspace, session, _dir) = setup().await;
-        let human_id = commit_place_change_set(&workspace, &session, draft(PlaceType::Country))
-            .await
-            .expect("create");
+        let human_id = commit_place_change_set(
+            &workspace,
+            &session,
+            draft(crate::std_statement("country").unwrap_or_default()),
+        )
+        .await
+        .expect("create");
         let place = show_place(&workspace, &human_id).await.expect("show").expect("place");
-        assert_eq!(place.place_type, Some(PlaceType::Country));
+        assert_eq!(
+            place.place_type,
+            Some(crate::std_statement("country").unwrap_or_default())
+        );
         assert!(place.names.is_empty(), "{:?}", place.names);
         assert_eq!(place.coordinates, None);
     }
@@ -242,15 +249,19 @@ mod tests {
     #[tokio::test]
     async fn a_taken_human_id_is_rejected_and_nothing_commits() {
         let (workspace, session, _dir) = setup().await;
-        let taken = commit_place_change_set(&workspace, &session, draft(PlaceType::City))
-            .await
-            .expect("first place");
+        let taken = commit_place_change_set(
+            &workspace,
+            &session,
+            draft(crate::std_statement("city").unwrap_or_default()),
+        )
+        .await
+        .expect("first place");
         let result = commit_place_change_set(
             &workspace,
             &session,
             PlaceChangeSet {
                 human_id: Some(taken),
-                ..draft(PlaceType::City)
+                ..draft(crate::std_statement("city").unwrap_or_default())
             },
         )
         .await;
@@ -273,7 +284,7 @@ mod tests {
                     evidence_analysis: None,
                     origin: None,
                 },
-                ..draft(PlaceType::City)
+                ..draft(crate::std_statement("city").unwrap_or_default())
             },
         )
         .await

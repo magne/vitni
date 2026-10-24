@@ -9,9 +9,9 @@
 
 use vitni_app::{
     CommitControl, CommitOutcome, EntityFields, EntityRef, FileDate, ImportPlan, ImportReview, LinkKind, MatchReply,
-    NewFact, PairAnswer, PlanError, PlanReply, PlanStep, RecordGraph, ReviewReply, RunToEnd, StagedCitation,
-    StagedEntity, StagedEvent, StagedFamily, StagedLink, StagedMedia, StagedNote, StagedPerson, StagedPlace,
-    StagedRepository, StagedSource, StagedTag, Timestamp,
+    NewFact, PairAnswer, PlaceTypeStatement, PlanError, PlanReply, PlanStep, RecordGraph, ReviewReply, RunToEnd,
+    StagedCitation, StagedEntity, StagedEvent, StagedFamily, StagedLink, StagedMedia, StagedNote, StagedPerson,
+    StagedPlace, StagedRepository, StagedSource, StagedTag, Timestamp,
 };
 use vitni_core::geo::GeoCoordinates;
 use vitni_core::matching::MatchableKind;
@@ -372,8 +372,10 @@ fn to_entity(entity: staging::StagedEntity) -> StagedEntity {
         staging::EntityFields::Place(place) => EntityFields::Place(StagedPlace {
             coordinates: place.coordinates.and_then(|point| to_coordinates(&place.name, point)),
             code: place.code.and_then(|code| to_code(&place.name, code)),
+            place_type: place
+                .place_type
+                .and_then(|record| to_staged_place_type(&place.name, record)),
             name: place.name,
-            place_type: place.place_type.map(to_place_type),
             restrictions: to_restrictions(place.restrictions),
         }),
         staging::EntityFields::Source(source) => EntityFields::Source(StagedSource {
@@ -425,6 +427,19 @@ fn to_coordinates(name: &str, point: types::Coordinates) -> Option<GeoCoordinate
         );
     }
     coordinates
+}
+
+/// The type a guest staged for the place `name`, or `None` when the record states none (Gramps
+/// `Unknown` arrives this way) or, with a warning, when it is not a usable statement.
+fn to_staged_place_type(name: &str, record: types::PlaceType) -> Option<PlaceTypeStatement> {
+    match to_place_type(record) {
+        Ok(statement) if statement.is_empty() => None,
+        Ok(statement) => Some(statement),
+        Err(why) => {
+            tracing::warn!(place = name, %why, "dropping a staged place's unusable type");
+            None
+        }
+    }
 }
 
 /// The code a guest staged for the place `name`, or `None`, with a warning, when it is blank: a place's
@@ -552,7 +567,106 @@ fn to_link(link: staging::StagedLink) -> StagedLink {
 
 #[cfg(test)]
 mod tests {
-    use super::{FileDate, Timestamp, read_file_date, to_code};
+    use vitni_app::{EntityFields, StagedPlace};
+
+    use super::{FileDate, Timestamp, read_file_date, to_code, to_entity};
+    use crate::bindings::imports::vitni::host_api::{staging, types};
+
+    fn text_only_date() -> types::GenealogicalDate {
+        types::GenealogicalDate {
+            calendar: types::DateCalendar::Gregorian,
+            quality: types::DateQuality::Normal,
+            modifier: types::DateModifier::TextOnly("in the old days".to_owned()),
+            new_year_begins: None,
+            original_text: None,
+        }
+    }
+
+    fn exact_date() -> types::GenealogicalDate {
+        types::GenealogicalDate {
+            modifier: types::DateModifier::Exact(types::DatePoint {
+                year: Some(1838),
+                month: None,
+                day: None,
+            }),
+            ..text_only_date()
+        }
+    }
+
+    fn farm_record() -> types::PlaceType {
+        types::PlaceType {
+            kind: Some(types::PlaceKind::Settlement),
+            level: None,
+            type_key: Some("std:farm".to_owned()),
+            date: None,
+        }
+    }
+
+    fn staged_place(record: Option<types::PlaceType>) -> StagedPlace {
+        let entity = staging::StagedEntity {
+            local_id: 1,
+            item: None,
+            fields: staging::EntityFields::Place(staging::StagedPlace {
+                name: "Haugen".to_owned(),
+                place_type: record,
+                coordinates: None,
+                code: None,
+                restrictions: Vec::new(),
+            }),
+        };
+        let EntityFields::Place(place) = to_entity(entity).fields else {
+            unreachable!("a staged place maps to a place");
+        };
+        place
+    }
+
+    #[test]
+    fn a_staged_place_type_record_is_kept_with_its_kind_and_key() {
+        let place = staged_place(Some(farm_record()));
+        let statement = place.place_type.expect("a type");
+        assert_eq!(
+            statement
+                .type_key
+                .as_ref()
+                .map(vitni_core::place_type::PlaceTypeKey::as_str),
+            Some("std:farm")
+        );
+        assert_eq!(statement.kind, Some(vitni_core::place_type::PlaceKind::Settlement));
+    }
+
+    #[test]
+    fn a_staged_empty_place_type_record_means_no_type() {
+        let empty = types::PlaceType {
+            kind: None,
+            level: None,
+            type_key: None,
+            date: None,
+        };
+        assert_eq!(staged_place(Some(empty)).place_type, None);
+    }
+
+    #[test]
+    fn a_staged_invalid_dated_only_or_text_dated_type_is_dropped_but_the_place_is_kept() {
+        let invalid_key = types::PlaceType {
+            type_key: Some("farm".to_owned()),
+            ..farm_record()
+        };
+        let dated_only = types::PlaceType {
+            kind: None,
+            level: None,
+            type_key: None,
+            date: Some(exact_date()),
+        };
+        let text_dated = types::PlaceType {
+            date: Some(text_only_date()),
+            ..farm_record()
+        };
+        for record in [invalid_key, dated_only, text_dated] {
+            let place = staged_place(Some(record));
+            assert_eq!(place.place_type, None);
+            assert_eq!(place.name, "Haugen");
+        }
+    }
 
     #[test]
     fn a_staged_code_is_kept() {

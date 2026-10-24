@@ -15,6 +15,7 @@ postgres = ["vitni-db/postgres"]
 [dependencies]
 vitni-core = { workspace = true }
 vitni-db = { workspace = true }
+vitni-interchange = { workspace = true }
 uuid = { workspace = true }
 time = { workspace = true }
 serde = { workspace = true }

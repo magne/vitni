@@ -61,6 +61,7 @@ pub mod place_geometry;
 pub mod place_name;
 pub mod place_ref;
 pub mod place_succession;
+pub mod place_type;
 pub mod provenance;
 pub mod repo_ref;
 pub mod repository;

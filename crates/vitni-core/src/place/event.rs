@@ -10,12 +10,13 @@ use std::collections::BTreeSet;
 
 use crate::assertions::{Envelope, EventBody};
 use crate::date::GenealogicalDate;
-use crate::enums::{PlaceType, Restriction, SuccessionKind};
+use crate::enums::{Restriction, SuccessionKind};
 use crate::geo::{GeoCoordinates, PlaceGeometry};
 use crate::ids::{AssertionId, CitationId, HumanId, NoteId, PlaceId, TagId};
 use crate::matching::MatchEvidence;
 use crate::place_name::PlaceName;
 use crate::place_ref::PlaceRef;
+use crate::place_type::PlaceTypeStatement;
 use crate::text::MediaRef;
 
 /// A single Place assertion plus its provenance envelope (ADR 0004 §1).
@@ -31,15 +32,15 @@ pub enum PlaceEventBody {
         place_id: PlaceId,
         /// The user-facing identifier.
         human_id: HumanId,
-        /// The place's type.
-        place_type: PlaceType,
+        /// The place's type statement; empty when no type was stated.
+        type_statement: PlaceTypeStatement,
     },
-    /// The place's type was set / changed.
+    /// A type statement was asserted for the place.
     PlaceTypeSet {
         /// The place.
         place_id: PlaceId,
-        /// The new place type.
-        place_type: PlaceType,
+        /// The asserted type statement.
+        type_statement: PlaceTypeStatement,
     },
     /// A name was asserted for the place.
     NameAsserted {
@@ -210,8 +211,10 @@ impl EventBody for PlaceEventBody {
     fn version(&self) -> &'static str {
         // Per-variant; bumped only on a payload change (ADR 0004 §4).
         // `MediaAttached` is "2.0" after `MediaRef.citations` widened to `EvidenceRef` (ADR 0023), no upcaster.
+        // `PlaceCreated` and `PlaceTypeSet` are "2.0" after the place type became a `PlaceTypeStatement`
+        // (ADR 0031 §3, §10).
         match self {
-            Self::MediaAttached { .. } => "2.0",
+            Self::MediaAttached { .. } | Self::PlaceCreated { .. } | Self::PlaceTypeSet { .. } => "2.0",
             _ => "1.0",
         }
     }

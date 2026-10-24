@@ -79,6 +79,12 @@ change ([`issue-tracking.md`](issue-tracking.md) §4). Check here before filing 
 - **A place `code` stays undated and single-valued (#574)** — ADR 0031 §8 makes a *kommunenummer* a
   Place `ExternalId` dated by its validity, so the identifier history #574 wanted lives there. `code` is
   Gramps' plain code and round-trips as it is; dating it too would hold the same number twice.
+- **`ENGINE_VERSION` moves 4 to 5 for the place-type feature (#714).** The place-type comparator now
+  compares kind, then level, then key, so it scores differently (`matching/mod.rs`, `ENGINE_VERSION`).
+  Stored `MatchEvidence` keeps its shape (ADR 0054 §7: feature, outcome and weight only). Historical
+  `EngineVersion(4)` literals in tests describe evidence stored under the earlier engine and stay.
+- **The place `type_key` is searchable (#714).** The Explorer `type` column is text over the key, so
+  searching a list for `parish` or `no:prestegjeld` finds the places typed so. No separate filter is added.
 
 ## Lists
 

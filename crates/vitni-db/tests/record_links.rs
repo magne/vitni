@@ -13,7 +13,7 @@ use vitni_core::citation::command::{CitationCommand, CitationCommandEnvelope};
 use vitni_core::dna::{Centimorgans, DnaProvider};
 use vitni_core::dna_match::{DnaMatchCommand, DnaMatchCommandEnvelope};
 use vitni_core::dna_test::{DnaTestCommand, DnaTestCommandEnvelope};
-use vitni_core::enums::{EventType, EvidenceLevel, ParticipantRole, PlaceType, SourceMediaType};
+use vitni_core::enums::{EventType, EvidenceLevel, ParticipantRole, SourceMediaType};
 use vitni_core::event::command::{EventCommand, EventCommandEnvelope};
 use vitni_core::family::command::{FamilyCommand, FamilyCommandEnvelope};
 use vitni_core::ids::{
@@ -24,6 +24,7 @@ use vitni_core::note::{NoteCommand, NoteCommandEnvelope};
 use vitni_core::person::command::{PersonCommand, PersonCommandEnvelope};
 use vitni_core::place::command::{PlaceCommand, PlaceCommandEnvelope};
 use vitni_core::place_ref::PlaceRef;
+use vitni_core::place_type::{PlaceTypeKey, PlaceTypeStatement};
 use vitni_core::provenance::{Agent, AgentKind, AssertionMeta, EventContext, Timestamp};
 use vitni_core::repo_ref::RepoRef;
 use vitni_core::repository::command::{RepositoryCommand, RepositoryCommandEnvelope};
@@ -129,7 +130,10 @@ async fn create_place(store: &Store, n: u128) {
         command: PlaceCommand::CreatePlace {
             place_id: PlaceId::from_uuid(id(n)),
             human_id: HumanId::new(format!("P{n:04}")),
-            place_type: PlaceType::Parish,
+            type_statement: PlaceTypeStatement {
+                type_key: PlaceTypeKey::new("std:parish").ok(),
+                ..PlaceTypeStatement::default()
+            },
         },
     };
     store.execute_place(&id(n).to_string(), envelope).await.unwrap();

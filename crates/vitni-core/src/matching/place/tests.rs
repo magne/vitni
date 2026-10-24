@@ -6,7 +6,6 @@ use proptest::prelude::{Strategy, prop, prop_assert, prop_assert_eq, proptest};
 use uuid::Uuid;
 
 use super::{ENCLOSED_SIMILARITY, compare, distance_km, distance_similarity};
-use crate::enums::PlaceType;
 use crate::geo::{GeoCoordinates, Microdegrees};
 use crate::ids::PlaceId;
 use crate::matching::name::Applied;
@@ -15,6 +14,7 @@ use crate::matching::profile::PlaceProfile;
 use crate::matching::tests::{DATA, feature, household};
 use crate::matching::{CultureId, Feature, MatchAssessment, MatchBand, MatchSettings, Outcome, assess_places};
 use crate::place_name::PlaceName;
+use crate::place_type::{PlaceTypeKey, PlaceTypeStatement};
 
 static PACKS: LazyLock<CulturePacks> = LazyLock::new(|| CulturePacks::embedded().unwrap());
 
@@ -112,11 +112,19 @@ fn assess(a: &PlaceProfile, b: &PlaceProfile) -> MatchAssessment {
     assess_places(a, b, &DATA, &MatchSettings::default())
 }
 
+/// A statement that states only `key`.
+fn keyed(key: &str) -> PlaceTypeStatement {
+    PlaceTypeStatement {
+        type_key: Some(PlaceTypeKey::new(key).unwrap()),
+        ..PlaceTypeStatement::default()
+    }
+}
+
 /// A workspace place of `place_type` named `name`, enclosed by `enclosing`, nearest first.
-fn place(name: &str, place_type: PlaceType, enclosing: &[PlaceId]) -> PlaceProfile {
+fn place(name: &str, place_type: &str, enclosing: &[PlaceId]) -> PlaceProfile {
     PlaceProfile {
         id: Some(id()),
-        place_type: Some(place_type),
+        place_type: Some(keyed(place_type)),
         enclosing: enclosing.to_vec(),
         country: Some("Norge".to_owned()),
         ..named(name)
@@ -125,8 +133,8 @@ fn place(name: &str, place_type: PlaceType, enclosing: &[PlaceId]) -> PlaceProfi
 
 #[test]
 fn a_farm_matched_to_its_parish_is_partial() {
-    let parish = place("Ringsaker", PlaceType::Parish, &[]);
-    let farm = place("Haugen", PlaceType::Farm, &[parish.id.unwrap()]);
+    let parish = place("Ringsaker", "std:parish", &[]);
+    let farm = place("Haugen", "std:farm", &[parish.id.unwrap()]);
     let assessment = assess(&farm, &parish);
     let enclosure = feature(&assessment, Feature::Enclosure);
     assert_eq!(
@@ -147,14 +155,14 @@ fn a_farm_matched_to_its_parish_is_partial() {
 
 #[test]
 fn one_farm_recorded_twice_in_one_parish_is_probable() {
-    let parish = place("Ringsaker", PlaceType::Parish, &[]).id.unwrap();
+    let parish = place("Ringsaker", "std:parish", &[]).id.unwrap();
     let a = PlaceProfile {
         coordinates: Some(at(60.880, 10.700)),
-        ..place("Nordaas", PlaceType::Farm, &[parish])
+        ..place("Nordaas", "std:farm", &[parish])
     };
     let b = PlaceProfile {
         coordinates: Some(at(60.881, 10.701)),
-        ..place("Nordås", PlaceType::Farm, &[parish])
+        ..place("Nordås", "std:farm", &[parish])
     };
     let assessment = assess(&a, &b);
     assert_eq!(assessment.band, MatchBand::Probable, "{assessment:#?}");
@@ -172,10 +180,10 @@ fn one_farm_recorded_twice_in_one_parish_is_probable() {
 
 #[test]
 fn a_farm_under_a_parish_in_the_others_county_is_partial() {
-    let county = place("Hedmark", PlaceType::County, &[]).id.unwrap();
-    let parish = place("Ringsaker", PlaceType::Parish, &[county]).id.unwrap();
-    let a = place("Haugen", PlaceType::Farm, &[parish, county]);
-    let b = place("Haugen", PlaceType::Farm, &[county]);
+    let county = place("Hedmark", "std:county", &[]).id.unwrap();
+    let parish = place("Ringsaker", "std:parish", &[county]).id.unwrap();
+    let a = place("Haugen", "std:farm", &[parish, county]);
+    let b = place("Haugen", "std:farm", &[county]);
     let enclosure = feature(&assess(&a, &b), Feature::Enclosure).clone();
     assert_eq!(
         enclosure.outcome,
@@ -187,12 +195,12 @@ fn a_farm_under_a_parish_in_the_others_county_is_partial() {
 #[test]
 fn farms_of_one_name_in_different_parishes_disagree() {
     let (east, west) = (
-        place("Ringsaker", PlaceType::Parish, &[]).id.unwrap(),
-        place("Voss", PlaceType::Parish, &[]).id.unwrap(),
+        place("Ringsaker", "std:parish", &[]).id.unwrap(),
+        place("Voss", "std:parish", &[]).id.unwrap(),
     );
     let assessment = assess(
-        &place("Haugen", PlaceType::Farm, &[east]),
-        &place("Haugen", PlaceType::Farm, &[west]),
+        &place("Haugen", "std:farm", &[east]),
+        &place("Haugen", "std:farm", &[west]),
     );
     assert_eq!(feature(&assessment, Feature::Enclosure).outcome, Outcome::Disagree);
     assert!(assessment.band < MatchBand::Probable, "{assessment:#?}");
@@ -212,21 +220,6 @@ fn farms_of_one_name_far_apart_are_unlikely() {
     assert_eq!(feature(&assessment, Feature::Coordinates).outcome, Outcome::Disagree);
     assert_eq!(feature(&assessment, Feature::PlaceName).outcome, Outcome::Agree);
     assert_eq!(assessment.band, MatchBand::Unlikely, "{assessment:#?}");
-}
-
-#[test]
-fn a_different_type_disagrees_and_a_custom_type_compares_case_folded() {
-    let typed = |place_type: PlaceType| PlaceProfile {
-        place_type: Some(place_type),
-        ..named("Haugen")
-    };
-    let other = assess(&typed(PlaceType::Farm), &typed(PlaceType::Parish));
-    assert_eq!(feature(&other, Feature::PlaceType).outcome, Outcome::Disagree);
-    let custom = |text: &str| typed(PlaceType::Custom(text.to_owned()));
-    let same = assess(&custom("Sokn"), &custom("sokn"));
-    assert_eq!(feature(&same, Feature::PlaceType).outcome, Outcome::Agree);
-    let unknown = assess(&named("Haugen"), &typed(PlaceType::Farm));
-    assert_eq!(feature(&unknown, Feature::PlaceType).outcome, Outcome::Missing);
 }
 
 #[test]
@@ -254,11 +247,7 @@ fn a_shared_origin_is_deterministic_and_two_items_of_one_record_conflict() {
 
 fn a_place() -> impl Strategy<Value = PlaceProfile> {
     let ids: Vec<PlaceId> = (0..3).map(|_| id()).collect();
-    let types = prop::sample::select(vec![
-        PlaceType::Farm,
-        PlaceType::Parish,
-        PlaceType::Custom("Sokn".to_owned()),
-    ]);
+    let types = prop::sample::select(vec!["std:farm", "std:parish", "custom:Sokn"]).prop_map(keyed);
     (
         prop::sample::select(vec!["Haugen", "Haug", "Nordaas", "Nordås", "Ringsaker"]),
         prop::option::of(types),
@@ -294,5 +283,152 @@ proptest! {
     fn a_place_matches_itself_at_least_as_well_as_any_other(a in a_place(), b in a_place()) {
         let (itself, other) = (assess(&a, &a), assess(&a, &b));
         prop_assert!(itself.score >= other.score, "self {} < other {}", itself.score, other.score);
+    }
+}
+
+mod place_type_statements {
+    use proptest::prelude::{Strategy, prop, prop_assert_eq, proptest};
+
+    use super::{assess, feature, named};
+    use crate::matching::profile::PlaceProfile;
+    use crate::matching::{ENGINE_VERSION, EngineVersion, Feature, Outcome};
+    use crate::place_type::{PlaceKind, PlaceLevel, PlaceTypeKey, PlaceTypeStatement};
+
+    fn statement(kind: Option<PlaceKind>, level: Option<PlaceLevel>, key: Option<&str>) -> PlaceTypeStatement {
+        PlaceTypeStatement {
+            kind,
+            level,
+            type_key: key.map(|key| PlaceTypeKey::new(key).unwrap()),
+            date: None,
+        }
+    }
+
+    fn outcome(a: &PlaceTypeStatement, b: &PlaceTypeStatement) -> Outcome {
+        let typed = |statement: &PlaceTypeStatement| PlaceProfile {
+            place_type: Some(statement.clone()),
+            ..named("Haugen")
+        };
+        feature(&assess(&typed(a), &typed(b)), Feature::PlaceType).outcome
+    }
+
+    #[test]
+    fn the_engine_version_is_five_and_an_older_stored_assessment_still_decodes() {
+        assert_eq!(ENGINE_VERSION, EngineVersion(5));
+        assert_eq!(serde_json::from_str::<EngineVersion>("4").unwrap(), EngineVersion(4));
+    }
+
+    #[test]
+    fn a_kind_mismatch_disagrees_before_levels_and_keys_are_looked_at() {
+        let a = statement(
+            Some(PlaceKind::Settlement),
+            Some(PlaceLevel::Settlement),
+            Some("std:city"),
+        );
+        let b = statement(
+            Some(PlaceKind::Ecclesiastical),
+            Some(PlaceLevel::Settlement),
+            Some("std:city"),
+        );
+        assert_eq!(outcome(&a, &b), Outcome::Disagree);
+    }
+
+    #[test]
+    fn a_level_mismatch_disagrees_when_kinds_agree() {
+        let a = statement(Some(PlaceKind::Administrative), Some(PlaceLevel::Adm1), None);
+        let b = statement(Some(PlaceKind::Administrative), Some(PlaceLevel::Adm2), None);
+        assert_eq!(outcome(&a, &b), Outcome::Disagree);
+    }
+
+    #[test]
+    fn the_same_key_agrees_and_different_std_keys_disagree() {
+        let farm = statement(None, None, Some("std:farm"));
+        let parish = statement(None, None, Some("std:parish"));
+        assert_eq!(outcome(&farm, &farm), Outcome::Agree);
+        assert_eq!(outcome(&farm, &parish), Outcome::Disagree);
+    }
+
+    #[test]
+    fn kinds_that_agree_with_keys_in_different_namespaces_is_a_match() {
+        let a = statement(Some(PlaceKind::Ecclesiastical), None, Some("std:parish"));
+        let b = statement(Some(PlaceKind::Ecclesiastical), None, Some("no:prestegjeld"));
+        assert_eq!(outcome(&a, &b), Outcome::Agree);
+    }
+
+    #[test]
+    fn keys_in_different_namespaces_alone_are_neutral() {
+        let a = statement(None, None, Some("std:parish"));
+        let b = statement(None, None, Some("no:prestegjeld"));
+        assert_eq!(outcome(&a, &b), Outcome::Missing);
+    }
+
+    #[test]
+    fn an_unstated_side_is_neutral() {
+        let farm = statement(Some(PlaceKind::Settlement), None, Some("std:farm"));
+        assert_eq!(outcome(&farm, &PlaceTypeStatement::default()), Outcome::Missing);
+        let lone = PlaceProfile {
+            place_type: Some(farm),
+            ..named("Haugen")
+        };
+        let none = assess(&named("Haugen"), &lone);
+        assert_eq!(feature(&none, Feature::PlaceType).outcome, Outcome::Missing);
+    }
+
+    #[test]
+    fn custom_keys_compare_case_folded() {
+        let a = statement(None, None, Some("custom:Sokn"));
+        let b = statement(None, None, Some("custom:sokn"));
+        assert_eq!(outcome(&a, &b), Outcome::Agree);
+        let other = statement(None, None, Some("custom:Prestegjeld"));
+        assert_eq!(outcome(&a, &other), Outcome::Disagree);
+    }
+
+    #[test]
+    fn the_nine_migrated_types_keep_the_outcomes_of_the_old_comparison() {
+        let migrated = [
+            ("std:country", PlaceKind::Administrative, Some(PlaceLevel::Country)),
+            ("std:county", PlaceKind::Administrative, None),
+            ("std:municipality", PlaceKind::Administrative, None),
+            ("std:parish", PlaceKind::Ecclesiastical, None),
+            ("std:city", PlaceKind::Settlement, Some(PlaceLevel::Settlement)),
+            ("std:town", PlaceKind::Settlement, Some(PlaceLevel::Settlement)),
+            ("std:village", PlaceKind::Settlement, Some(PlaceLevel::Settlement)),
+            ("std:farm", PlaceKind::Settlement, None),
+            ("std:building", PlaceKind::Building, None),
+        ];
+        for (left, (left_key, left_kind, left_level)) in migrated.iter().enumerate() {
+            for (right, (right_key, right_kind, right_level)) in migrated.iter().enumerate() {
+                let a = statement(Some(*left_kind), *left_level, Some(left_key));
+                let b = statement(Some(*right_kind), *right_level, Some(right_key));
+                let expected = if left == right {
+                    Outcome::Agree
+                } else {
+                    Outcome::Disagree
+                };
+                assert_eq!(outcome(&a, &b), expected, "{left_key} against {right_key}");
+            }
+        }
+    }
+
+    fn a_statement() -> impl Strategy<Value = PlaceTypeStatement> {
+        (
+            prop::option::of(prop::sample::select(PlaceKind::ALL.to_vec())),
+            prop::option::of(prop::sample::select(PlaceLevel::ALL.to_vec())),
+            prop::option::of(prop::sample::select(vec![
+                "std:farm",
+                "std:parish",
+                "no:prestegjeld",
+                "se:harad",
+                "custom:Sokn",
+                "custom:sokn",
+            ])),
+        )
+            .prop_map(|(kind, level, key)| statement(kind, level, key))
+    }
+
+    proptest! {
+        #[test]
+        fn the_place_type_comparison_is_symmetric(a in a_statement(), b in a_statement()) {
+            prop_assert_eq!(outcome(&a, &b), outcome(&b, &a));
+        }
     }
 }

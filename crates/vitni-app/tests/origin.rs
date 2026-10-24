@@ -9,7 +9,7 @@ use vitni_app::{
     OperatorConfig, PersonNameParts, Provenance, Session, Workspace, WorkspaceDefaults, create_citation, create_event,
     create_family, create_media, create_note, create_person, create_place, create_repository, create_source,
 };
-use vitni_core::enums::{EventType, EvidenceLevel, PlaceType};
+use vitni_core::enums::{EventType, EvidenceLevel};
 use vitni_core::ids::{AgentId, ImportRunId};
 use vitni_core::origin::{DatasetId, RecordOrigin};
 use vitni_core::provenance::{Agent, AgentKind, EventContext};
@@ -90,7 +90,7 @@ async fn every_event_a_create_writes_carries_the_callers_origin() {
         .expect("event");
     let place = NewPlace {
         human_id: None,
-        place_type: PlaceType::Farm,
+        place_type: vitni_app::std_statement("farm").unwrap_or_default(),
         name: Some("Haugen".to_owned()),
     };
     create_place(&workspace, &session, place, provenance(), &[])

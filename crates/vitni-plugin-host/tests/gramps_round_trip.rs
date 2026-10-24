@@ -1253,3 +1253,151 @@ async fn an_export_without_the_sink_grant_is_refused_the_workspace_id() {
     );
     assert!(!target.exists(), "nothing was written");
 }
+
+/// The twenty Gramps standard place-type labels, derived from the app's `std` table (same order).
+fn gramps_labels() -> Vec<String> {
+    vitni_app::place_vocabulary::std_statements()
+        .iter()
+        .filter_map(|statement| statement.type_key.clone())
+        .map(|key| {
+            let name = key.name().to_owned();
+            let mut chars = name.chars();
+            chars
+                .next()
+                .map(|first| first.to_uppercase().collect::<String>() + chars.as_str())
+                .unwrap_or_default()
+        })
+        .collect()
+}
+
+/// One `<placeobj>` per Gramps standard type, plus the three shapes that are not one: a literal `std:foo`
+/// and `custom:Sokn` (text that merely looks namespaced) and `Unknown`. The importer stages a place from
+/// the event that names it, so one person's events each name one place.
+fn typed_places_doc() -> String {
+    let labels: Vec<String> = gramps_labels()
+        .into_iter()
+        .chain(["std:foo", "custom:Sokn", "Unknown"].map(str::to_owned))
+        .collect();
+    let each = |render: &dyn Fn(usize, &str) -> String| -> String {
+        labels
+            .iter()
+            .enumerate()
+            .map(|(n, label)| render(n, label))
+            .collect::<String>()
+    };
+    let eventrefs = each(&|n, _| format!(r#"<eventref hlink="_e{n}"/>"#));
+    let events = each(&|n, _| {
+        format!(r#"<event handle="_e{n}" id="E{n:04}"><type>Birth</type><place hlink="_pl{n}"/></event>"#)
+    });
+    let places = each(&|n, label| {
+        format!(r#"<placeobj handle="_pl{n}" id="P{n:04}" type="{label}"><pname value="Place {label}"/></placeobj>"#)
+    });
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<database xmlns="http://gramps-project.org/xml/1.7.1/">
+<people>
+<person handle="_p1" id="I0001"><name><first>John</first><surname>Smith</surname></name>{eventrefs}</person>
+</people>
+<events>{events}</events>
+<places>{places}</places>
+</database>
+"#
+    )
+}
+
+/// Each place's name with its type statement: `(kind, level, key)`.
+type TypedPlace = (String, Option<(Option<String>, Option<String>, Option<String>)>);
+
+async fn typed_places(workspace: &Workspace) -> Vec<TypedPlace> {
+    let mut typed: Vec<TypedPlace> = list_places(workspace)
+        .await
+        .expect("places")
+        .into_iter()
+        .map(|place| {
+            let statement = place.place_type.map(|statement| {
+                (
+                    statement.kind.map(|kind| format!("{kind:?}")),
+                    statement.level.map(|level| format!("{level:?}")),
+                    statement.type_key.map(|key| key.as_str().to_owned()),
+                )
+            });
+            (place.resolved_name.unwrap_or_default(), statement)
+        })
+        .collect();
+    typed.sort();
+    typed
+}
+
+async fn import_typed_places(io_dir: &Path, doc: &str) -> (Workspace, tempfile::TempDir) {
+    let (root, dir) = init_workspace();
+    let workspace = open_workspace(&root).await;
+    let source = write_file(io_dir, "in.gramps", doc.as_bytes());
+    let BulkImported { workspace, .. } = common::host()
+        .run_bulk_import(
+            &common::component("gramps-import"),
+            invocation(workspace, import_grants()),
+            source,
+            |_: ProgressUpdate| ProgressControl::Proceed,
+        )
+        .await
+        .expect("import");
+    (workspace, dir)
+}
+
+#[tokio::test]
+async fn gramps_round_trips_every_standard_place_type_and_the_shapes_that_are_not_one() {
+    let io_dir = tempfile::tempdir().expect("io dir");
+    let (workspace, _first_dir) = import_typed_places(io_dir.path(), &typed_places_doc()).await;
+    let imported = typed_places(&workspace).await;
+    assert_eq!(imported.len(), 23);
+
+    assert_eq!(gramps_labels().len(), 20);
+    for label in gramps_labels() {
+        let name = format!("Place {label}");
+        let wanted = vitni_app::place_vocabulary::std_statement(&label.to_lowercase()).expect("a std row");
+        let found = imported.iter().find(|(found, _)| *found == name).expect("the place");
+        let expected = (
+            wanted.kind.map(|kind| format!("{kind:?}")),
+            wanted.level.map(|level| format!("{level:?}")),
+            wanted.type_key.map(|key| key.as_str().to_owned()),
+        );
+        assert_eq!(found.1, Some(expected), "{label}: key, kind and level of T4's table");
+    }
+    let key_of = |name: &str| {
+        imported
+            .iter()
+            .find(|(found, _)| found == name)
+            .and_then(|(_, statement)| statement.as_ref())
+            .and_then(|(_, _, key)| key.clone())
+    };
+    assert_eq!(key_of("Place std:foo").as_deref(), Some("custom:std:foo"));
+    assert_eq!(key_of("Place custom:Sokn").as_deref(), Some("custom:custom:Sokn"));
+    let unknown = imported
+        .iter()
+        .find(|(name, _)| name == "Place Unknown")
+        .expect("the place");
+    assert_eq!(unknown.1, None, "Unknown imports untyped");
+    assert_ne!(
+        key_of("Place State").as_deref(),
+        Some("std:county"),
+        "State no longer folds into County"
+    );
+
+    let out = io_dir.path().join("out.gramps");
+    let (exported, _) = export_gramps(workspace, &out).await;
+    for expected in [
+        r#"type="std:foo""#,
+        r#"type="custom:Sokn""#,
+        r#"type="Unknown""#,
+        r#"type="Hamlet""#,
+    ] {
+        assert!(exported.contains(expected), "{expected} in the export");
+    }
+
+    let (again, _second_dir) = import_typed_places(io_dir.path(), &exported).await;
+    assert_eq!(
+        typed_places(&again).await,
+        imported,
+        "an export re-imports to the same types"
+    );
+}

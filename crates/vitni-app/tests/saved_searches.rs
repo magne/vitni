@@ -14,7 +14,7 @@ use vitni_app::{
     create_tag, delete_saved_search, list_persons_page, list_places_page, list_saved_searches, rename_saved_search,
     resolve_saved_search, resolve_saved_search_id, save_saved_search, tag_person, update_saved_search,
 };
-use vitni_core::enums::{EvidenceLevel, PlaceType};
+use vitni_core::enums::EvidenceLevel;
 use vitni_core::ids::AgentId;
 use vitni_core::provenance::{Agent, AgentKind};
 
@@ -465,7 +465,7 @@ async fn a_missing_record_in_an_is_clause_matches_nothing() {
     let (ws, store, dir) = workspace_with_store().await;
     let new = NewPlace {
         human_id: None,
-        place_type: PlaceType::Farm,
+        place_type: vitni_app::std_statement("farm").unwrap_or_default(),
         name: Some("Nordgard".to_owned()),
     };
     create_place(&ws, &session(), new, Provenance::default(), &[])
@@ -751,4 +751,80 @@ async fn a_clause_missing_its_column_or_operator_reports_none_not_an_empty_name(
     assert_eq!(first.stale[0].op.as_deref(), Some("contains"));
     assert_eq!(second.stale[0].column.as_deref(), Some("surname"));
     assert_eq!(second.stale[0].op, None);
+}
+
+#[tokio::test]
+async fn a_saved_place_type_choice_clause_is_stale_now_that_type_is_text() {
+    let (_ws, store, dir) = workspace_with_store().await;
+    write_search(
+        &dir,
+        1,
+        "Parishes",
+        "place",
+        "",
+        &clause("type", "is-any-of", &values(&["parish"])),
+    );
+
+    let resolution = resolve_saved_search(&store, "Parishes", Some(ListedKind::Place)).expect("resolve");
+
+    assert_eq!(resolution.stale.len(), 1, "{:?}", resolution.stale);
+    assert_eq!(resolution.stale[0].column.as_deref(), Some("type"));
+    assert_eq!(resolution.stale[0].op.as_deref(), Some("is-any-of"));
+    let error = saved_search_error(vitni_app::runnable_saved_query(&store, "Parishes", ListedKind::Place));
+    assert!(matches!(error, SavedSearchError::Broken { .. }), "{error:?}");
+}
+
+#[tokio::test]
+async fn a_saved_search_naming_place_kind_or_level_runs() {
+    let (ws, store, dir) = workspace_with_store().await;
+    let new = |name: &str, kind, level| NewPlace {
+        human_id: None,
+        place_type: vitni_app::PlaceTypeStatement {
+            kind,
+            level,
+            type_key: None,
+            date: None,
+        },
+        name: Some(name.to_owned()),
+    };
+    let hamar = create_place(
+        &ws,
+        &session(),
+        new(
+            "Hamar",
+            Some(vitni_app::PlaceKind::Ecclesiastical),
+            Some(vitni_app::PlaceLevel::Adm1),
+        ),
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("hamar");
+    create_place(
+        &ws,
+        &session(),
+        new(
+            "Norge",
+            Some(vitni_app::PlaceKind::Administrative),
+            Some(vitni_app::PlaceLevel::Country),
+        ),
+        Provenance::default(),
+        &[],
+    )
+    .await
+    .expect("norge");
+    let filters = format!(
+        "{}{}",
+        clause("kind", "is-any-of", &values(&["ecclesiastical"])),
+        clause("level", "is-none-of", &values(&["country"]))
+    );
+    write_search(&dir, 1, "Church levels", "place", "", &filters);
+
+    let resolution = resolve_saved_search(&store, "Church levels", Some(ListedKind::Place)).expect("resolve");
+
+    assert_eq!(resolution.stale, Vec::new());
+    let query = runnable(&resolution).expect("a runnable query");
+    let page = list_places_page(&ws, query, ListPage::ALL).await.expect("list");
+    let found: Vec<String> = page.items.into_iter().map(|summary| summary.human_id).collect();
+    assert_eq!(found, [hamar]);
 }

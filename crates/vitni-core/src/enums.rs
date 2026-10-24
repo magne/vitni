@@ -186,35 +186,6 @@ pub enum AssociationRole {
     Custom(String),
 }
 
-/// The kind of a `Place` in the enclosure hierarchy (closed set plus a custom escape — Gramps
-/// place types, data-model §7). ADR 0031 §3 decides its replacement by a `kind`, a `level` and a
-/// vocabulary key.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "type", content = "value")]
-pub enum PlaceType {
-    /// A country.
-    Country,
-    /// A county-like division, whose level varies by country: a Norwegian fylke is first-level, a US
-    /// county second-level. The Gramps import also folds State and Province into it.
-    County,
-    /// A municipality / kommune.
-    Municipality,
-    /// An ecclesiastical parish.
-    Parish,
-    /// A city.
-    City,
-    /// A town.
-    Town,
-    /// A village.
-    Village,
-    /// A farm / gård.
-    Farm,
-    /// A single building.
-    Building,
-    /// An application-defined place type.
-    Custom(String),
-}
-
 /// How a `Place`'s *identity* changed into (or out of) another place — a municipality merger,
 /// county split, or absorption (ADR 0026 §2–§3). Cardinality carries the meaning: `Merged` is
 /// many→one, `Split` is one→many, `Absorbed`/`Elevated`/`Renamed` are one→one. Distinct from a mere
@@ -377,7 +348,7 @@ pub enum NoteType {
 
 #[cfg(test)]
 mod tests {
-    use super::{AssociationRole, ChildParentRelationship, EventType, FactType, ParticipantRole, PlaceType, Sex};
+    use super::{AssociationRole, ChildParentRelationship, EventType, FactType, ParticipantRole, Sex};
 
     #[test]
     fn sex_other_round_trips() {
@@ -419,21 +390,6 @@ mod tests {
         let json = serde_json::to_string(&relationship).unwrap();
         let back: ChildParentRelationship = serde_json::from_str(&json).unwrap();
         assert_eq!(relationship, back);
-    }
-
-    #[test]
-    fn place_type_custom_is_tagged() {
-        let json = serde_json::to_value(PlaceType::Custom("Sokn".to_owned())).unwrap();
-        assert_eq!(json["type"], "Custom");
-        assert_eq!(json["value"], "Sokn");
-    }
-
-    #[test]
-    fn place_type_closed_variant_round_trips() {
-        let place_type = PlaceType::Parish;
-        let json = serde_json::to_string(&place_type).unwrap();
-        let back: PlaceType = serde_json::from_str(&json).unwrap();
-        assert_eq!(place_type, back);
     }
 
     #[test]

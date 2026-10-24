@@ -19,7 +19,7 @@ use time::macros::datetime;
 use uuid::Uuid;
 use vitni_core::citation::command::{CitationCommand, CitationCommandEnvelope};
 use vitni_core::date::{Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody};
-use vitni_core::enums::{EvidenceLevel, PlaceType, SuccessionKind};
+use vitni_core::enums::{EvidenceLevel, SuccessionKind};
 use vitni_core::id_format::IdFormat;
 use vitni_core::ids::{
     AgentId, AssertionId, CitationId, HumanId, MediaId, NoteId, PersonId, PlaceId, RepositoryId, SourceId,
@@ -30,6 +30,7 @@ use vitni_core::name::{NameType, PersonName, Surname};
 use vitni_core::note::{NoteCommand, NoteCommandEnvelope};
 use vitni_core::person::command::{PersonCommand, PersonCommandEnvelope};
 use vitni_core::place::command::{PlaceCommand, PlaceCommandEnvelope};
+use vitni_core::place_type::{PlaceTypeKey, PlaceTypeStatement};
 use vitni_core::provenance::{Agent, AgentKind, AssertionMeta, Confidence, EventContext, Timestamp};
 use vitni_core::repository::{RepositoryCommand, RepositoryCommandEnvelope};
 use vitni_core::source::{SourceCommand, SourceCommandEnvelope};
@@ -131,7 +132,10 @@ async fn create_place(store: &Store, n: u128, human_id: &str) {
                 command: PlaceCommand::CreatePlace {
                     place_id,
                     human_id: HumanId::new(human_id),
-                    place_type: PlaceType::Municipality,
+                    type_statement: PlaceTypeStatement {
+                        type_key: PlaceTypeKey::new("std:municipality").ok(),
+                        ..PlaceTypeStatement::default()
+                    },
                 },
             },
         )
@@ -805,7 +809,10 @@ async fn merge_one_pair_of_every_record_kind(store: &Store) -> (PlaceId, Vec<(Ma
     let create_place = |place_id, human_id| PlaceCommand::CreatePlace {
         place_id,
         human_id,
-        place_type: PlaceType::Parish,
+        type_statement: PlaceTypeStatement {
+            type_key: PlaceTypeKey::new("std:parish").ok(),
+            ..PlaceTypeStatement::default()
+        },
     };
     let (place, places) = merged_pair!(
         store,

@@ -1,16 +1,19 @@
 //! Place subcommands.
 
-use clap::Subcommand;
+use clap::{Args, Subcommand};
 use uuid::Uuid;
 use vitni_app::{
-    AppError, DateParts, ListedKind, MatchableKind, MediaRefInput, MutationMeta, NewPlace, PlaceSuccessionInput,
+    AppError, DateParts, GenealogicalDate, ListedKind, MatchableKind, MediaRefInput, MutationMeta, NewPlace,
+    PlaceError, PlaceKind, PlaceLevel, PlaceSuccessionInput, PlaceTypeGiven, PlaceTypeKey, PlaceTypeStatement,
     Provenance, Session, Workspace, add_place_citation, add_place_name, assert_place_coordinates,
     assert_place_enclosed_by, assert_place_succession, attach_place_media, attach_place_note, create_place,
-    gregorian_date, list_places_page, set_place_code, set_place_restrictions, set_place_type, show_place, tag_place,
+    gregorian_date, list_places_page, merge_place_type, place_type_at, set_place_code, set_place_restrictions,
+    set_place_type, show_place, tag_place,
 };
 use vitni_core::geo::{GeoCoordinates, Microdegrees};
 
-use crate::args::{ListArgs, PlaceTypeArg, RestrictionsArgs, SuccessionKindArg, narrows};
+use crate::args::{ListArgs, PlaceKindArg, PlaceLevelArg, RestrictionsArgs, SuccessionKindArg, narrows};
+use crate::commands::person::parse_born;
 use crate::commands::similar::hint_similar;
 use crate::i18n::Localizer;
 
@@ -18,24 +21,16 @@ use crate::i18n::Localizer;
 #[derive(Subcommand)]
 pub enum PlaceCmd {
     /// Create a new place (auto-assigns a human id unless `--id` is given).
-    Create {
-        /// A specific human id (e.g. `P0500`); omitted to auto-allocate the next free one.
-        #[arg(long, value_name = "HUMAN_ID")]
-        id: Option<String>,
-        /// The place's type.
-        #[arg(long, value_enum, default_value_t = PlaceTypeArg::Parish)]
-        r#type: PlaceTypeArg,
-        /// An initial name for the place.
-        #[arg(long)]
-        name: Option<String>,
-    },
+    Create(CreateArgs),
     /// Set (or change) an existing place's type.
+    ///
+    /// Fields left out keep the value of the entry with the same date (the latest undated one
+    /// without `--date`); a `std` key re-derives kind and level unless they are given.
     SetType {
         /// The place's human id (e.g. `P0001`).
         human_id: String,
-        /// The new place type.
-        #[arg(long, value_enum)]
-        r#type: PlaceTypeArg,
+        #[command(flatten)]
+        flags: TypeFlags,
     },
     /// Assert an additional name on an existing place.
     AddName {
@@ -158,6 +153,113 @@ pub enum PlaceCmd {
     List(ListArgs),
 }
 
+fn type_key(key: &str) -> Result<PlaceTypeKey, AppError> {
+    Ok(PlaceTypeKey::new(key).map_err(|_| PlaceError::InvalidTypeKey(key.to_owned()))?)
+}
+
+fn type_date(raw: &str) -> Result<GenealogicalDate, AppError> {
+    let parts = parse_born(raw).map_err(|_| PlaceError::InvalidTypeDate(raw.to_owned()))?;
+    Ok(gregorian_date(parts))
+}
+
+/// The statement a new place starts with: `--type` pre-fills kind and level from the `std` table, and
+/// `--kind`/`--level` override it. Empty when none is given.
+fn new_type_statement(
+    key: Option<&str>,
+    kind: Option<PlaceKindArg>,
+    level: Option<PlaceLevelArg>,
+) -> Result<PlaceTypeStatement, AppError> {
+    let given = PlaceTypeGiven {
+        type_key: key.map(type_key).transpose()?,
+        kind: kind.map(PlaceKind::from),
+        level: level.map(PlaceLevel::from),
+    };
+    if given == PlaceTypeGiven::default() {
+        return Ok(PlaceTypeStatement::default());
+    }
+    Ok(merge_place_type(None, given, None))
+}
+
+/// The flags of `place set-type`.
+#[derive(Args)]
+pub struct TypeFlags {
+    /// The new place type as a vocabulary key: `std:farm`, `no:prestegjeld` or `custom:<text>`.
+    #[arg(long, value_name = "KEY")]
+    r#type: Option<String>,
+    /// The kind of structure the place is.
+    #[arg(long, value_enum)]
+    kind: Option<PlaceKindArg>,
+    /// The place's rank in a hierarchy.
+    #[arg(long, value_enum)]
+    level: Option<PlaceLevelArg>,
+    /// When the type held: `YYYY`, `YYYY-MM` or `YYYY-MM-DD`; omitted for an undated type.
+    #[arg(long, value_name = "DATE")]
+    date: Option<String>,
+}
+
+/// Sets a place's type, keeping what the flags leave out from the record's own entry with the same date —
+/// the latest undated one without `--date`, so an undated write never takes a dated entry's date.
+async fn set_type(
+    workspace: &Workspace,
+    session: &Session,
+    human_id: &str,
+    flags: TypeFlags,
+    meta: MutationMeta<'_>,
+) -> Result<(), AppError> {
+    let date = flags.date.as_deref().map(type_date).transpose()?;
+    let given = PlaceTypeGiven {
+        type_key: flags.r#type.as_deref().map(type_key).transpose()?,
+        kind: flags.kind.map(PlaceKind::from),
+        level: flags.level.map(PlaceLevel::from),
+    };
+    if given == PlaceTypeGiven::default() {
+        return Err(PlaceError::EmptyPlaceType.into());
+    }
+    let base = place_type_at(workspace, human_id, date.as_ref()).await?;
+    let statement = merge_place_type(base.as_ref(), given, date);
+    set_place_type(workspace, session, human_id, statement, meta).await
+}
+
+/// The flags of `place create`.
+#[derive(Args)]
+pub struct CreateArgs {
+    /// A specific human id (e.g. `P0500`); omitted to auto-allocate the next free one.
+    #[arg(long, value_name = "HUMAN_ID")]
+    id: Option<String>,
+    /// The place's type as a vocabulary key: `std:farm`, `no:prestegjeld` or `custom:<text>`. Omitted
+    /// when the type is not known.
+    #[arg(long, value_name = "KEY")]
+    r#type: Option<String>,
+    /// The kind of structure the place is; overrides what a `std` type implies.
+    #[arg(long, value_enum)]
+    kind: Option<PlaceKindArg>,
+    /// The place's rank in a hierarchy; overrides what a `std` type implies.
+    #[arg(long, value_enum)]
+    level: Option<PlaceLevelArg>,
+    /// An initial name for the place.
+    #[arg(long)]
+    name: Option<String>,
+}
+
+/// Creates a place and prints its human id, with a hint when similar places exist.
+async fn create(
+    workspace: &Workspace,
+    session: &Session,
+    args: CreateArgs,
+    localizer: &Localizer,
+) -> Result<(), AppError> {
+    let place_type = new_type_statement(args.r#type.as_deref(), args.kind, args.level)?;
+    let place = NewPlace {
+        human_id: args.id,
+        place_type,
+        name: args.name,
+    };
+    let human_id = create_place(workspace, session, place, Provenance::default(), &[]).await?;
+    println!("{}", localizer.created(&human_id));
+    hint_similar(workspace, MatchableKind::Place, &human_id, localizer).await;
+    Ok(())
+}
+
 /// Runs a place subcommand against the open workspace.
 pub async fn run(
     workspace: &Workspace,
@@ -167,25 +269,9 @@ pub async fn run(
 ) -> Result<(), AppError> {
     let meta = MutationMeta::default();
     match command {
-        PlaceCmd::Create { id, r#type, name } => {
-            let human_id = create_place(
-                workspace,
-                session,
-                NewPlace {
-                    human_id: id,
-                    place_type: r#type.into(),
-                    name,
-                },
-                Provenance::default(),
-                &[],
-            )
-            .await?;
-            println!("{}", localizer.created(&human_id));
-            hint_similar(workspace, MatchableKind::Place, &human_id, localizer).await;
-            Ok(())
-        }
-        PlaceCmd::SetType { human_id, r#type } => {
-            set_place_type(workspace, session, &human_id, r#type.into(), meta).await?;
+        PlaceCmd::Create(args) => create(workspace, session, args, localizer).await,
+        PlaceCmd::SetType { human_id, flags } => {
+            set_type(workspace, session, &human_id, flags, meta).await?;
             println!("{}", localizer.updated(&human_id));
             Ok(())
         }
