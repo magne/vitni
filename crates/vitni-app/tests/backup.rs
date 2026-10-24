@@ -15,7 +15,8 @@ use sha2::{Digest, Sha256};
 use time::macros::datetime;
 use uuid::Uuid;
 use vitni_app::backup::{
-    BackupError, BackupRequest, ReplaceRequest, RestoreRequest, create_backup, replace_backup, restore_backup,
+    BackupError, BackupRequest, ReplaceRequest, RestoreRequest, create_backup, current_format_version, replace_backup,
+    restore_backup,
 };
 use vitni_app::saved_search::{SavedSearch, SavedSearchEntry, SavedSearchId, StoredQuery};
 use vitni_app::workspace::{read_saved_searches, save_saved_searches};
@@ -210,7 +211,7 @@ async fn a_restore_reproduces_every_event_and_projection() {
         "person (2), note (2) and media (3, the checksum included) events"
     );
     assert_eq!(report.workspace.name, "restored");
-    assert_eq!(report.format_version, "0.1");
+    assert_eq!(report.format_version, current_format_version());
 
     let restored = open(&target).await;
     let source_rows = fixture.source.store().read_raw_events(None, 1000).await.expect("rows");
@@ -301,7 +302,7 @@ async fn the_archive_holds_the_manifest_the_log_and_a_portable_workspace_manifes
 
     let manifest: serde_json::Value =
         serde_json::from_slice(&member(&fixture.archive, "manifest.json")).expect("manifest");
-    assert_eq!(manifest["format_version"], "0.1");
+    assert_eq!(manifest["format_version"], current_format_version());
     assert_eq!(manifest["app_version"], env!("CARGO_PKG_VERSION"));
     assert_eq!(manifest["workspace"], "gen");
     assert_eq!(manifest["event_count"], 7);
@@ -462,7 +463,10 @@ async fn a_newer_format_is_refused_with_both_versions_named() {
     let BackupError::FormatTooNew { found, current } = &error else {
         panic!("expected FormatTooNew, got {error:?}");
     };
-    assert_eq!((found.as_str(), current.as_str()), ("0.9", "0.1"));
+    assert_eq!(
+        (found.as_str(), current.as_str()),
+        ("0.9", current_format_version().as_str())
+    );
     assert_nothing_created(fixture.home.path(), &target);
 }
 
@@ -756,7 +760,7 @@ async fn a_replace_leaves_the_archives_rows_and_projections() {
         .expect("replace");
 
     assert_eq!(report.events, 7);
-    assert_eq!(report.format_version, "0.1");
+    assert_eq!(report.format_version, current_format_version());
     assert_eq!(
         state(&target).await,
         state(&fixture.source).await,

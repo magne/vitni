@@ -9,10 +9,10 @@
 
 use time::macros::datetime;
 use uuid::Uuid;
-use vitni_core::enums::PlaceType;
 use vitni_core::geo::{GeoCoordinates, Microdegrees, PlaceGeometry};
 use vitni_core::ids::{AgentId, AssertionId, HumanId, PlaceId};
 use vitni_core::place::command::{PlaceCommand, PlaceCommandEnvelope};
+use vitni_core::place_type::{PlaceTypeKey, PlaceTypeStatement};
 use vitni_core::provenance::{Agent, AgentKind, AssertionMeta, EventContext, Timestamp};
 use vitni_db::Store;
 
@@ -109,7 +109,10 @@ async fn located_place(store: &Store, n: u128, geometry: PlaceGeometry) {
     let command = PlaceCommand::CreatePlace {
         place_id: place_id(n),
         human_id: HumanId::new(format!("P{n:04}")),
-        place_type: PlaceType::Parish,
+        type_statement: PlaceTypeStatement {
+            type_key: PlaceTypeKey::new("std:parish").ok(),
+            ..PlaceTypeStatement::default()
+        },
     };
     place(store, n, n * 100, command).await;
     let command = match geometry {

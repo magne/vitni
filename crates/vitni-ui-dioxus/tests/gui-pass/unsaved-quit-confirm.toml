@@ -106,7 +106,7 @@ label = "Tab onto the Type select"
 [[step]]
 do = "key"
 chord = "Down"
-label = "Type: Municipality → Parish"
+label = "Type: Municipality → Town"
 
 [[step]]
 do = "click"

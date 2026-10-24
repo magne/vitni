@@ -16,9 +16,9 @@
 use dioxus::prelude::*;
 use vitni_app::EventType;
 use vitni_ui::{
-    Category, Localizer, NEW_EVENT_TYPES, NEW_PLACE_TYPES, NewCitationFields, NewEventFields, NewMediaFields,
-    NewNoteFields, NewPersonFields, NewPlaceFields, NewRecordDraft, NewRepositoryFields, NewSourceFields,
-    PickerSelection, PickerState, RecordLink, parse_birth,
+    Category, Localizer, NEW_EVENT_TYPES, NewCitationFields, NewEventFields, NewMediaFields, NewNoteFields,
+    NewPersonFields, NewPlaceFields, NewRecordDraft, NewRepositoryFields, NewSourceFields, PickerSelection,
+    PickerState, RecordLink, new_place_types, parse_birth,
 };
 
 use crate::app::AppCtx;
@@ -162,10 +162,10 @@ fn person_body(loc: &Localizer, link: Signal<RecordLink<NewRecordDraft>>, fields
     }
 }
 
-/// The new-place fields: a required type select ([`NEW_PLACE_TYPES`], defaulting to City — a place
-/// always has some type) and a name input.
+/// The new-place fields: a type select ([`new_place_types`], defaulting to City) and a name input.
 fn place_body(loc: &Localizer, link: Signal<RecordLink<NewRecordDraft>>, fields: &NewPlaceFields) -> Element {
-    let options: Vec<SelectChoice> = NEW_PLACE_TYPES
+    let place_types = new_place_types();
+    let options: Vec<SelectChoice> = place_types
         .iter()
         .enumerate()
         .map(|(index, place_type)| SelectChoice {
@@ -173,9 +173,9 @@ fn place_body(loc: &Localizer, link: Signal<RecordLink<NewRecordDraft>>, fields:
             label: loc.place_type_label(place_type),
         })
         .collect();
-    let selected = NEW_PLACE_TYPES
+    let selected = place_types
         .iter()
-        .position(|place_type| place_type == &fields.place_type)
+        .position(|place_type| place_type.type_key == fields.place_type.type_key)
         .unwrap_or(0)
         .to_string();
     rsx! {
@@ -185,7 +185,7 @@ fn place_body(loc: &Localizer, link: Signal<RecordLink<NewRecordDraft>>, fields:
             value: Some(selected),
             options,
             onchange: move |event: FormEvent| {
-                if let Some(place_type) = event.value().parse::<usize>().ok().and_then(|index| NEW_PLACE_TYPES.get(index).cloned()) {
+                if let Some(place_type) = event.value().parse::<usize>().ok().and_then(|index| place_types.get(index).cloned()) {
                     with_new(link, move |draft| if let NewRecordDraft::Place(fields) = draft { fields.place_type = place_type; });
                 }
             },

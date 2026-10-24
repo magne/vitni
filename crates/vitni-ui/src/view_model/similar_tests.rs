@@ -1,6 +1,5 @@
 use vitni_app::{
-    AggRef, DateParts, DraftRecord, MatchAssessment, MatchBand, MatchableKind, PersonNameParts, PlaceType,
-    SimilarRecord,
+    AggRef, DateParts, DraftRecord, MatchAssessment, MatchBand, MatchableKind, PersonNameParts, SimilarRecord,
 };
 
 use super::{
@@ -104,14 +103,14 @@ fn a_new_person_from_a_picker_carries_its_birth_and_is_matched() {
 #[test]
 fn place_source_and_repository_drafts_are_matched_but_a_note_is_not() {
     let place = NewRecordDraft::Place(NewPlaceFields {
-        place_type: PlaceType::Farm,
+        place_type: vitni_app::std_statement("farm").unwrap_or_default(),
         name: "Nordås".to_owned(),
     });
     assert_eq!(
         place.similar_draft(),
         Some(DraftRecord::Place {
             name: "Nordås".to_owned(),
-            place_type: Some(PlaceType::Farm),
+            place_type: Some(vitni_app::std_statement("farm").unwrap_or_default()),
         })
     );
     let note = NewRecordDraft::Note(NewNoteFields {

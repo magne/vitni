@@ -490,10 +490,10 @@ const CITATIONS: [(&str, &str, &str); 4] = [
 
 /// The places, by human id, type, name and coordinates.
 const PLACES: [(&str, &str, &str, &str, &str); 4] = [
-    ("P0001", "farm", "Vestheim", "58.1600", "7.8600"),
-    ("P0002", "municipality", "Kristiansand", "58.1467", "7.9956"),
-    ("P0003", "parish", "Søgne", "58.0906", "7.7855"),
-    ("P0004", "town", "Mandal", "58.0294", "7.4534"),
+    ("P0001", "std:farm", "Vestheim", "58.1600", "7.8600"),
+    ("P0002", "std:municipality", "Kristiansand", "58.1467", "7.9956"),
+    ("P0003", "std:parish", "Søgne", "58.0906", "7.7855"),
+    ("P0004", "std:town", "Mandal", "58.0294", "7.4534"),
 ];
 
 /// The seven persons, oldest generation first.

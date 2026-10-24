@@ -35,7 +35,7 @@ use std::hash::Hash;
 use uuid::Uuid;
 use vitni_core::citation::CitationView;
 use vitni_core::date::{DateQuality, GenealogicalDate};
-use vitni_core::enums::{ChildParentRelationship, EventType, FactType, ParticipantRole, PlaceType};
+use vitni_core::enums::{ChildParentRelationship, EventType, FactType, ParticipantRole};
 use vitni_core::event::EventView;
 use vitni_core::family::{ChildEntry, FamilyView};
 use vitni_core::identity::ClusterRecord;
@@ -54,6 +54,7 @@ use vitni_core::origin::RecordOrigin;
 use vitni_core::person::PersonView;
 use vitni_core::place::PlaceView;
 use vitni_core::place_name::PlaceName;
+use vitni_core::place_type::PlaceLevel;
 use vitni_core::repository::RepositoryView;
 use vitni_core::source::SourceView;
 use vitni_core::tag::TagView;
@@ -1197,12 +1198,16 @@ impl PlaceLookup {
         let country = std::iter::once(&place_id)
             .chain(&enclosing)
             .filter_map(|id| self.places.get(id))
-            .find(|place| place.place_type() == Some(&PlaceType::Country))
+            .find(|place| {
+                place
+                    .place_type()
+                    .is_some_and(|statement| statement.level == Some(PlaceLevel::Country))
+            })
             .and_then(|country| country.names().first().map(|name| name.text.clone()));
         PlaceProfile {
             id: Some(place_id),
             names: view.names().into_iter().cloned().collect(),
-            place_type: crate::place::stated_place_type(view).cloned(),
+            place_type: view.place_type().cloned(),
             enclosing,
             country,
             coordinates: view.coordinates().copied(),

@@ -60,7 +60,7 @@ fn a_new_persons_unreadable_birth_is_flagged() {
 
 fn place_view() -> Element {
     card(&RecordLink::New(NewRecordDraft::Place(NewPlaceFields {
-        place_type: vitni_app::PlaceType::City,
+        place_type: vitni_app::std_statement("city").unwrap_or_default(),
         name: "Ellis Island".to_owned(),
     })))
 }
@@ -378,4 +378,48 @@ fn citation_form_disables_save_while_the_source_link_is_empty() {
         html.contains("disabled") && html.contains(">Save<"),
         "Save is blocked while the required source link is unset:\n{html}"
     );
+}
+
+#[test]
+fn the_new_place_type_select_offers_the_twenty_std_labels_with_city_selected() {
+    let html = render(place_view);
+    let marker = r#"id="new-record-place-type""#;
+    let start = html.find(marker).expect("the type select");
+    let select = &html[start..html[start..].find("</select>").map_or(html.len(), |end| start + end)];
+    let mut labels = Vec::new();
+    let mut selected = Vec::new();
+    for chunk in select.split("<option").skip(1) {
+        let (attributes, rest) = chunk.split_once('>').unwrap_or_default();
+        let label = rest.split("</option>").next().unwrap_or_default().to_owned();
+        if attributes.contains("selected") {
+            selected.push(label.clone());
+        }
+        labels.push(label);
+    }
+    assert_eq!(
+        labels,
+        [
+            "Country",
+            "State",
+            "County",
+            "City",
+            "Parish",
+            "Locality",
+            "Street",
+            "Province",
+            "Region",
+            "Department",
+            "Neighborhood",
+            "District",
+            "Borough",
+            "Municipality",
+            "Town",
+            "Village",
+            "Hamlet",
+            "Farm",
+            "Building",
+            "Number",
+        ]
+    );
+    assert_eq!(selected, ["City"]);
 }

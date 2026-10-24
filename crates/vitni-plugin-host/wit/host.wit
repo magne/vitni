@@ -226,7 +226,12 @@
 // `file-date-text`, which the host records on the run, and quotes, whenever `file-asserted-at` yields
 // no instant — a partial, text-only or impossible date — so the run says why it replaced no value
 // (ADR 0029 §3). A breaking change to `staging`.
-package vitni:host-api@0.32.0;
+//
+// Version 0.33.0 replaces the closed `place-type` variant with ADR 0031 §3's statement (#714):
+// `place-type` becomes a record of optional `kind`, `level`, `type-key` and `date`, with the `place-kind` and
+// `place-level` enums. `set-place-type`, `place-dto`, `staged-place` and the `place-type` feature value carry
+// it. A breaking change to `types`, `commands`, `query` and `staging`.
+package vitni:host-api@0.33.0;
 
 interface types {
     // The kind of a name (data-model §7 / GEDCOM `NAME.TYPE`), mirroring `vitni_core::name::NameType`.
@@ -494,18 +499,43 @@ interface types {
         very-high,
     }
 
-    // The kind of a place (data-model §7), mirroring `vitni_core::enums::PlaceType`.
-    variant place-type {
-        country,
-        county,
-        municipality,
-        parish,
-        city,
-        town,
-        village,
-        farm,
+    // The kind of a place (ADR 0031 §3), mirroring `vitni_core::place_type::PlaceKind`.
+    enum place-kind {
+        administrative,
+        ecclesiastical,
+        judicial,
+        registration,
+        fiscal,
+        military,
+        manorial,
+        cadastral,
+        statistical,
+        settlement,
         building,
-        custom(string),
+        natural,
+    }
+
+    // A place's level in the administrative hierarchy (ADR 0031 §3), mirroring
+    // `vitni_core::place_type::PlaceLevel`.
+    enum place-level {
+        country,
+        adm1,
+        adm2,
+        adm3,
+        adm4,
+        adm5,
+        settlement,
+        sub-settlement,
+    }
+
+    // A (possibly dated) statement of a place's type (ADR 0031 §3), mirroring
+    // `vitni_core::place_type::PlaceTypeStatement`. `type-key` is `<namespace>:<name>`, such as
+    // `std:farm`, or `custom:<text>`; a statement states at least one of kind, level and key.
+    record place-type {
+        kind: option<place-kind>,
+        level: option<place-level>,
+        type-key: option<string>,
+        date: option<genealogical-date>,
     }
 
     // A stable identifier in an external system (data-model §7, §11) — mirrors

@@ -10,15 +10,16 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
 use crate::assertions::{Asserted, Attributed};
-use crate::enums::{PlaceType, Restriction};
+use crate::enums::Restriction;
 use crate::geo::GeoCoordinates;
-use crate::ids::{CitationId, HumanId, NoteId, PlaceId, TagId};
+use crate::ids::{AssertionId, CitationId, HumanId, NoteId, PlaceId, TagId};
 use crate::place::decide::evolve;
 use crate::place::state::PlaceState;
 use crate::place_geometry::PlaceGeometryAssertion;
 use crate::place_name::PlaceName;
 use crate::place_ref::PlaceRef;
 use crate::place_succession::PlaceSuccessionAssertion;
+use crate::place_type::PlaceTypeStatement;
 use crate::temporal::resolve_as_of;
 use crate::text::MediaRef;
 
@@ -47,16 +48,48 @@ impl PlaceView {
         self.state.human_id.as_ref()
     }
 
-    /// The place's type.
+    /// The place's current type: the one in effect as of the latest date (dated beats undated).
     #[must_use]
-    pub fn place_type(&self) -> Option<&PlaceType> {
-        self.state.place_type.as_ref().map(|t| &t.value.value)
+    pub fn place_type(&self) -> Option<&PlaceTypeStatement> {
+        self.place_type_as_of(i64::MAX)
     }
 
-    /// The place's type with its provenance (surety + backing citations), if set.
+    /// The type in effect as of `target_sort_value`, with its provenance.
     #[must_use]
-    pub fn asserted_place_type(&self) -> Option<&Asserted<PlaceType>> {
-        self.state.place_type.as_ref().map(|t| &t.value)
+    pub fn asserted_place_type_as_of(&self, target_sort_value: i64) -> Option<&Asserted<PlaceTypeStatement>> {
+        self.place_type_entry_as_of(target_sort_value).map(|t| &t.value)
+    }
+
+    /// The type in effect **as of** `target_sort_value`: the dated statement with the latest date
+    /// `<= target_sort_value`, else the latest live undated statement (ADR 0054 — unlike names, where
+    /// the first undated one is the fallback).
+    #[must_use]
+    pub fn place_type_as_of(&self, target_sort_value: i64) -> Option<&PlaceTypeStatement> {
+        self.place_type_entry_as_of(target_sort_value).map(|t| &t.value.value)
+    }
+
+    fn place_type_entry_as_of(&self, target_sort_value: i64) -> Option<&Attributed<Asserted<PlaceTypeStatement>>> {
+        let dated = self.state.place_types.iter().filter(|t| t.value.value.date.is_some());
+        let best = resolve_as_of(dated, target_sort_value, |t| t.value.value.date_sort_value());
+        best.or_else(|| {
+            self.state
+                .place_types
+                .iter()
+                .rev()
+                .find(|t| t.value.value.date.is_none())
+        })
+    }
+
+    /// Every live non-empty type statement with its introducing `AssertionId`, in assertion order.
+    #[must_use]
+    pub fn place_types_with_assertions(&self) -> &[Attributed<Asserted<PlaceTypeStatement>>] {
+        &self.state.place_types
+    }
+
+    /// The assertion that created the place, once created.
+    #[must_use]
+    pub fn created_assertion(&self) -> Option<AssertionId> {
+        self.state.created_assertion
     }
 
     /// All currently-live asserted names, in assertion order.

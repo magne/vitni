@@ -24,7 +24,7 @@ use vitni_app::{
     undo_repository_distinction_and_merge, undo_source_assertion, undo_source_distinction_and_merge, workspace_counts,
 };
 use vitni_core::citation::CitationError;
-use vitni_core::enums::PlaceType;
+
 use vitni_core::ids::AgentId;
 use vitni_core::matching::{CultureId, EngineVersion, MatchEvidence};
 use vitni_core::media::MediaError;
@@ -82,7 +82,7 @@ struct Shown {
 async fn new_place(ws: &Workspace) -> String {
     let new = NewPlace {
         human_id: None,
-        place_type: PlaceType::Farm,
+        place_type: vitni_app::std_statement("farm").unwrap_or_default(),
         name: Some("Haugen".to_owned()),
     };
     create_place(ws, &session(), new, Provenance::default(), &[])

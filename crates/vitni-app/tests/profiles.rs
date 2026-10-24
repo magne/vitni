@@ -17,7 +17,7 @@ use vitni_app::{
 };
 use vitni_core::age::Age;
 use vitni_core::date::DateQuality;
-use vitni_core::enums::{EventType, EvidenceLevel, FactType, ParticipantRole, PlaceType, Sex};
+use vitni_core::enums::{EventType, EvidenceLevel, FactType, ParticipantRole, Sex};
 use vitni_core::ids::{AgentId, ImportRunId, PlaceId};
 use vitni_core::matching::profile::{FamilyProfile, PersonProfile, VitalKind};
 use vitni_core::matching::{
@@ -94,7 +94,7 @@ impl Records {
         self.person_from(given, surname, sex, Provenance::default()).await
     }
 
-    async fn place(&self, name: &str, place_type: PlaceType, enclosed_by: Option<&str>) -> String {
+    async fn place(&self, name: &str, place_type: vitni_app::PlaceTypeStatement, enclosed_by: Option<&str>) -> String {
         let new = NewPlace {
             human_id: None,
             place_type,
@@ -255,8 +255,16 @@ fn assess(a: &PersonProfile, b: &PersonProfile) -> vitni_core::matching::MatchAs
 #[tokio::test]
 async fn two_ole_olsens_born_the_same_year_separate_on_their_fathers() {
     let records = Records::new().await;
-    let norge = records.place("Norge", PlaceType::Country, None).await;
-    let parish = records.place("Ringsaker", PlaceType::Parish, Some(&norge)).await;
+    let norge = records
+        .place("Norge", vitni_app::std_statement("country").unwrap_or_default(), None)
+        .await;
+    let parish = records
+        .place(
+            "Ringsaker",
+            vitni_app::std_statement("parish").unwrap_or_default(),
+            Some(&norge),
+        )
+        .await;
     let mut oles = Vec::new();
     for father_born in [1815, 1830] {
         let ole = records.person("Ole", "Olsen", Sex::Male).await;
@@ -284,9 +292,23 @@ async fn two_ole_olsens_born_the_same_year_separate_on_their_fathers() {
 #[tokio::test]
 async fn the_profile_carries_vitals_places_occupations_and_relatives() {
     let records = Records::new().await;
-    let norge = records.place("Norge", PlaceType::Country, None).await;
-    let parish = records.place("Ringsaker", PlaceType::Parish, Some(&norge)).await;
-    let farm = records.place("Haugen", PlaceType::Farm, Some(&parish)).await;
+    let norge = records
+        .place("Norge", vitni_app::std_statement("country").unwrap_or_default(), None)
+        .await;
+    let parish = records
+        .place(
+            "Ringsaker",
+            vitni_app::std_statement("parish").unwrap_or_default(),
+            Some(&norge),
+        )
+        .await;
+    let farm = records
+        .place(
+            "Haugen",
+            vitni_app::std_statement("farm").unwrap_or_default(),
+            Some(&parish),
+        )
+        .await;
     let ole = records.person("Ole", "Olsen", Sex::Male).await;
     let primary = || NewParticipation::with_role(ParticipantRole::Primary);
     records
@@ -576,8 +598,16 @@ impl Records {
 #[tokio::test]
 async fn one_marriage_from_a_church_book_and_a_gedcom_file_is_probable() {
     let records = Records::new().await;
-    let norge = records.place("Norge", PlaceType::Country, None).await;
-    let parish = records.place("Ringsaker", PlaceType::Parish, Some(&norge)).await;
+    let norge = records
+        .place("Norge", vitni_app::std_statement("country").unwrap_or_default(), None)
+        .await;
+    let parish = records
+        .place(
+            "Ringsaker",
+            vitni_app::std_statement("parish").unwrap_or_default(),
+            Some(&norge),
+        )
+        .await;
     let church = records.family_profile(&records.church_book(&parish).await).await;
     let gedcom = records.family_profile(&records.gedcom(&parish).await).await;
     let data = MatchData::embedded().expect("embedded match data");
@@ -602,8 +632,16 @@ async fn one_marriage_from_a_church_book_and_a_gedcom_file_is_probable() {
 #[tokio::test]
 async fn the_family_profile_carries_partners_children_and_the_marriage() {
     let records = Records::new().await;
-    let norge = records.place("Norge", PlaceType::Country, None).await;
-    let parish = records.place("Ringsaker", PlaceType::Parish, Some(&norge)).await;
+    let norge = records
+        .place("Norge", vitni_app::std_statement("country").unwrap_or_default(), None)
+        .await;
+    let parish = records
+        .place(
+            "Ringsaker",
+            vitni_app::std_statement("parish").unwrap_or_default(),
+            Some(&norge),
+        )
+        .await;
     let family = records.church_book(&parish).await;
     let child = records.person("Anne", "Guldbrandsdatter", Sex::Female).await;
     records.born(&child, 1878, Some(&parish)).await;
@@ -655,8 +693,16 @@ async fn the_family_profile_carries_partners_children_and_the_marriage() {
 #[tokio::test]
 async fn the_event_profile_carries_type_date_place_and_participants() {
     let records = Records::new().await;
-    let norge = records.place("Norge", PlaceType::Country, None).await;
-    let parish = records.place("Ringsaker", PlaceType::Parish, Some(&norge)).await;
+    let norge = records
+        .place("Norge", vitni_app::std_statement("country").unwrap_or_default(), None)
+        .await;
+    let parish = records
+        .place(
+            "Ringsaker",
+            vitni_app::std_statement("parish").unwrap_or_default(),
+            Some(&norge),
+        )
+        .await;
     let ole = records.person("Ole", "Olsen", Sex::Male).await;
     records.born(&ole, 1850, None).await;
     let census = records
@@ -744,16 +790,33 @@ async fn an_unknown_family_or_event_is_not_found() {
 #[tokio::test]
 async fn a_farm_matched_to_its_parish_is_partial() {
     let records = Records::new().await;
-    let norge = records.place("Norge", PlaceType::Country, None).await;
-    let parish = records.place("Ringsaker", PlaceType::Parish, Some(&norge)).await;
-    let farm = records.place("Haugen", PlaceType::Farm, Some(&parish)).await;
+    let norge = records
+        .place("Norge", vitni_app::std_statement("country").unwrap_or_default(), None)
+        .await;
+    let parish = records
+        .place(
+            "Ringsaker",
+            vitni_app::std_statement("parish").unwrap_or_default(),
+            Some(&norge),
+        )
+        .await;
+    let farm = records
+        .place(
+            "Haugen",
+            vitni_app::std_statement("farm").unwrap_or_default(),
+            Some(&parish),
+        )
+        .await;
     let (farm, parish) = (
         place_profile(&records.workspace, &farm).await.expect("farm profile"),
         place_profile(&records.workspace, &parish)
             .await
             .expect("parish profile"),
     );
-    assert_eq!(farm.place_type, Some(PlaceType::Farm));
+    assert_eq!(
+        farm.place_type,
+        Some(vitni_app::std_statement("farm").unwrap_or_default())
+    );
     assert_eq!(farm.names[0].text, "Haugen");
     assert_eq!(
         farm.enclosing,
@@ -775,7 +838,7 @@ async fn the_place_profile_carries_the_creating_origin() {
     let records = Records::new().await;
     let new = NewPlace {
         human_id: None,
-        place_type: PlaceType::Farm,
+        place_type: vitni_app::std_statement("farm").unwrap_or_default(),
         name: Some("Haugen".to_owned()),
     };
     let place = create_place(

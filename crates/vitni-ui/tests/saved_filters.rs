@@ -9,7 +9,7 @@
 use uuid::Uuid;
 use vitni_app::{
     Agent, AgentId, AgentKind, AppDefaults, ConfigStore, DateParts, FileConfigStore, FilterOp, FilterValue, ListFilter,
-    ListQuery, ListedKind, NewPlace, OperatorConfig, PlaceType, Provenance, SavedSearchResolution, Session, Workspace,
+    ListQuery, ListedKind, NewPlace, OperatorConfig, Provenance, SavedSearchResolution, Session, Workspace,
     WorkspaceDefaults, create_place, create_tag, gregorian_date, reference_id, resolve_saved_search, save_saved_search,
 };
 use vitni_ui::{ActiveFilter, Localizer, filter_chip_label, resolve_filter, saved_filters};
@@ -83,7 +83,7 @@ fn tag_clause(op: FilterOp, ids: &[&str]) -> ListFilter {
 async fn place(fixture: &Fixture, name: &str) -> String {
     let new = NewPlace {
         human_id: None,
-        place_type: PlaceType::Parish,
+        place_type: vitni_app::std_statement("parish").unwrap_or_default(),
         name: Some(name.to_owned()),
     };
     create_place(&fixture.workspace, &session(), new, Provenance::default(), &[])

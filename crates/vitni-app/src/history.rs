@@ -2525,7 +2525,7 @@ mod tests {
             &human,
             crate::place::NewPlace {
                 human_id: None,
-                place_type: vitni_core::enums::PlaceType::City,
+                place_type: crate::std_statement("city").unwrap_or_default(),
                 name: Some("Trinity Church".to_owned()),
             },
             Provenance::default(),
@@ -2611,7 +2611,7 @@ mod tests {
             &human,
             crate::place::NewPlace {
                 human_id: None,
-                place_type: vitni_core::enums::PlaceType::City,
+                place_type: crate::std_statement("city").unwrap_or_default(),
                 name: None,
             },
             Provenance::default(),

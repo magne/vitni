@@ -9,8 +9,8 @@ use uuid::Uuid;
 use vitni_app::{
     Agent, AgentId, AgentKind, AppDefaults, AppError, ColumnType, EventType, EvidenceLevel, FilterOp, FilterValue,
     ListFilter, ListQuery, ListQueryError, ListSort, ListWindow, ListedKind, MutationMeta, NewEvent, NewPerson,
-    NewPlace, OperatorConfig, PersonNameParts, PlaceType, Provenance, Session, SortDirection, Workspace,
-    WorkspaceDefaults, create_event, create_person, create_place, create_tag, link_place, query_list, tag_person,
+    NewPlace, OperatorConfig, PersonNameParts, Provenance, Session, SortDirection, Workspace, WorkspaceDefaults,
+    create_event, create_person, create_place, create_tag, link_place, query_list, tag_person,
 };
 use vitni_ui::{FilterDraft, Localizer, PAGE_ROWS, choice_options, list_page, resolve_filter};
 
@@ -175,7 +175,7 @@ async fn a_picked_record_is_resolved_to_the_id_the_query_holds() {
     let (ws, loc, _dir) = setup().await;
     let place = |name: &str| NewPlace {
         human_id: None,
-        place_type: PlaceType::Parish,
+        place_type: vitni_app::std_statement("parish").unwrap_or_default(),
         name: Some(name.to_owned()),
     };
     let fana = create_place(&ws, &session(), place("Fana"), Provenance::default(), &[])
@@ -242,7 +242,7 @@ async fn a_rows_second_line_is_its_chosen_columns_an_empty_cell_skipped() {
         &session(),
         NewPlace {
             human_id: None,
-            place_type: PlaceType::Parish,
+            place_type: vitni_app::std_statement("parish").unwrap_or_default(),
             name: Some("Fana".to_owned()),
         },
         Provenance::default(),

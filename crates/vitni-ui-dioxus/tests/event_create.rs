@@ -102,3 +102,50 @@ fn a_new_place_selection_reveals_the_inline_place_draft_card() {
         "choosing a new place makes the draft dirty:\n{html}"
     );
 }
+
+#[test]
+fn the_inline_new_place_type_select_offers_the_twenty_std_labels_with_city_selected() {
+    let html = render(new_place_view);
+    let marker = r#"id="event-new-place-type""#;
+    let start = html
+        .find(marker)
+        .unwrap_or_else(|| panic!("the inline type select:\n{html}"));
+    let select = &html[start..html[start..].find("</select>").map_or(html.len(), |end| start + end)];
+    let mut labels = Vec::new();
+    let mut selected = Vec::new();
+    for chunk in select.split("<option").skip(1) {
+        let (attributes, rest) = chunk.split_once('>').unwrap_or_default();
+        let label = rest.split("</option>").next().unwrap_or_default().to_owned();
+        if attributes.contains("selected") {
+            selected.push(label.clone());
+        }
+        labels.push(label);
+    }
+    labels.retain(|label| label != "—");
+    assert_eq!(
+        labels,
+        [
+            "Country",
+            "State",
+            "County",
+            "City",
+            "Parish",
+            "Locality",
+            "Street",
+            "Province",
+            "Region",
+            "Department",
+            "Neighborhood",
+            "District",
+            "Borough",
+            "Municipality",
+            "Town",
+            "Village",
+            "Hamlet",
+            "Farm",
+            "Building",
+            "Number",
+        ]
+    );
+    assert_eq!(selected, ["City"]);
+}

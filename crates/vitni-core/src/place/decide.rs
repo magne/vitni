@@ -7,7 +7,7 @@
 //! core, while the impure read stays at the edge.
 
 use crate::assertions::{Asserted, Attributed};
-use crate::enums::{PlaceType, SuccessionKind};
+use crate::enums::SuccessionKind;
 use crate::geo::PlaceGeometry;
 use crate::ids::{HumanId, PlaceId};
 use crate::matching::MatchEvidence;
@@ -18,6 +18,7 @@ use crate::place::ref_resolver::PlaceRefs;
 use crate::place::state::PlaceState;
 use crate::place_geometry::PlaceGeometryAssertion;
 use crate::place_succession::PlaceSuccessionAssertion;
+use crate::place_type::PlaceTypeStatement;
 use crate::provenance::AssertionMeta;
 
 /// Decides the events a command produces, or rejects it with a domain error.
@@ -38,11 +39,24 @@ pub fn decide(
         PlaceCommand::CreatePlace {
             place_id,
             human_id,
-            place_type,
-        } => create_place(state, meta, place_id, human_id, place_type),
-        PlaceCommand::SetPlaceType { place_id, place_type } => {
+            type_statement,
+        } => create_place(state, meta, place_id, human_id, type_statement),
+        PlaceCommand::SetPlaceType {
+            place_id,
+            type_statement,
+        } => {
             ensure_exists(state, place_id)?;
-            Ok(one(meta, PlaceEventBody::PlaceTypeSet { place_id, place_type }))
+            if type_statement.is_empty() {
+                return Err(PlaceError::EmptyPlaceType);
+            }
+            type_statement.validate()?;
+            Ok(one(
+                meta,
+                PlaceEventBody::PlaceTypeSet {
+                    place_id,
+                    type_statement,
+                },
+            ))
         }
         PlaceCommand::AssertName { place_id, name } => {
             ensure_exists(state, place_id)?;
@@ -185,17 +199,18 @@ fn create_place(
     meta: &AssertionMeta,
     place_id: PlaceId,
     human_id: HumanId,
-    place_type: PlaceType,
+    type_statement: PlaceTypeStatement,
 ) -> Result<Vec<PlaceEvent>, PlaceError> {
     if state.exists {
         return Err(PlaceError::AlreadyExists(place_id));
     }
+    type_statement.validate()?;
     Ok(one(
         meta,
         PlaceEventBody::PlaceCreated {
             place_id,
             human_id,
-            place_type,
+            type_statement,
         },
     ))
 }
@@ -346,16 +361,31 @@ fn evolve_place_created(
     assertion_id: crate::ids::AssertionId,
     place_id: PlaceId,
     human_id: HumanId,
-    place_type: crate::enums::PlaceType,
+    type_statement: PlaceTypeStatement,
 ) {
     state.exists = true;
     state.place_id = Some(place_id);
     state.human_id = Some(human_id);
-    state.place_type = Some(Attributed {
-        assertion_id,
-        value: Asserted::from_context(place_type, &event.context),
-    });
+    state.created_assertion = Some(assertion_id);
+    push_type_statement(state, event, assertion_id, type_statement);
     state.live_assertions.insert(assertion_id);
+}
+
+/// Records a non-empty type statement; an empty one (an upgraded `Custom("place")`) holds no type but
+/// its assertion stays live so it can still be retracted or superseded.
+fn push_type_statement(
+    state: &mut PlaceState,
+    event: &PlaceEvent,
+    assertion_id: crate::ids::AssertionId,
+    statement: PlaceTypeStatement,
+) {
+    if statement.is_empty() {
+        return;
+    }
+    state.place_types.push(Attributed {
+        assertion_id,
+        value: Asserted::from_context(statement, &event.context),
+    });
 }
 
 /// Applies an event to the state (the fold). No business logic lives here (ADR 0004 §3).
@@ -365,20 +395,17 @@ pub fn evolve(state: &mut PlaceState, event: &PlaceEvent) {
         PlaceEventBody::PlaceCreated {
             place_id,
             human_id,
-            place_type,
+            type_statement,
         } => evolve_place_created(
             state,
             event,
             assertion_id,
             *place_id,
             human_id.clone(),
-            place_type.clone(),
+            type_statement.clone(),
         ),
-        PlaceEventBody::PlaceTypeSet { place_type, .. } => {
-            state.place_type = Some(Attributed {
-                assertion_id,
-                value: Asserted::from_context(place_type.clone(), &event.context),
-            });
+        PlaceEventBody::PlaceTypeSet { type_statement, .. } => {
+            push_type_statement(state, event, assertion_id, type_statement.clone());
             state.live_assertions.insert(assertion_id);
         }
         PlaceEventBody::NameAsserted { name, .. } => {
@@ -544,7 +571,6 @@ fn evolve_succession_asserted(
 #[cfg(test)]
 mod tests {
     use super::{decide, evolve};
-    use crate::enums::PlaceType;
     use crate::geo::{GeoCoordinates, Microdegrees};
     use crate::ids::{AgentId, AssertionId, HumanId, PlaceId};
     use crate::place::command::PlaceCommand;
@@ -554,6 +580,7 @@ mod tests {
     use crate::place::state::PlaceState;
     use crate::place_name::PlaceName;
     use crate::place_ref::PlaceRef;
+    use crate::place_type::PlaceTypeStatement;
     use crate::provenance::{Agent, AgentKind, AssertionMeta, Confidence, EventContext, Timestamp};
     use time::macros::datetime;
     use uuid::Uuid;
@@ -611,7 +638,7 @@ mod tests {
             PlaceCommand::CreatePlace {
                 place_id: place(id),
                 human_id: HumanId::new("P1"),
-                place_type: PlaceType::Parish,
+                type_statement: PlaceTypeStatement::default(),
             },
             &meta(1),
             &ENCLOSING_PRESENT,
@@ -629,7 +656,7 @@ mod tests {
             PlaceCommand::CreatePlace {
                 place_id: place(1),
                 human_id: HumanId::new("P1"),
-                place_type: PlaceType::Farm,
+                type_statement: PlaceTypeStatement::default(),
             },
             &meta(1),
             &ENCLOSING_PRESENT,
@@ -647,7 +674,7 @@ mod tests {
             PlaceCommand::CreatePlace {
                 place_id: place(1),
                 human_id: HumanId::new("P1"),
-                place_type: PlaceType::Farm,
+                type_statement: PlaceTypeStatement::default(),
             },
             &meta(2),
             &ENCLOSING_PRESENT,
@@ -1389,6 +1416,302 @@ mod tests {
                 let err = decide(&state, second.clone(), &meta(3), &ENCLOSING_PRESENT).unwrap_err();
                 assert_eq!(err, decided, "{first:?} then {second:?}");
             }
+        }
+    }
+
+    mod type_statements {
+        use super::*;
+        use crate::date::{Calendar, DateModifier, DatePoint, DateQuality, GenealogicalDate, GenealogicalDateBody};
+        use crate::place_type::{PlaceKind, PlaceLevel, PlaceTypeKey, PlaceTypeStatement};
+
+        fn statement(key: &str) -> PlaceTypeStatement {
+            PlaceTypeStatement {
+                kind: Some(PlaceKind::Administrative),
+                level: None,
+                type_key: Some(PlaceTypeKey::new(key).unwrap()),
+                date: None,
+            }
+        }
+
+        fn dated(mut statement: PlaceTypeStatement, year: i32) -> PlaceTypeStatement {
+            statement.date = Some(GenealogicalDate {
+                calendar: Calendar::Gregorian,
+                quality: DateQuality::Normal,
+                modifier: GenealogicalDateBody::Structured(DateModifier::None(DatePoint {
+                    year: Some(year),
+                    month: None,
+                    day: None,
+                })),
+                time: None,
+                new_year_begins: None,
+                sort_value: i64::from(year),
+                original_text: None,
+            });
+            statement
+        }
+
+        fn text_only_date() -> GenealogicalDate {
+            GenealogicalDate {
+                calendar: Calendar::Gregorian,
+                quality: DateQuality::Estimated,
+                modifier: GenealogicalDateBody::TextOnly {
+                    text: "in the old days".to_owned(),
+                },
+                time: None,
+                new_year_begins: None,
+                sort_value: 0,
+                original_text: None,
+            }
+        }
+
+        fn date_only() -> PlaceTypeStatement {
+            dated(PlaceTypeStatement::default(), 1838)
+        }
+
+        fn create(type_statement: PlaceTypeStatement) -> Result<Vec<crate::place::event::PlaceEvent>, PlaceError> {
+            decide(
+                &PlaceState::default(),
+                PlaceCommand::CreatePlace {
+                    place_id: place(1),
+                    human_id: HumanId::new("P1"),
+                    type_statement,
+                },
+                &meta(1),
+                &ENCLOSING_PRESENT,
+            )
+        }
+
+        fn set_type(
+            state: &PlaceState,
+            assertion: u128,
+            type_statement: PlaceTypeStatement,
+        ) -> Result<Vec<crate::place::event::PlaceEvent>, PlaceError> {
+            decide(
+                state,
+                PlaceCommand::SetPlaceType {
+                    place_id: place(1),
+                    type_statement,
+                },
+                &meta(assertion),
+                &ENCLOSING_PRESENT,
+            )
+        }
+
+        fn apply_set_type(state: &mut PlaceState, assertion: u128, type_statement: PlaceTypeStatement) {
+            let events = set_type(state, assertion, type_statement).unwrap();
+            apply_all(state, &events);
+        }
+
+        fn untyped_place() -> PlaceState {
+            let mut state = PlaceState::default();
+            apply_all(&mut state, &create(PlaceTypeStatement::default()).unwrap());
+            state
+        }
+
+        fn assertion(n: u128) -> AssertionId {
+            AssertionId::from_uuid(Uuid::from_u128(n))
+        }
+
+        fn live_keys(state: &PlaceState) -> Vec<String> {
+            state
+                .place_types
+                .iter()
+                .filter_map(|entry| entry.value.value.type_key.as_ref().map(|key| key.as_str().to_owned()))
+                .collect()
+        }
+
+        #[test]
+        fn create_place_may_state_no_type() {
+            let events = create(PlaceTypeStatement::default()).unwrap();
+            assert!(matches!(events[0].body, PlaceEventBody::PlaceCreated { .. }));
+            let mut state = PlaceState::default();
+            apply_all(&mut state, &events);
+            assert!(state.exists);
+            assert_eq!(state.place_types.len(), 0, "an untyped place holds no type");
+            assert!(state.live_assertions.contains(&assertion(1)));
+        }
+
+        #[test]
+        fn create_place_with_a_type_records_it_and_the_creation_assertion() {
+            let mut state = PlaceState::default();
+            apply_all(&mut state, &create(statement("std:farm")).unwrap());
+            assert_eq!(live_keys(&state), ["std:farm"]);
+            assert_eq!(state.created_assertion, Some(assertion(1)));
+        }
+
+        #[test]
+        fn an_empty_or_dated_only_set_place_type_is_refused() {
+            let state = untyped_place();
+            for refused in [PlaceTypeStatement::default(), date_only()] {
+                let err = set_type(&state, 2, refused).unwrap_err();
+                assert_eq!(err, PlaceError::EmptyPlaceType);
+            }
+        }
+
+        #[test]
+        fn a_dated_only_create_place_is_refused() {
+            assert_eq!(create(date_only()).unwrap_err(), PlaceError::EmptyPlaceType);
+        }
+
+        #[test]
+        fn a_text_only_date_is_refused_on_both_commands() {
+            let mut text_dated = statement("std:parish");
+            text_dated.date = Some(text_only_date());
+            assert_eq!(
+                create(text_dated.clone()).unwrap_err(),
+                PlaceError::TextOnlyPlaceTypeDate
+            );
+            assert_eq!(
+                set_type(&untyped_place(), 2, text_dated).unwrap_err(),
+                PlaceError::TextOnlyPlaceTypeDate
+            );
+        }
+
+        #[test]
+        fn a_wrapped_command_gets_the_same_validation_as_a_bare_one() {
+            let mut state = untyped_place();
+            apply_set_type(&mut state, 2, statement("std:farm"));
+            let mut text_dated = statement("std:parish");
+            text_dated.date = Some(text_only_date());
+            for (replacement, expected) in [
+                (PlaceTypeStatement::default(), PlaceError::EmptyPlaceType),
+                (date_only(), PlaceError::EmptyPlaceType),
+                (text_dated, PlaceError::TextOnlyPlaceTypeDate),
+            ] {
+                let bare = set_type(&state, 3, replacement.clone()).unwrap_err();
+                let wrapped = decide(
+                    &state,
+                    PlaceCommand::SupersedeAssertion {
+                        place_id: place(1),
+                        target: assertion(2),
+                        replacement: Box::new(PlaceCommand::SetPlaceType {
+                            place_id: place(1),
+                            type_statement: replacement,
+                        }),
+                    },
+                    &meta(3),
+                    &ENCLOSING_PRESENT,
+                )
+                .unwrap_err();
+                assert_eq!(bare, expected);
+                assert_eq!(wrapped, expected);
+            }
+        }
+
+        fn replayed_empty_set(state: &mut PlaceState, assertion_n: u128) {
+            let event = crate::place::event::PlaceEvent {
+                assertion_id: assertion(assertion_n),
+                context: meta(assertion_n).context,
+                body: PlaceEventBody::PlaceTypeSet {
+                    place_id: place(1),
+                    type_statement: PlaceTypeStatement::default(),
+                },
+            };
+            evolve(state, &event);
+        }
+
+        #[test]
+        fn an_empty_replayed_type_set_is_live_but_never_the_type() {
+            let mut state = untyped_place();
+            apply_set_type(&mut state, 2, statement("std:farm"));
+            replayed_empty_set(&mut state, 3);
+            assert!(state.live_assertions.contains(&assertion(3)));
+            assert_eq!(live_keys(&state), ["std:farm"]);
+            assert_eq!(state.place_types.len(), 1);
+        }
+
+        #[test]
+        fn an_empty_replayed_type_set_can_be_retracted_and_superseded() {
+            for correction in ["retract", "supersede"] {
+                let mut state = untyped_place();
+                replayed_empty_set(&mut state, 3);
+                let command = if correction == "retract" {
+                    PlaceCommand::RetractAssertion {
+                        place_id: place(1),
+                        target: assertion(3),
+                    }
+                } else {
+                    PlaceCommand::SupersedeAssertion {
+                        place_id: place(1),
+                        target: assertion(3),
+                        replacement: Box::new(PlaceCommand::SetPlaceType {
+                            place_id: place(1),
+                            type_statement: statement("std:parish"),
+                        }),
+                    }
+                };
+                let events = decide(&state, command, &meta(4), &ENCLOSING_PRESENT).unwrap();
+                apply_all(&mut state, &events);
+                assert!(!state.live_assertions.contains(&assertion(3)), "{correction}");
+            }
+        }
+
+        #[test]
+        fn the_latest_undated_type_wins_and_retracting_it_restores_the_earlier() {
+            let mut state = untyped_place();
+            apply_set_type(&mut state, 2, statement("std:farm"));
+            apply_set_type(&mut state, 3, statement("std:parish"));
+            let view = view_of(&state);
+            assert_eq!(
+                view.place_type().unwrap().type_key.as_ref().unwrap().as_str(),
+                "std:parish"
+            );
+
+            let retract = PlaceCommand::RetractAssertion {
+                place_id: place(1),
+                target: assertion(3),
+            };
+            let events = decide(&state, retract, &meta(4), &ENCLOSING_PRESENT).unwrap();
+            apply_all(&mut state, &events);
+            let view = view_of(&state);
+            assert_eq!(
+                view.place_type().unwrap().type_key.as_ref().unwrap().as_str(),
+                "std:farm"
+            );
+        }
+
+        #[test]
+        fn dated_types_accumulate_and_resolve_as_of_their_dates() {
+            let mut state = untyped_place();
+            apply_set_type(&mut state, 2, dated(statement("std:parish"), 1838));
+            apply_set_type(&mut state, 3, dated(statement("std:municipality"), 1964));
+            assert_eq!(live_keys(&state), ["std:parish", "std:municipality"]);
+            let view = view_of(&state);
+            let key_at = |year: i64| {
+                view.place_type_as_of(year)
+                    .and_then(|statement| statement.type_key.as_ref())
+                    .map(|key| key.as_str().to_owned())
+            };
+            assert_eq!(key_at(1900).as_deref(), Some("std:parish"));
+            assert_eq!(key_at(2000).as_deref(), Some("std:municipality"));
+        }
+
+        fn view_of(state: &PlaceState) -> crate::place::view::PlaceView {
+            serde_json::from_value(serde_json::json!({ "state": state })).unwrap()
+        }
+
+        #[test]
+        fn the_old_place_type_payload_shape_fails_to_decode_by_name() {
+            let old = serde_json::json!({
+                "type": "PlaceCreated",
+                "place_id": place(1),
+                "human_id": "P1",
+                "place_type": { "type": "Farm" },
+            });
+            let err = serde_json::from_value::<PlaceEventBody>(old).unwrap_err().to_string();
+            assert!(err.contains("type_statement"), "{err}");
+        }
+
+        #[test]
+        fn a_statement_with_kind_and_level_but_no_key_is_a_stated_type() {
+            let only_level = PlaceTypeStatement {
+                level: Some(PlaceLevel::Adm1),
+                ..PlaceTypeStatement::default()
+            };
+            let mut state = untyped_place();
+            apply_set_type(&mut state, 2, only_level.clone());
+            assert_eq!(state.place_types.len(), 1);
+            assert_eq!(state.place_types[0].value.value, only_level);
         }
     }
 }

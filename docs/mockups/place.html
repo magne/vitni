@@ -56,6 +56,19 @@
         <input class="filter" placeholder="Filter places…">
         <button class="btn sm" title="Filter the list by its columns" aria-expanded="false" aria-controls="filter-editor">Filters</button>
         <span class="menu-anchor"><button class="btn sm" title="Choose and order the columns a row shows" aria-haspopup="dialog" aria-expanded="false">Columns</button></span>
+        <!-- The Columns menu open: Type is the text of the place's type key (a keyless place shows its kind's label, else
+             its level's, so a stated type is never an empty cell); Kind and Level are their own choice columns,
+             hidden by default, and the row still reads them to fill a keyless Type.
+        <span class="menu-anchor"><button class="btn sm" title="Choose and order the columns a row shows" aria-haspopup="dialog" aria-expanded="true">Columns</button>
+          <div class="list-menu" role="dialog" aria-label="Columns">
+            <div class="list-menu-column"><label for="list-column-type"><input type="checkbox" id="list-column-type" checked><span>Type</span></label><button class="btn sm ghost" type="button" aria-label="Move Type up" disabled>↑</button><button class="btn sm ghost" type="button" aria-label="Move Type down">↓</button></div>
+            <div class="list-menu-column"><label for="list-column-enclosed-by"><input type="checkbox" id="list-column-enclosed-by" checked><span>Enclosed by</span></label><button class="btn sm ghost" type="button" aria-label="Move Enclosed by up">↑</button><button class="btn sm ghost" type="button" aria-label="Move Enclosed by down" disabled>↓</button></div>
+            <div class="list-menu-column"><label for="list-column-kind"><input type="checkbox" id="list-column-kind"><span>Kind</span></label></div>
+            <div class="list-menu-column"><label for="list-column-level"><input type="checkbox" id="list-column-level"><span>Level</span></label></div>
+            <div class="list-menu-column"><label for="list-column-tags"><input type="checkbox" id="list-column-tags"><span>Tags</span></label></div>
+          </div>
+        </span>
+        -->
         <!-- The sort menu open (ADR 0052 §7, #679): the ID order or a column (Tags does not sort), then the
              direction, which the ID order lacks (both directions disabled while it is chosen). -->
         <span class="menu-anchor"><button class="icon-btn" type="button" title="Saved searches" aria-label="Saved searches" aria-haspopup="menu" aria-expanded="false">☆</button></span>
@@ -64,6 +77,8 @@
             <button class="menu-item" role="menuitemradio" type="button" aria-checked="false" aria-disabled="false"><span class="menu-check" aria-hidden="true"></span><span>ID</span></button>
             <button class="menu-item" role="menuitemradio" type="button" aria-checked="true" aria-disabled="false"><span class="menu-check" aria-hidden="true">✓</span><span>Name</span></button>
             <button class="menu-item" role="menuitemradio" type="button" aria-checked="false" aria-disabled="false"><span class="menu-check" aria-hidden="true"></span><span>Type</span></button>
+            <button class="menu-item" role="menuitemradio" type="button" aria-checked="false" aria-disabled="false"><span class="menu-check" aria-hidden="true"></span><span>Kind</span></button>
+            <button class="menu-item" role="menuitemradio" type="button" aria-checked="false" aria-disabled="false"><span class="menu-check" aria-hidden="true"></span><span>Level</span></button>
             <button class="menu-item" role="menuitemradio" type="button" aria-checked="false" aria-disabled="false"><span class="menu-check" aria-hidden="true"></span><span>Enclosed by</span></button>
             <div class="menu-sep" role="separator"></div>
             <button class="menu-item" role="menuitemradio" type="button" aria-checked="false" aria-disabled="false"><span class="menu-check" aria-hidden="true"></span><span>Ascending</span></button>
@@ -82,10 +97,10 @@
           <div class="row-id">P0001</div>
         </div>
         <div class="row">
-          <div class="avatar">⛪</div>
+          <div class="avatar">📍</div>
           <div class="row-main">
             <div class="row-title">Trinity Church</div>
-            <div class="row-sub">church · New York</div>
+            <div class="row-sub">building · New York</div>
           </div>
           <div class="row-id">P0021</div>
         </div>
@@ -98,10 +113,10 @@
           <div class="row-id">P0007</div>
         </div>
         <div class="row">
-          <div class="avatar">⚰</div>
+          <div class="avatar">📍</div>
           <div class="row-main">
             <div class="row-title">Green-Wood Cemetery</div>
-            <div class="row-sub">cemetery · Brooklyn</div>
+            <div class="row-sub">locality · Brooklyn</div>
           </div>
           <div class="row-id">P0034</div>
         </div>
@@ -225,7 +240,7 @@
             <div class="stack">
               <div class="fact-row">
                 <span class="field-label" style="width:110px;margin:0">Type</span>
-                <select class="in" style="width:auto"><option selected>city</option><option>county</option><option>state</option><option>country</option><option>church</option><option>cemetery</option><option>custom…</option></select>
+                <select class="in" style="width:auto"><option>Country</option><option>State</option><option>County</option><option selected>City</option><option>Parish</option><option>Locality</option><option>Street</option><option>Province</option><option>Region</option><option>Department</option><option>Neighborhood</option><option>District</option><option>Borough</option><option>Municipality</option><option>Town</option><option>Village</option><option>Hamlet</option><option>Farm</option><option>Building</option><option>Number</option></select>
               </div>
               <div class="fact-row">
                 <span class="field-label" style="width:110px;margin:0">Coordinates</span>

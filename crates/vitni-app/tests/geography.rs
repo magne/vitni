@@ -19,9 +19,8 @@ use std::str::FromStr;
 use uuid::Uuid;
 use vitni_app::{
     AppDefaults, EventType, GeoCoordinates, Microdegrees, MutationMeta, NewEvent, NewPlace, OperatorConfig,
-    PlaceGeometry, PlaceType, Provenance, Session, UnplottedReason, Workspace, WorkspaceDefaults,
-    assert_place_coordinates, assert_place_geometry, create_event, create_place, link_place, show_geography,
-    show_place, year_only_date,
+    PlaceGeometry, Provenance, Session, UnplottedReason, Workspace, WorkspaceDefaults, assert_place_coordinates,
+    assert_place_geometry, create_event, create_place, link_place, show_geography, show_place, year_only_date,
 };
 use vitni_core::date::GenealogicalDate;
 use vitni_core::ids::AgentId;
@@ -71,7 +70,7 @@ async fn a_place_with_only_scalar_coordinates_still_becomes_a_marker() {
         &session,
         NewPlace {
             human_id: None,
-            place_type: PlaceType::Farm,
+            place_type: vitni_app::std_statement("farm").unwrap_or_default(),
             name: Some("Nordgarden".to_owned()),
         },
         Provenance::default(),
@@ -102,7 +101,7 @@ async fn an_explicit_geometry_assertion_wins_over_the_scalar_coordinate_fallback
         &session,
         NewPlace {
             human_id: None,
-            place_type: PlaceType::Parish,
+            place_type: vitni_app::std_statement("parish").unwrap_or_default(),
             name: Some("Vågå".to_owned()),
         },
         Provenance::default(),
@@ -147,7 +146,7 @@ async fn a_place_with_neither_geometry_nor_coordinates_is_not_a_marker() {
         &session,
         NewPlace {
             human_id: None,
-            place_type: PlaceType::County,
+            place_type: vitni_app::std_statement("county").unwrap_or_default(),
             name: Some("Nordland".to_owned()),
         },
         Provenance::default(),
@@ -198,7 +197,7 @@ async fn place_with_geometry(ws: &Workspace, session: &Session, name: &str, year
         session,
         NewPlace {
             human_id: None,
-            place_type: PlaceType::Parish,
+            place_type: vitni_app::std_statement("parish").unwrap_or_default(),
             name: Some(name.to_owned()),
         },
         Provenance::default(),
@@ -278,7 +277,7 @@ async fn a_scalar_coordinate_place_is_a_marker_at_every_year_and_never_unplotted
         &session,
         NewPlace {
             human_id: None,
-            place_type: PlaceType::Farm,
+            place_type: vitni_app::std_statement("farm").unwrap_or_default(),
             name: Some("Nordgarden".to_owned()),
         },
         Provenance::default(),
@@ -309,7 +308,7 @@ async fn a_place_with_no_geometry_and_no_coordinate_is_reported_unplotted_with_n
         &session,
         NewPlace {
             human_id: None,
-            place_type: PlaceType::County,
+            place_type: vitni_app::std_statement("county").unwrap_or_default(),
             name: Some("Nordland".to_owned()),
         },
         Provenance::default(),
@@ -326,7 +325,10 @@ async fn a_place_with_no_geometry_and_no_coordinate_is_reported_unplotted_with_n
         .find(|place| place.human_id == human_id)
         .expect("a place nobody ever located is reported unplotted (#256)");
     assert_eq!(unplotted.reason, UnplottedReason::NoGeometry);
-    assert_eq!(unplotted.place_type, Some(PlaceType::County));
+    assert_eq!(
+        unplotted.place_type,
+        Some(vitni_app::std_statement("county").unwrap_or_default())
+    );
 }
 
 #[tokio::test]
@@ -338,7 +340,7 @@ async fn show_place_carries_only_the_events_that_occurred_at_that_place() {
         &session,
         NewPlace {
             human_id: None,
-            place_type: PlaceType::Farm,
+            place_type: vitni_app::std_statement("farm").unwrap_or_default(),
             name: Some("Nordgarden".to_owned()),
         },
         Provenance::default(),
@@ -355,7 +357,7 @@ async fn show_place_carries_only_the_events_that_occurred_at_that_place() {
         &session,
         NewPlace {
             human_id: None,
-            place_type: PlaceType::Farm,
+            place_type: vitni_app::std_statement("farm").unwrap_or_default(),
             name: Some("Sørgarden".to_owned()),
         },
         Provenance::default(),
@@ -418,7 +420,7 @@ async fn show_place_has_no_events_when_none_occurred_there() {
         &session,
         NewPlace {
             human_id: None,
-            place_type: PlaceType::Farm,
+            place_type: vitni_app::std_statement("farm").unwrap_or_default(),
             name: Some("Nordgarden".to_owned()),
         },
         Provenance::default(),
@@ -442,7 +444,7 @@ async fn renamed_place(ws: &Workspace, session: &Session) -> String {
         session,
         NewPlace {
             human_id: None,
-            place_type: PlaceType::Municipality,
+            place_type: vitni_app::std_statement("municipality").unwrap_or_default(),
             name: Some("Oslo".to_owned()),
         },
         Provenance::default(),
