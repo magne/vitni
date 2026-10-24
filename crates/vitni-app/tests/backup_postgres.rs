@@ -2,7 +2,7 @@
 //! original's row for row — SQLite into Postgres, and Postgres back into SQLite. The ADR 0044 exit
 //! test too: a replace over a Postgres workspace leaves the archive's projections, row for row.
 //!
-//! Needs a Docker daemon (`test-containers-util` reuses one `vitni-pg` container and gives each
+//! Needs a Docker daemon (`vitni-test-postgres` reuses one `vitni-pg` container and gives each
 //! test its own database), so it compiles only under `--features postgres` and CI runs it in the
 //! native `postgres` job.
 
@@ -11,8 +11,6 @@
 
 use std::path::Path;
 
-use sqlx::migrate::Migrator;
-use test_containers_util::sqlx_pg::PostgresTestDb;
 use time::macros::datetime;
 use uuid::Uuid;
 use vitni_app::{
@@ -23,11 +21,9 @@ use vitni_app::{
 use vitni_core::enums::EvidenceLevel;
 use vitni_core::ids::AgentId;
 use vitni_core::provenance::{Agent, AgentKind};
+use vitni_test_postgres::PostgresTestDb;
 
 const CONTAINER: &str = "vitni-pg";
-
-/// An empty migrator: the schema is created by `Store::open`, but the test helper requires one.
-static MIGRATIONS: Migrator = sqlx::migrate!("../vitni-db/migrations");
 
 fn operator() -> OperatorConfig {
     OperatorConfig {
@@ -125,7 +121,7 @@ async fn a_sqlite_backup_restores_into_postgres() {
     let archive = home.path().join("gen.vitni-backup");
     back_up(&source, &archive).await;
 
-    let db = PostgresTestDb::create(CONTAINER, &MIGRATIONS, None, None).await;
+    let db = PostgresTestDb::create(CONTAINER).await.expect("test database");
     let restored = restore(home.path(), &archive, "pg", Some(db.dsn())).await;
     assert_same_workspace(&source, &restored).await;
 }
@@ -133,7 +129,7 @@ async fn a_sqlite_backup_restores_into_postgres() {
 #[tokio::test(flavor = "multi_thread")]
 async fn a_postgres_backup_restores_into_sqlite() {
     let home = tempfile::tempdir().expect("tempdir");
-    let db = PostgresTestDb::create(CONTAINER, &MIGRATIONS, None, None).await;
+    let db = PostgresTestDb::create(CONTAINER).await.expect("test database");
     let source = workspace(&home.path().join("source"), Some(db.dsn())).await;
     seed(&source).await;
     let archive = home.path().join("gen.vitni-backup");
@@ -151,7 +147,7 @@ async fn a_restore_into_a_database_that_holds_events_is_refused() {
     let archive = home.path().join("gen.vitni-backup");
     back_up(&source, &archive).await;
 
-    let db = PostgresTestDb::create(CONTAINER, &MIGRATIONS, None, None).await;
+    let db = PostgresTestDb::create(CONTAINER).await.expect("test database");
     let occupied = workspace(&home.path().join("occupied"), Some(db.dsn())).await;
     seed(&occupied).await;
     let config = home.path().join("config.toml");
@@ -234,7 +230,7 @@ async fn a_restore_that_fails_after_inserting_leaves_the_database_empty() {
     let colliding = home.path().join("colliding.vitni-backup");
     with_colliding_media(&archive, &colliding);
 
-    let db = PostgresTestDb::create(CONTAINER, &MIGRATIONS, None, None).await;
+    let db = PostgresTestDb::create(CONTAINER).await.expect("test database");
     let config = home.path().join("config.toml");
     let dir = home.path().join("pg");
     let request = RestoreRequest {
@@ -265,7 +261,7 @@ async fn a_sqlite_backup_replaces_a_postgres_workspace_and_its_pre_restore_backu
     seed(&source).await;
     let archive = home.path().join("gen.vitni-backup");
     back_up(&source, &archive).await;
-    let db = PostgresTestDb::create(CONTAINER, &MIGRATIONS, None, None).await;
+    let db = PostgresTestDb::create(CONTAINER).await.expect("test database");
     let target = workspace(&home.path().join("pg"), Some(db.dsn())).await;
     let note = NewNote {
         human_id: None,

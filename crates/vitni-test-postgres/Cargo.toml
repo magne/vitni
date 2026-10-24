@@ -1,0 +1,21 @@
+[package]
+name = "vitni-test-postgres"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+# AGPL-3.0-or-later, not the workspace default: test support for the application crates (ADR 0034 §1).
+license = "AGPL-3.0-or-later"
+repository.workspace = true
+publish = false
+
+[dependencies]
+sqlx = { workspace = true }
+testcontainers = { workspace = true }
+testcontainers-modules = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+
+[lints]
+workspace = true

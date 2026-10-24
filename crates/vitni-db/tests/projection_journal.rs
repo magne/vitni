@@ -485,12 +485,8 @@ mod sqlite {
 
 #[cfg(feature = "postgres")]
 mod postgres {
-    use sqlx::migrate::Migrator;
-    use test_containers_util::sqlx_pg::PostgresTestDb;
     use vitni_db::Store;
-
-    static MIGRATIONS: Migrator = sqlx::migrate!();
-
+    use vitni_test_postgres::PostgresTestDb;
     struct Workspace {
         db: PostgresTestDb,
     }
@@ -498,7 +494,7 @@ mod postgres {
     impl Workspace {
         async fn new() -> Self {
             Self {
-                db: PostgresTestDb::create("vitni-pg", &MIGRATIONS, None, None).await,
+                db: PostgresTestDb::create("vitni-pg").await.unwrap(),
             }
         }
 

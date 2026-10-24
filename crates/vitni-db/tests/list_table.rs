@@ -821,14 +821,11 @@ mod sqlite {
 
 #[cfg(feature = "postgres")]
 mod postgres {
-    use sqlx::migrate::Migrator;
-    use test_containers_util::sqlx_pg::PostgresTestDb;
     use vitni_db::Store;
-
-    static MIGRATIONS: Migrator = sqlx::migrate!();
+    use vitni_test_postgres::PostgresTestDb;
 
     async fn store() -> (Store, PostgresTestDb) {
-        let db = PostgresTestDb::create("vitni-pg", &MIGRATIONS, None, None).await;
+        let db = PostgresTestDb::create("vitni-pg").await.unwrap();
         let store = Store::open(db.dsn()).await.unwrap();
         (store, db)
     }

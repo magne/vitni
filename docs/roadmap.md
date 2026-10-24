@@ -192,7 +192,7 @@ no longer touches a central list. See <https://github.com/magne/vitni/issues/38>
   `database_url` (ADR 0002). A workspace is created on Postgres with `vitni init --database-url
   postgres://…`, or by setting `[defaults].database_url` in the global config (precedence: flag >
   config > the `engine` default). Postgres is exercised in CI against a containerized server
-  (`test-containers-util`/`testcontainers`, image `postgres:18-alpine`), each test isolated in its
+  (`vitni-test-postgres`/`testcontainers`, image `postgres:18-alpine`), each test isolated in its
   own database.
 - ✅ Promoted Spike B's rebuild into the **`vitni rebuild`** maintenance command
   (`Workspace::rebuild_projections` → the engine-neutral `Store::rebuild_projections`).

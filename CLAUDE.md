@@ -84,6 +84,7 @@ Each crate's `lib.rs` module header holds the authoritative description; this ta
 | `vitni-cli` | The terminal frontend; its stdout/stderr is the interface. Library + binary (`vitni-cli`), so the launcher shares one `run()`. |
 | `vitni-ui` | Framework-agnostic presentation (ADR 0008): view-models, navigation/intents, Fluent, plugin-UI vocabulary. |
 | `vitni-ui-dioxus` | The Dioxus renderer. Library only — SSR tests render without a window; `run_desktop()`, its window entry point, is behind the `desktop` feature. |
+| `vitni-test-postgres` | Dev-dependency only: a throwaway Postgres database per test, in one reused Docker container. Needs Docker; used by the `postgres` feature tests of `vitni-db` and `vitni-app`. |
 | `vitni-i18n` | Shared Fluent plumbing (ADR 0003): the workspace > shared-app > embedded override chain and locale fallback. |
 | `vitni-plugin-host` | WASM component host (ADR 0007, 0011, 0014): Wasmtime, deny-by-default capabilities over one versioned WIT world, fuel + memory limits. Sits above `vitni-app`, driving use-cases under an `AgentKind::Software` session. |
 | `vitni-interchange` | The format-neutral leaf value vocabulary shared by the interchange formats — simple and serde-free; richer concerns stay in core. |
