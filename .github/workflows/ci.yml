@@ -60,7 +60,7 @@ jobs:
       # rust-cache alone (no sccache: it would double-cache the same artifacts against the shared
       # 10 GB GHA backend). One stable toolchain and the default `./target` are all that need caching;
       # the plugin `plugins/*/target` dirs are small wasm builds, intentionally left uncached.
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - name: rustfmt (workspace + plugins)
         run: cargo xtask fmt --check
       - name: clippy
@@ -88,7 +88,7 @@ jobs:
       # and in its own test.
       - name: trust the checkout
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       # This job links every test binary in the workspace against the whole dependency tree, and ran
       # the runner's disk out from under the linker — `rust-lld` mmaps its output file, so a full disk
       # surfaces as `ld terminated with signal 7 [Bus error]`, not as ENOSPC. The runner's hosted
@@ -138,7 +138,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # stable, pinned 2026-10-04
         with:
           toolchain: stable
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       # Pre-pull so the first test doesn't race the image pull (testcontainers reuses one
       # `vitni-pg` container, isolating each test in its own database).
       - name: pre-pull postgres image
