@@ -48,7 +48,7 @@ time = { workspace = true }
 # a regenerated icon depends on `Cargo.lock` alone rather than on whichever SVG renderer a machine
 # happens to have; `default-features = false` drops text shaping (fontdb, system fonts) — the icon
 # sources are pure geometry.
-resvg = { version = "0.48", default-features = false }
+resvg = { version = "0.49", default-features = false }
 
 # `regen-fixtures` prunes the fetched Digitalarkivet pages to the elements the parser reads (ADR 0042
 # §4), so it takes those selectors from `vitni-digitalarkivet` itself and walks the page with the same
